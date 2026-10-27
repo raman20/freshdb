@@ -67,6 +67,10 @@ type Phase struct {
 	FirstError string  `json:"first_error,omitempty"`
 	Latency    Lat     `json:"latency"`
 	GC         *GCStat `json:"go_gc,omitempty"`
+	// NotIssued counts open-loop ops still unissued when the phase hit its
+	// deadline (duration + an equal grace period): the engine could not keep
+	// up with the target rate. Their latency is unbounded and not in Latency.
+	NotIssued int64 `json:"not_issued_overload,omitempty"`
 }
 
 // GCStat is what the Go garbage collector did during a phase. Every engine
@@ -170,6 +174,8 @@ func runOpenDue(clients int, rate float64, d time.Duration, mk func(id int) func
 	interval := float64(time.Second) / rate
 	total := int64(rate * d.Seconds())
 	start := time.Now().Add(2 * time.Millisecond)
+	deadline := start.Add(2 * d)
+	var notIssued atomic.Int64
 	for i := 0; i < clients; i++ {
 		hs[i] = newHist()
 		op := mk(i)
@@ -177,6 +183,10 @@ func runOpenDue(clients int, rate float64, d time.Duration, mk func(id int) func
 		go func(i int, h *hdrhistogram.Histogram) {
 			defer wg.Done()
 			for n := int64(i); n < total; n += int64(clients) {
+				if time.Now().After(deadline) {
+					notIssued.Add((total - n + int64(clients) - 1) / int64(clients))
+					return
+				}
 				due := start.Add(time.Duration(float64(n) * interval))
 				for {
 					w := time.Until(due)
@@ -202,6 +212,7 @@ func runOpenDue(clients int, rate float64, d time.Duration, mk func(id int) func
 	el := time.Since(start).Seconds()
 	p := finish("open", el, ops.Load(), errs.Load(), firstErr, hs, rate)
 	p.GC = gcSince(gc0)
+	p.NotIssued = notIssued.Load()
 	return p
 }
 

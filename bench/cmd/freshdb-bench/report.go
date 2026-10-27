@@ -63,7 +63,7 @@ func cmdReport(args []string) {
 		runs, _ := r["runs"].([]any)
 		switch r["suite"] {
 		case "ycsb":
-			w("| sys | fsync | wl | clients | closed ops/s | closed p50 | p99 | p99.9 | open target/s | open achieved/s | open p50 | p99 | p99.9 | errors (closed/open) | open-phase Go GC (cycles, max STW ms) |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
+			w("| sys | fsync | wl | clients | closed ops/s | closed p50 | p99 | p99.9 | open target/s | open achieved/s | open p50 | p99 | p99.9 | errors (closed/open) | open not issued (overload) | open-phase Go GC (cycles, max STW ms) |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 			for _, x := range runs {
 				m := x.(map[string]any)
 				c, _ := m["closed_loop"].(map[string]any)
@@ -72,9 +72,9 @@ func cmdReport(args []string) {
 				if g, ok := o["go_gc"].(map[string]any); ok {
 					gc = fmt.Sprintf("%v, %v", g["cycles"], g["stw_pause_max_ms"])
 				}
-				w("| %v | %v | %v | %v | %s | %s | %s | %s | %s | %s | %s | %s | %s | %v/%v | %s |\n", m["system"], m["fsync"], m["workload"], m["clients"],
+				w("| %v | %v | %v | %v | %s | %s | %s | %s | %s | %s | %s | %s | %s | %v/%v | %v | %s |\n", m["system"], m["fsync"], m["workload"], m["clients"],
 					num(c, "ops_per_sec"), ms(c, "p50_us"), ms(c, "p99_us"), ms(c, "p999_us"),
-					num(o, "target_ops_per_sec"), num(o, "ops_per_sec"), ms(o, "p50_us"), ms(o, "p99_us"), ms(o, "p999_us"), get(c, "errors"), get(o, "errors"), gc)
+					num(o, "target_ops_per_sec"), num(o, "ops_per_sec"), ms(o, "p50_us"), ms(o, "p99_us"), ms(o, "p999_us"), get(c, "errors"), get(o, "errors"), get(o, "not_issued_overload"), gc)
 			}
 		case "msg":
 			w("| sys | fsync | kind | target/s | producers | groups | publish/s | consume/s/group | backlog | publish p50 | p99 | e2e p50 | e2e p99 | e2e p99.9 | errors |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")

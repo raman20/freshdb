@@ -154,6 +154,7 @@ jobs:
           go-version-file: bench/go.mod
           cache-dependency-path: bench/go.sum
       - run: go vet ./...
+      - run: go test -race -count=1 ./...
       - name: staticcheck
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@latest

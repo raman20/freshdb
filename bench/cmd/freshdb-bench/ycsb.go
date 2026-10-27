@@ -159,8 +159,8 @@ func cmdYCSB(args []string) {
 			open := runOpen(c, rate, *dur, mk(3))
 			run := ycsbRun{System: *system, Fsync: *fsync, Durability: kv.Durability(), Workload: wl.Name, Desc: wl.Desc, Clients: c, Closed: closed, Open: open}
 			res.Runs = append(res.Runs, run)
-			logf("%s %s fsync=%v c=%d: max %.0f ops/s | open @%.0f/s p50 %.1fus p99 %.1fus p99.9 %.1fus | errs %d/%d",
-				*system, wl.Name, *fsync, c, closed.OpsPerSec, rate, open.Latency.P50Us, open.Latency.P99Us, open.Latency.P999Us, closed.Errors, open.Errors)
+			logf("%s %s fsync=%v c=%d: max %.0f ops/s | open @%.0f/s p50 %.1fus p99 %.1fus p99.9 %.1fus | errs %d/%d not-issued %d",
+				*system, wl.Name, *fsync, c, closed.OpsPerSec, rate, open.Latency.P50Us, open.Latency.P99Us, open.Latency.P999Us, closed.Errors, open.Errors, open.NotIssued)
 		}
 	}
 	kv.Close()

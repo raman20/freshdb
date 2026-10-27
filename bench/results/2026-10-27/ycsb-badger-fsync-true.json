@@ -1,0 +1,837 @@
+{
+  "suite": "ycsb",
+  "env": {
+    "time": "2026-10-27T19:55:04+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "4d1ec1b",
+    "command": "bin/freshdb-bench ycsb -system badger -fsync=true -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27",
+    "loadavg_at_start": "3.84 2.98 2.90"
+  },
+  "params": {
+    "system": "badger",
+    "fsync": true,
+    "keys": 1000000,
+    "value_bytes": 1024,
+    "workloads": "A,B,C,F,D",
+    "clients": [
+      1,
+      8,
+      64
+    ],
+    "warmup": "2s",
+    "duration": "5s",
+    "open_loop_fraction_of_max": 0.5,
+    "open_loop_cap_ops_per_sec": 200000,
+    "seed": 42,
+    "zipf_theta": 0.99,
+    "load_seconds": 7.14,
+    "load_keys_per_sec": 140117,
+    "disk_after_run": "1.3G",
+    "peak_rss": "3999832 kB"
+  },
+  "runs": [
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 85083,
+        "ops_per_sec": 17014.6,
+        "errors": 0,
+        "latency": {
+          "count": 85083,
+          "mean_us": 58.55,
+          "p50_us": 32.83,
+          "p99_us": 337.66,
+          "p999_us": 2049.02,
+          "max_us": 25657.34
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.24,
+          "stw_pause_max_ms": 0.16,
+          "heap_inuse_end_mb": 1230,
+          "gc_cpu_fraction_cumulative": 0.0011
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 42536,
+        "ops_per_sec": 8507.1,
+        "target_ops_per_sec": 8507.3,
+        "errors": 0,
+        "latency": {
+          "count": 42536,
+          "mean_us": 5034.73,
+          "p50_us": 66.11,
+          "p99_us": 91160.58,
+          "p999_us": 101908.48,
+          "max_us": 103284.74
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.28,
+          "stw_pause_max_ms": 0.28,
+          "heap_inuse_end_mb": 1163,
+          "gc_cpu_fraction_cumulative": 0.0009
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 136523,
+        "ops_per_sec": 27302.7,
+        "errors": 0,
+        "latency": {
+          "count": 136523,
+          "mean_us": 292.61,
+          "p50_us": 251.9,
+          "p99_us": 1141.76,
+          "p999_us": 4296.7,
+          "max_us": 23117.82
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.26,
+          "stw_pause_max_ms": 0.26,
+          "heap_inuse_end_mb": 2111,
+          "gc_cpu_fraction_cumulative": 0.0007
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 68256,
+        "ops_per_sec": 13651.5,
+        "target_ops_per_sec": 13651.4,
+        "errors": 0,
+        "latency": {
+          "count": 68256,
+          "mean_us": 5977.86,
+          "p50_us": 130.37,
+          "p99_us": 91095.04,
+          "p999_us": 101318.66,
+          "max_us": 106364.93
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.1,
+          "stw_pause_max_ms": 0.1,
+          "heap_inuse_end_mb": 2141,
+          "gc_cpu_fraction_cumulative": 0.0007
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 127762,
+        "ops_per_sec": 25540.3,
+        "errors": 0,
+        "latency": {
+          "count": 127762,
+          "mean_us": 2504.39,
+          "p50_us": 2183.17,
+          "p99_us": 9969.66,
+          "p999_us": 39190.53,
+          "max_us": 49545.22
+        },
+        "go_gc": {
+          "cycles": 3,
+          "stw_pause_total_ms": 0.55,
+          "stw_pause_max_ms": 0.33,
+          "heap_inuse_end_mb": 959,
+          "gc_cpu_fraction_cumulative": 0.0007
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 63850,
+        "ops_per_sec": 12770.2,
+        "target_ops_per_sec": 12770.2,
+        "errors": 0,
+        "latency": {
+          "count": 63850,
+          "mean_us": 1298.17,
+          "p50_us": 73.22,
+          "p99_us": 34242.56,
+          "p999_us": 61112.32,
+          "max_us": 67010.56
+        },
+        "go_gc": {
+          "cycles": 0,
+          "stw_pause_total_ms": 0,
+          "stw_pause_max_ms": 0,
+          "heap_inuse_end_mb": 1269,
+          "gc_cpu_fraction_cumulative": 0.0007
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 210899,
+        "ops_per_sec": 42179.7,
+        "errors": 0,
+        "latency": {
+          "count": 210899,
+          "mean_us": 23.54,
+          "p50_us": 16.85,
+          "p99_us": 195.58,
+          "p999_us": 697.34,
+          "max_us": 15826.94
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.23,
+          "stw_pause_max_ms": 0.13,
+          "heap_inuse_end_mb": 1310,
+          "gc_cpu_fraction_cumulative": 0.0007
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 105449,
+        "ops_per_sec": 21089.9,
+        "target_ops_per_sec": 21089.9,
+        "errors": 0,
+        "latency": {
+          "count": 105449,
+          "mean_us": 820.59,
+          "p50_us": 26.93,
+          "p99_us": 18694.14,
+          "p999_us": 24084.48,
+          "max_us": 25477.12
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.2,
+          "stw_pause_max_ms": 0.11,
+          "heap_inuse_end_mb": 612,
+          "gc_cpu_fraction_cumulative": 0.0007
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 533584,
+        "ops_per_sec": 106715.8,
+        "errors": 0,
+        "latency": {
+          "count": 533584,
+          "mean_us": 74.69,
+          "p50_us": 22.29,
+          "p99_us": 442.62,
+          "p999_us": 1472.51,
+          "max_us": 73728
+        },
+        "go_gc": {
+          "cycles": 9,
+          "stw_pause_total_ms": 1.29,
+          "stw_pause_max_ms": 0.2,
+          "heap_inuse_end_mb": 606,
+          "gc_cpu_fraction_cumulative": 0.0011
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 266789,
+        "ops_per_sec": 53357.7,
+        "target_ops_per_sec": 53357.9,
+        "errors": 0,
+        "latency": {
+          "count": 266789,
+          "mean_us": 5747.37,
+          "p50_us": 67.78,
+          "p99_us": 76349.44,
+          "p999_us": 91357.18,
+          "max_us": 94109.7
+        },
+        "go_gc": {
+          "cycles": 6,
+          "stw_pause_total_ms": 0.92,
+          "stw_pause_max_ms": 0.19,
+          "heap_inuse_end_mb": 640,
+          "gc_cpu_fraction_cumulative": 0.0012
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 747864,
+        "ops_per_sec": 149558.8,
+        "errors": 0,
+        "latency": {
+          "count": 747864,
+          "mean_us": 427.32,
+          "p50_us": 328.45,
+          "p99_us": 3051.52,
+          "p999_us": 9617.41,
+          "max_us": 23117.82
+        },
+        "go_gc": {
+          "cycles": 16,
+          "stw_pause_total_ms": 2.81,
+          "stw_pause_max_ms": 0.33,
+          "heap_inuse_end_mb": 525,
+          "gc_cpu_fraction_cumulative": 0.0018
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 373897,
+        "ops_per_sec": 74772.3,
+        "target_ops_per_sec": 74779.4,
+        "errors": 0,
+        "latency": {
+          "count": 373897,
+          "mean_us": 3640.59,
+          "p50_us": 1261.57,
+          "p99_us": 54558.72,
+          "p999_us": 71303.17,
+          "max_us": 79626.24
+        },
+        "go_gc": {
+          "cycles": 8,
+          "stw_pause_total_ms": 1.31,
+          "stw_pause_max_ms": 0.24,
+          "heap_inuse_end_mb": 790,
+          "gc_cpu_fraction_cumulative": 0.0021
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 308556,
+        "ops_per_sec": 61711,
+        "errors": 0,
+        "latency": {
+          "count": 308556,
+          "mean_us": 16.08,
+          "p50_us": 16.25,
+          "p99_us": 32.53,
+          "p999_us": 48.54,
+          "max_us": 529.92
+        },
+        "go_gc": {
+          "cycles": 8,
+          "stw_pause_total_ms": 1.14,
+          "stw_pause_max_ms": 0.25,
+          "heap_inuse_end_mb": 604,
+          "gc_cpu_fraction_cumulative": 0.0021
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 154277,
+        "ops_per_sec": 30855.5,
+        "target_ops_per_sec": 30855.5,
+        "errors": 0,
+        "latency": {
+          "count": 154277,
+          "mean_us": 27.71,
+          "p50_us": 21.89,
+          "p99_us": 82.24,
+          "p999_us": 1196.03,
+          "max_us": 2768.9
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 0.31,
+          "stw_pause_max_ms": 0.11,
+          "heap_inuse_end_mb": 538,
+          "gc_cpu_fraction_cumulative": 0.0021
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1254646,
+        "ops_per_sec": 250927,
+        "errors": 0,
+        "latency": {
+          "count": 1254646,
+          "mean_us": 31.67,
+          "p50_us": 19.66,
+          "p99_us": 362.24,
+          "p999_us": 1080.32,
+          "max_us": 48136.19
+        },
+        "go_gc": {
+          "cycles": 31,
+          "stw_pause_total_ms": 20.12,
+          "stw_pause_max_ms": 14.22,
+          "heap_inuse_end_mb": 518,
+          "gc_cpu_fraction_cumulative": 0.0033
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 627317,
+        "ops_per_sec": 125463.1,
+        "target_ops_per_sec": 125463.5,
+        "errors": 0,
+        "latency": {
+          "count": 627317,
+          "mean_us": 912.46,
+          "p50_us": 22.54,
+          "p99_us": 23183.36,
+          "p999_us": 73400.32,
+          "max_us": 86769.66
+        },
+        "go_gc": {
+          "cycles": 14,
+          "stw_pause_total_ms": 29.05,
+          "stw_pause_max_ms": 24.2,
+          "heap_inuse_end_mb": 724,
+          "gc_cpu_fraction_cumulative": 0.0039
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1384198,
+        "ops_per_sec": 276810.9,
+        "errors": 0,
+        "latency": {
+          "count": 1384198,
+          "mean_us": 230.88,
+          "p50_us": 19.66,
+          "p99_us": 5025.79,
+          "p999_us": 9773.06,
+          "max_us": 27983.87
+        },
+        "go_gc": {
+          "cycles": 32,
+          "stw_pause_total_ms": 5.53,
+          "stw_pause_max_ms": 0.33,
+          "heap_inuse_end_mb": 605,
+          "gc_cpu_fraction_cumulative": 0.0049
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.02,
+        "ops": 692027,
+        "ops_per_sec": 137869.3,
+        "target_ops_per_sec": 138405.5,
+        "errors": 0,
+        "latency": {
+          "count": 692027,
+          "mean_us": 26435.25,
+          "p50_us": 16924.67,
+          "p99_us": 129171.46,
+          "p999_us": 168951.81,
+          "max_us": 197001.22
+        },
+        "go_gc": {
+          "cycles": 16,
+          "stw_pause_total_ms": 3.29,
+          "stw_pause_max_ms": 1,
+          "heap_inuse_end_mb": 569,
+          "gc_cpu_fraction_cumulative": 0.0053
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 70973,
+        "ops_per_sec": 14194.3,
+        "errors": 0,
+        "latency": {
+          "count": 70973,
+          "mean_us": 70.22,
+          "p50_us": 48.32,
+          "p99_us": 371.97,
+          "p999_us": 956.93,
+          "max_us": 21839.87
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.23,
+          "stw_pause_max_ms": 0.13,
+          "heap_inuse_end_mb": 550,
+          "gc_cpu_fraction_cumulative": 0.0051
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 35485,
+        "ops_per_sec": 7095.1,
+        "target_ops_per_sec": 7097.2,
+        "errors": 0,
+        "latency": {
+          "count": 35485,
+          "mean_us": 374.52,
+          "p50_us": 97.41,
+          "p99_us": 3287.04,
+          "p999_us": 6086.66,
+          "max_us": 7282.69
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.15,
+          "stw_pause_max_ms": 0.15,
+          "heap_inuse_end_mb": 578,
+          "gc_cpu_fraction_cumulative": 0.0049
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 144575,
+        "ops_per_sec": 28912.3,
+        "errors": 0,
+        "latency": {
+          "count": 144575,
+          "mean_us": 276.28,
+          "p50_us": 250.88,
+          "p99_us": 810.5,
+          "p999_us": 2787.33,
+          "max_us": 15491.07
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.26,
+          "stw_pause_max_ms": 0.19,
+          "heap_inuse_end_mb": 1405,
+          "gc_cpu_fraction_cumulative": 0.0049
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 72280,
+        "ops_per_sec": 14456.1,
+        "target_ops_per_sec": 14456.2,
+        "errors": 0,
+        "latency": {
+          "count": 72280,
+          "mean_us": 1158.28,
+          "p50_us": 153.47,
+          "p99_us": 22790.14,
+          "p999_us": 27934.72,
+          "max_us": 29966.34
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.14,
+          "stw_pause_max_ms": 0.14,
+          "heap_inuse_end_mb": 1404,
+          "gc_cpu_fraction_cumulative": 0.0048
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 144949,
+        "ops_per_sec": 28972.1,
+        "errors": 1054,
+        "first_error": "Transaction Conflict. Please retry",
+        "latency": {
+          "count": 144949,
+          "mean_us": 2207.11,
+          "p50_us": 1641.47,
+          "p99_us": 19513.34,
+          "p999_us": 38535.17,
+          "max_us": 84803.58
+        },
+        "go_gc": {
+          "cycles": 3,
+          "stw_pause_total_ms": 0.55,
+          "stw_pause_max_ms": 0.34,
+          "heap_inuse_end_mb": 1462,
+          "gc_cpu_fraction_cumulative": 0.0045
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 72430,
+        "ops_per_sec": 14474.6,
+        "target_ops_per_sec": 14486.1,
+        "errors": 112,
+        "first_error": "Transaction Conflict. Please retry",
+        "latency": {
+          "count": 72430,
+          "mean_us": 5702.88,
+          "p50_us": 2594.82,
+          "p99_us": 49905.66,
+          "p999_us": 72024.06,
+          "max_us": 87228.42
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.13,
+          "stw_pause_max_ms": 0.13,
+          "heap_inuse_end_mb": 893,
+          "gc_cpu_fraction_cumulative": 0.0044
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 344381,
+        "ops_per_sec": 68876.1,
+        "errors": 0,
+        "latency": {
+          "count": 344381,
+          "mean_us": 14.36,
+          "p50_us": 5.31,
+          "p99_us": 165.76,
+          "p999_us": 609.79,
+          "max_us": 45318.14
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 0.66,
+          "stw_pause_max_ms": 0.19,
+          "heap_inuse_end_mb": 676,
+          "gc_cpu_fraction_cumulative": 0.0043
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 172190,
+        "ops_per_sec": 34436.9,
+        "target_ops_per_sec": 34438.1,
+        "errors": 0,
+        "latency": {
+          "count": 172190,
+          "mean_us": 1926.99,
+          "p50_us": 29.15,
+          "p99_us": 32817.15,
+          "p999_us": 42696.7,
+          "max_us": 43941.89
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.23,
+          "stw_pause_max_ms": 0.12,
+          "heap_inuse_end_mb": 729,
+          "gc_cpu_fraction_cumulative": 0.0042
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 462663,
+        "ops_per_sec": 92532,
+        "errors": 0,
+        "latency": {
+          "count": 462663,
+          "mean_us": 86.18,
+          "p50_us": 10.58,
+          "p99_us": 597.5,
+          "p999_us": 8577.02,
+          "max_us": 170786.82
+        },
+        "go_gc": {
+          "cycles": 10,
+          "stw_pause_total_ms": 27.32,
+          "stw_pause_max_ms": 13.88,
+          "heap_inuse_end_mb": 1064,
+          "gc_cpu_fraction_cumulative": 0.0044
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 231330,
+        "ops_per_sec": 46262.3,
+        "target_ops_per_sec": 46266,
+        "errors": 0,
+        "latency": {
+          "count": 231330,
+          "mean_us": 670.11,
+          "p50_us": 17.07,
+          "p99_us": 23642.11,
+          "p999_us": 38600.7,
+          "max_us": 42106.88
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.12,
+          "stw_pause_max_ms": 0.12,
+          "heap_inuse_end_mb": 1297,
+          "gc_cpu_fraction_cumulative": 0.0043
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "durability": "SyncWrites=true (value log + WAL synced per commit, commits batched internally)",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1090968,
+        "ops_per_sec": 218182,
+        "errors": 0,
+        "latency": {
+          "count": 1090968,
+          "mean_us": 292.87,
+          "p50_us": 211.07,
+          "p99_us": 2306.05,
+          "p999_us": 7147.52,
+          "max_us": 40632.32
+        },
+        "go_gc": {
+          "cycles": 6,
+          "stw_pause_total_ms": 17.71,
+          "stw_pause_max_ms": 17.02,
+          "heap_inuse_end_mb": 1649,
+          "gc_cpu_fraction_cumulative": 0.0043
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 545455,
+        "ops_per_sec": 109072.4,
+        "target_ops_per_sec": 109091,
+        "errors": 0,
+        "latency": {
+          "count": 545455,
+          "mean_us": 4017.65,
+          "p50_us": 502.27,
+          "p99_us": 54263.81,
+          "p999_us": 86573.06,
+          "max_us": 109379.58
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 1.14,
+          "stw_pause_max_ms": 0.43,
+          "heap_inuse_end_mb": 1223,
+          "gc_cpu_fraction_cumulative": 0.0043
+        }
+      }
+    }
+  ]
+}
