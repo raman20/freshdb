@@ -39,8 +39,11 @@ type lensRun struct {
 	MsgsPerSec  float64 `json:"msgs_per_sec"`
 	Latency     Lat     `json:"txn_latency"`
 	ExactlyOnce bool    `json:"exactly_once_check"`
-	Check       string  `json:"check"`
-	Errors      int64   `json:"errors"`
+	// InputDrained: a worker emptied its input partition before the
+	// duration ended and stopped; rates are over the time actually worked.
+	InputDrained bool   `json:"input_drained"`
+	Check        string `json:"check"`
+	Errors       int64  `json:"errors"`
 }
 
 func enc(v int64) []byte { b := make([]byte, 8); binary.LittleEndian.PutUint64(b, uint64(v)); return b }
@@ -58,12 +61,13 @@ func cmdTxn(args []string) {
 	hotF := fs.String("hot", "1,16,256,65536", "hot-set sizes; each txn moves 1 unit between 2 random hot keys (1 = increment one counter)")
 	partsF := fs.String("partitions", "1,8", "multi-lens: independent topic partitions, one worker each")
 	batchF := fs.String("batch", "1,10", "multi-lens: messages per transaction")
+	fs.IntVar(&lensPrefill, "prefill", 1_000_000, "multi-lens: input messages published before the run (256 B each), split across partitions")
 	dur := fs.Duration("duration", 5*time.Second, "per cell")
 	seed := fs.Uint64("seed", 42, "RNG seed")
 	dataDir := fs.String("dir", "/tmp/freshdb-bench", "data directory (wiped)")
 	out := fs.String("out", "results", "output directory")
 	fs.Parse(args)
-	res := &Result{Suite: "txn", Env: envInfo(*dataDir), Params: map[string]any{"fsync": *fsync, "duration": dur.String(), "seed": *seed,
+	res := &Result{Suite: "txn", Env: envInfo(*dataDir), Params: map[string]any{"fsync": *fsync, "duration": dur.String(), "seed": *seed, "prefill": lensPrefill,
 		"occ_txn":        "read 2 hot keys, write both (a-1, b+1); retried on conflict up to 16 times like freshdb.Update",
 		"multi_lens_txn": "Fetch N from in-topic group, Put result/<offset> per msg, Publish each to out-topic, Ack last: one transaction"}}
 	for _, sys := range []string{"freshdb", "badger"} {
@@ -235,6 +239,8 @@ func occOnce(sys, dir string, fsync bool, clients, hot int, dur time.Duration, s
 	return r
 }
 
+var lensPrefill = 1_000_000
+
 func lensOnce(dir string, fsync bool, parts, batch int, dur time.Duration) lensRun {
 	db, err := openFreshDB(dir, fsync)
 	if err != nil {
@@ -242,8 +248,9 @@ func lensOnce(dir string, fsync bool, parts, batch int, dur time.Duration) lensR
 	}
 	defer db.Close()
 	payload := make([]byte, 256)
-	// prefill enough input that workers never run dry (checked below)
-	const prefill = 200_000
+	// prefill input; a worker that empties its partition stops (errStop), so
+	// rates cover only the time spent doing real work (reported as drained)
+	prefill := lensPrefill
 	for p := 0; p < parts; p++ {
 		for i := 0; i < prefill/parts; i += 1000 {
 			if err := db.Update(bg, func(tx *freshdb.Tx) error {
@@ -259,6 +266,8 @@ func lensOnce(dir string, fsync bool, parts, batch int, dur time.Duration) lensR
 		}
 	}
 	var msgs atomic.Int64
+	stopAware = func(err error) bool { return errors.Is(err, errStop) }
+	defer func() { stopAware = func(error) bool { return false } }()
 	ph := runClosed(parts, dur, func(id int) opFunc {
 		in, outT := fmt.Sprintf("in-%d", id), fmt.Sprintf("out-%d", id)
 		return func() error {
@@ -266,9 +275,11 @@ func lensOnce(dir string, fsync bool, parts, batch int, dur time.Duration) lensR
 			err := db.Update(bg, func(tx *freshdb.Tx) error {
 				g := tx.Topic(in).Group("worker")
 				ms, err := g.Fetch(batch)
-				if err != nil || len(ms) == 0 {
-					n = 0
+				if err != nil {
 					return err
+				}
+				if len(ms) == 0 {
+					return errStop // input drained: this worker is done
 				}
 				for _, m := range ms {
 					if err := tx.Put(fmt.Sprintf("result/%s/%d", in, m.Offset), m.Value); err != nil {
@@ -288,7 +299,7 @@ func lensOnce(dir string, fsync bool, parts, batch int, dur time.Duration) lensR
 		}
 	})
 	// exactly-once: for each partition, cursor == out length == result count
-	ok, check := true, ""
+	ok, drained, check := true, false, ""
 	db.View(bg, func(tx *freshdb.Tx) error {
 		var outs, results, cursors uint64
 		for p := 0; p < parts; p++ {
@@ -296,8 +307,11 @@ func lensOnce(dir string, fsync bool, parts, batch int, dur time.Duration) lensR
 			cur, _ := tx.Topic(in).Group("worker").Cursor()
 			ol := tx.Topic(fmt.Sprintf("out-%d", p)).Len()
 			rs, _ := tx.Scan("result/" + in + "/")
-			if cur != ol || ol != uint64(len(rs)) || cur >= uint64(prefill/parts) {
+			if cur != ol || ol != uint64(len(rs)) {
 				ok = false
+			}
+			if cur >= uint64(prefill/parts) {
+				drained = true
 			}
 			outs += ol
 			results += uint64(len(rs))
@@ -310,5 +324,5 @@ func lensOnce(dir string, fsync bool, parts, batch int, dur time.Duration) lensR
 		return nil
 	})
 	return lensRun{Fsync: fsync, Partitions: parts, Batch: batch, Txns: ph.Ops - ph.Errors, TxnsPerSec: round(float64(ph.Ops-ph.Errors)/ph.Seconds, 1),
-		MsgsPerSec: round(float64(msgs.Load())/ph.Seconds, 1), Latency: ph.Latency, ExactlyOnce: ok, Check: check, Errors: ph.Errors}
+		MsgsPerSec: round(float64(msgs.Load())/ph.Seconds, 1), Latency: ph.Latency, ExactlyOnce: ok, InputDrained: drained, Check: check, Errors: ph.Errors}
 }

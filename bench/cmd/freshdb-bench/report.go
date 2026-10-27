@@ -115,14 +115,14 @@ func cmdReport(args []string) {
 				w("| %v | %v | %v | %v | %v | %v | %v | %s | %s | %s | %v |\n", m["system"], m["fsync"], m["clients"], m["hot_keys"], m["commits_per_sec"], m["abort_rate"], get(m, "gave_up_after_16_retries"),
 					lms(m, "latency_incl_retries", "p50_us"), lms(m, "latency_incl_retries", "p99_us"), lms(m, "latency_incl_retries", "p999_us"), m["invariant_ok"])
 			}
-			w("\nMulti-lens consume+write transaction (freshDB only):\n\n| fsync | partitions | batch | txns/s | msgs/s | p50 | p99 | p99.9 | exactly-once check | errors |\n|---|---|---|---|---|---|---|---|---|---|\n")
+			w("\nMulti-lens consume+write transaction (freshDB only):\n\n| fsync | partitions | batch | txns/s | msgs/s | p50 | p99 | p99.9 | exactly-once check | input drained early | errors |\n|---|---|---|---|---|---|---|---|---|---|---|\n")
 			for _, x := range runs {
 				m := x.(map[string]any)
 				if _, ok := m["partitions"]; !ok {
 					continue
 				}
-				w("| %v | %v | %v | %v | %v | %s | %s | %s | %v | %v |\n", m["fsync"], m["partitions"], m["batch"], m["txns_per_sec"], m["msgs_per_sec"],
-					lms(m, "txn_latency", "p50_us"), lms(m, "txn_latency", "p99_us"), lms(m, "txn_latency", "p999_us"), m["exactly_once_check"], get(m, "errors"))
+				w("| %v | %v | %v | %v | %v | %s | %s | %s | %v | %v | %v |\n", m["fsync"], m["partitions"], m["batch"], m["txns_per_sec"], m["msgs_per_sec"],
+					lms(m, "txn_latency", "p50_us"), lms(m, "txn_latency", "p99_us"), lms(m, "txn_latency", "p999_us"), m["exactly_once_check"], get(m, "input_drained"), get(m, "errors"))
 			}
 		default:
 			for _, x := range runs {
