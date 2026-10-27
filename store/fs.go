@@ -17,7 +17,15 @@ import (
 // renameat2(RENAME_NOREPLACE) into place (atomic create-only, falls back to
 // link(2)), then fsync the directory. A crash at any point leaves either no
 // object or the complete object; stray temp files are removed on open.
-type FS struct{ root string }
+type FS struct {
+	root   string
+	noSync bool
+}
+
+// SetUnsafeNoSync disables every fsync. A crash or power loss can then lose
+// acknowledged writes or leave the log unrecoverable. It exists only so
+// benchmarks can report fsync-off numbers next to other engines' no-sync modes.
+func (s *FS) SetUnsafeNoSync(on bool) { s.noSync = on }
 
 const tmpDir = ".tmp"
 
@@ -55,7 +63,7 @@ func (s *FS) mkdirs(dir string) error {
 	if err := os.Mkdir(dir, 0o755); err != nil && !errors.Is(err, fs.ErrExist) {
 		return err
 	}
-	return syncDir(filepath.Dir(dir))
+	return s.syncDir(filepath.Dir(dir))
 }
 
 func (s *FS) PutIfAbsent(_ context.Context, key string, data []byte) error {
@@ -78,7 +86,7 @@ func (s *FS) PutIfAbsent(_ context.Context, key string, data []byte) error {
 		os.Remove(tmp)
 		return err
 	}
-	if err := f.Sync(); err != nil { // durable BEFORE it becomes visible
+	if err := s.fsync(f); err != nil { // durable BEFORE it becomes visible
 		f.Close()
 		os.Remove(tmp)
 		return err
@@ -95,7 +103,7 @@ func (s *FS) PutIfAbsent(_ context.Context, key string, data []byte) error {
 		}
 		return err
 	}
-	return syncDir(filepath.Dir(p))
+	return s.syncDir(filepath.Dir(p))
 }
 
 func (s *FS) Get(_ context.Context, key string) ([]byte, error) {
@@ -140,5 +148,19 @@ func (s *FS) Delete(_ context.Context, key string) error {
 	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	return syncDir(filepath.Dir(p))
+	return s.syncDir(filepath.Dir(p))
+}
+
+func (s *FS) fsync(f *os.File) error {
+	if s.noSync {
+		return nil
+	}
+	return f.Sync()
+}
+
+func (s *FS) syncDir(dir string) error {
+	if s.noSync {
+		return nil
+	}
+	return syncDir(dir)
 }

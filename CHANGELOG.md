@@ -34,6 +34,19 @@ break APIs and the on-storage format.
   - Fuzzing of the decoders.
   - MinIO S3 tests.
 - Agent demo (`examples/agent-demo.sh`) and Go API tour (`examples/tour`).
+- Benchmark suite in [`bench/`](bench) (`freshdb-bench`): YCSB A/B/C/D/F
+  against Badger, Pebble, bbolt and SQLite on the same box; streaming against
+  embedded NATS JetStream; OCC contention; the multi-lens transaction; vector
+  recall vs QPS; and S3 request counts and estimated request cost.
+  Coordinated-omission-aware (HdrHistogram) latency. See
+  [docs/benchmarks.md](docs/benchmarks.md).
+
+### Changed
+- KV/topic snapshots are now **off by default** (`WithSnapshotEvery(n)` turns
+  them on). The benchmarks showed they are written synchronously inside the
+  commit path and copy the whole lens. With 1M × 1 KB keys that is about 1 GB
+  every 1,000 commits. They also don't speed up open yet, because recovery
+  still reads every segment.
 
 ### Fixed during development (found by the tooling)
 - TLC found that a slow opener could write an older-epoch fence after a newer

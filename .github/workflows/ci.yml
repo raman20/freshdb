@@ -140,6 +140,32 @@ jobs:
           test "$(/tmp/freshdb get hello)" = world
           /tmp/freshdb verify
 
+  bench-smoke:
+    name: benchmark smoke (tiny sizes; numbers are meaningless)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: bench
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: bench/go.mod
+          cache-dependency-path: bench/go.sum
+      - run: go vet ./...
+      - name: staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          "$(go env GOPATH)/bin/staticcheck" ./...
+      - name: run every suite at tiny size (fails if a txn invariant or exactly-once check fails)
+        run: OUT=$RUNNER_TEMP/bench-smoke scripts/smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-smoke-results
+          path: ${{ runner.temp }}/bench-smoke
+
   tla:
     name: TLA+ (TLC)
     runs-on: ubuntu-latest

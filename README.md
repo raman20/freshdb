@@ -482,7 +482,8 @@ Please report vulnerabilities privately; see [SECURITY.md](SECURITY.md). Short v
 
 ## Limitations
 
-- All lens state is in RAM. There is no compaction, and snapshots don't speed
+- All lens state is in RAM. There is no compaction. Snapshots are off by
+  default: they are written synchronously in the commit path and don't speed
   up open yet.
 - Vector search is exact brute force; there is no ANN index.
 - There is one writer per database, with no HA and no replicas.

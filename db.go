@@ -25,7 +25,10 @@ type Options struct {
 	// KEK is the 32-byte key-encryption key. Nil = dev mode: generated and
 	// stored in the bucket at keys/_kek (NOT safe against bucket backups).
 	KEK []byte
-	// SnapshotEvery writes a KV/topic checkpoint every N commits per log (0 = 1000, <0 = never).
+	// SnapshotEvery writes a KV/topic checkpoint every N commits per log
+	// (<= 0 = never, the default). Snapshots are written synchronously in the
+	// commit path, copy the whole lens state, and do not yet make open faster
+	// (recovery still verifies every segment), so they are opt-in for now.
 	SnapshotEvery int
 	// MaxBatch bounds how many transactions one group commit may contain.
 	MaxBatch int
@@ -85,9 +88,6 @@ func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
 	}
 	if o.Rand == nil {
 		o.Rand = rand.Reader
-	}
-	if o.SnapshotEvery == 0 {
-		o.SnapshotEvery = 1000
 	}
 	if o.MaxBatch <= 0 {
 		o.MaxBatch = 256
