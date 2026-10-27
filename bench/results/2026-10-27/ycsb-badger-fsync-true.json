@@ -1,7 +1,7 @@
 {
   "suite": "ycsb",
   "env": {
-    "time": "2026-10-27T19:55:04+05:30",
+    "time": "2026-10-27T20:14:55+05:30",
     "go_version": "go1.27.3",
     "os": "linux/amd64",
     "kernel": "6.12.94+",
@@ -9,9 +9,9 @@
     "cpus": 8,
     "mem_total": "16386368 kB",
     "disk": "/dev/vdb ext4 128G",
-    "freshdb_commit": "4d1ec1b",
+    "freshdb_commit": "8db8396-dirty",
     "command": "bin/freshdb-bench ycsb -system badger -fsync=true -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27",
-    "loadavg_at_start": "3.84 2.98 2.90"
+    "loadavg_at_start": "3.51 2.46 2.45"
   },
   "params": {
     "system": "badger",
@@ -30,10 +30,10 @@
     "open_loop_cap_ops_per_sec": 200000,
     "seed": 42,
     "zipf_theta": 0.99,
-    "load_seconds": 7.14,
-    "load_keys_per_sec": 140117,
+    "load_seconds": 7.26,
+    "load_keys_per_sec": 137725,
     "disk_after_run": "1.3G",
-    "peak_rss": "3999832 kB"
+    "peak_rss": "4404628 kB"
   },
   "runs": [
     {
@@ -46,46 +46,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 85083,
-        "ops_per_sec": 17014.6,
+        "ops": 82603,
+        "ops_per_sec": 16520.4,
         "errors": 0,
         "latency": {
-          "count": 85083,
-          "mean_us": 58.55,
-          "p50_us": 32.83,
-          "p99_us": 337.66,
-          "p999_us": 2049.02,
-          "max_us": 25657.34
+          "count": 82603,
+          "mean_us": 60.29,
+          "p50_us": 32.32,
+          "p99_us": 378.88,
+          "p999_us": 2459.65,
+          "max_us": 51642.37
         },
         "go_gc": {
           "cycles": 2,
           "stw_pause_total_ms": 0.24,
-          "stw_pause_max_ms": 0.16,
-          "heap_inuse_end_mb": 1230,
-          "gc_cpu_fraction_cumulative": 0.0011
+          "stw_pause_max_ms": 0.14,
+          "heap_inuse_end_mb": 1599,
+          "gc_cpu_fraction_cumulative": 0.0014
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 42536,
-        "ops_per_sec": 8507.1,
-        "target_ops_per_sec": 8507.3,
+        "ops": 41301,
+        "ops_per_sec": 8259.7,
+        "target_ops_per_sec": 8260.2,
         "errors": 0,
         "latency": {
-          "count": 42536,
-          "mean_us": 5034.73,
-          "p50_us": 66.11,
-          "p99_us": 91160.58,
-          "p999_us": 101908.48,
-          "max_us": 103284.74
+          "count": 41301,
+          "mean_us": 5843.13,
+          "p50_us": 111.42,
+          "p99_us": 88801.28,
+          "p999_us": 102825.98,
+          "max_us": 105250.82
         },
         "go_gc": {
-          "cycles": 1,
-          "stw_pause_total_ms": 0.28,
-          "stw_pause_max_ms": 0.28,
-          "heap_inuse_end_mb": 1163,
-          "gc_cpu_fraction_cumulative": 0.0009
+          "cycles": 0,
+          "stw_pause_total_ms": 0,
+          "stw_pause_max_ms": 0,
+          "heap_inuse_end_mb": 2442,
+          "gc_cpu_fraction_cumulative": 0.0014
         }
       }
     },
@@ -99,46 +99,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 136523,
-        "ops_per_sec": 27302.7,
+        "ops": 132033,
+        "ops_per_sec": 26405.9,
         "errors": 0,
         "latency": {
-          "count": 136523,
-          "mean_us": 292.61,
-          "p50_us": 251.9,
-          "p99_us": 1141.76,
-          "p999_us": 4296.7,
-          "max_us": 23117.82
+          "count": 132033,
+          "mean_us": 302.55,
+          "p50_us": 247.3,
+          "p99_us": 1331.2,
+          "p999_us": 5853.18,
+          "max_us": 52396.03
         },
         "go_gc": {
-          "cycles": 1,
-          "stw_pause_total_ms": 0.26,
-          "stw_pause_max_ms": 0.26,
-          "heap_inuse_end_mb": 2111,
-          "gc_cpu_fraction_cumulative": 0.0007
+          "cycles": 2,
+          "stw_pause_total_ms": 0.27,
+          "stw_pause_max_ms": 0.15,
+          "heap_inuse_end_mb": 1678,
+          "gc_cpu_fraction_cumulative": 0.0008
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 68256,
-        "ops_per_sec": 13651.5,
-        "target_ops_per_sec": 13651.4,
+        "ops": 66014,
+        "ops_per_sec": 13202.7,
+        "target_ops_per_sec": 13203,
         "errors": 0,
         "latency": {
-          "count": 68256,
-          "mean_us": 5977.86,
-          "p50_us": 130.37,
-          "p99_us": 91095.04,
-          "p999_us": 101318.66,
-          "max_us": 106364.93
+          "count": 66014,
+          "mean_us": 10671.62,
+          "p50_us": 153.47,
+          "p99_us": 139329.54,
+          "p999_us": 154796.03,
+          "max_us": 159907.84
         },
         "go_gc": {
           "cycles": 1,
-          "stw_pause_total_ms": 0.1,
-          "stw_pause_max_ms": 0.1,
-          "heap_inuse_end_mb": 2141,
-          "gc_cpu_fraction_cumulative": 0.0007
+          "stw_pause_total_ms": 0.2,
+          "stw_pause_max_ms": 0.2,
+          "heap_inuse_end_mb": 1732,
+          "gc_cpu_fraction_cumulative": 0.0008
         }
       }
     },
@@ -152,46 +152,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 127762,
-        "ops_per_sec": 25540.3,
+        "ops": 142049,
+        "ops_per_sec": 28398.3,
         "errors": 0,
         "latency": {
-          "count": 127762,
-          "mean_us": 2504.39,
-          "p50_us": 2183.17,
-          "p99_us": 9969.66,
-          "p999_us": 39190.53,
-          "max_us": 49545.22
+          "count": 142049,
+          "mean_us": 2251.29,
+          "p50_us": 1929.22,
+          "p99_us": 10616.83,
+          "p999_us": 36044.8,
+          "max_us": 142344.19
         },
         "go_gc": {
-          "cycles": 3,
-          "stw_pause_total_ms": 0.55,
-          "stw_pause_max_ms": 0.33,
-          "heap_inuse_end_mb": 959,
-          "gc_cpu_fraction_cumulative": 0.0007
+          "cycles": 2,
+          "stw_pause_total_ms": 0.33,
+          "stw_pause_max_ms": 0.23,
+          "heap_inuse_end_mb": 1733,
+          "gc_cpu_fraction_cumulative": 0.0008
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 63850,
-        "ops_per_sec": 12770.2,
-        "target_ops_per_sec": 12770.2,
+        "ops": 70995,
+        "ops_per_sec": 14199.3,
+        "target_ops_per_sec": 14199.2,
         "errors": 0,
         "latency": {
-          "count": 63850,
-          "mean_us": 1298.17,
-          "p50_us": 73.22,
-          "p99_us": 34242.56,
-          "p999_us": 61112.32,
-          "max_us": 67010.56
+          "count": 70995,
+          "mean_us": 773.3,
+          "p50_us": 99.78,
+          "p99_us": 9854.98,
+          "p999_us": 32161.79,
+          "max_us": 37650.43
         },
         "go_gc": {
-          "cycles": 0,
-          "stw_pause_total_ms": 0,
-          "stw_pause_max_ms": 0,
-          "heap_inuse_end_mb": 1269,
-          "gc_cpu_fraction_cumulative": 0.0007
+          "cycles": 1,
+          "stw_pause_total_ms": 0.13,
+          "stw_pause_max_ms": 0.13,
+          "heap_inuse_end_mb": 1485,
+          "gc_cpu_fraction_cumulative": 0.0008
         }
       }
     },
@@ -205,43 +205,43 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 210899,
-        "ops_per_sec": 42179.7,
+        "ops": 223325,
+        "ops_per_sec": 44665,
         "errors": 0,
         "latency": {
-          "count": 210899,
-          "mean_us": 23.54,
-          "p50_us": 16.85,
-          "p99_us": 195.58,
-          "p999_us": 697.34,
-          "max_us": 15826.94
+          "count": 223325,
+          "mean_us": 22.25,
+          "p50_us": 14.46,
+          "p99_us": 192.26,
+          "p999_us": 877.06,
+          "max_us": 40108.03
         },
         "go_gc": {
           "cycles": 2,
-          "stw_pause_total_ms": 0.23,
-          "stw_pause_max_ms": 0.13,
-          "heap_inuse_end_mb": 1310,
+          "stw_pause_total_ms": 0.22,
+          "stw_pause_max_ms": 0.12,
+          "heap_inuse_end_mb": 1284,
           "gc_cpu_fraction_cumulative": 0.0007
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 105449,
-        "ops_per_sec": 21089.9,
-        "target_ops_per_sec": 21089.9,
+        "ops": 111662,
+        "ops_per_sec": 22332.1,
+        "target_ops_per_sec": 22332.5,
         "errors": 0,
         "latency": {
-          "count": 105449,
-          "mean_us": 820.59,
-          "p50_us": 26.93,
-          "p99_us": 18694.14,
-          "p999_us": 24084.48,
-          "max_us": 25477.12
+          "count": 111662,
+          "mean_us": 371.94,
+          "p50_us": 24.86,
+          "p99_us": 6520.83,
+          "p999_us": 17825.79,
+          "max_us": 19464.19
         },
         "go_gc": {
           "cycles": 2,
-          "stw_pause_total_ms": 0.2,
+          "stw_pause_total_ms": 0.21,
           "stw_pause_max_ms": 0.11,
           "heap_inuse_end_mb": 612,
           "gc_cpu_fraction_cumulative": 0.0007
@@ -258,46 +258,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 533584,
-        "ops_per_sec": 106715.8,
+        "ops": 529541,
+        "ops_per_sec": 105904.1,
         "errors": 0,
         "latency": {
-          "count": 533584,
-          "mean_us": 74.69,
-          "p50_us": 22.29,
-          "p99_us": 442.62,
-          "p999_us": 1472.51,
-          "max_us": 73728
+          "count": 529541,
+          "mean_us": 75.27,
+          "p50_us": 22.42,
+          "p99_us": 469.5,
+          "p999_us": 1974.27,
+          "max_us": 34439.17
         },
         "go_gc": {
-          "cycles": 9,
-          "stw_pause_total_ms": 1.29,
-          "stw_pause_max_ms": 0.2,
-          "heap_inuse_end_mb": 606,
-          "gc_cpu_fraction_cumulative": 0.0011
+          "cycles": 12,
+          "stw_pause_total_ms": 3.9,
+          "stw_pause_max_ms": 2.04,
+          "heap_inuse_end_mb": 535,
+          "gc_cpu_fraction_cumulative": 0.0014
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 266789,
-        "ops_per_sec": 53357.7,
-        "target_ops_per_sec": 53357.9,
+        "ops": 264760,
+        "ops_per_sec": 52952.1,
+        "target_ops_per_sec": 52952.1,
         "errors": 0,
         "latency": {
-          "count": 266789,
-          "mean_us": 5747.37,
-          "p50_us": 67.78,
-          "p99_us": 76349.44,
-          "p999_us": 91357.18,
-          "max_us": 94109.7
+          "count": 264760,
+          "mean_us": 1102.21,
+          "p50_us": 49.18,
+          "p99_us": 24936.45,
+          "p999_us": 35356.67,
+          "max_us": 37322.75
         },
         "go_gc": {
           "cycles": 6,
-          "stw_pause_total_ms": 0.92,
-          "stw_pause_max_ms": 0.19,
-          "heap_inuse_end_mb": 640,
-          "gc_cpu_fraction_cumulative": 0.0012
+          "stw_pause_total_ms": 0.87,
+          "stw_pause_max_ms": 0.21,
+          "heap_inuse_end_mb": 568,
+          "gc_cpu_fraction_cumulative": 0.0015
         }
       }
     },
@@ -311,46 +311,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 747864,
-        "ops_per_sec": 149558.8,
+        "ops": 669983,
+        "ops_per_sec": 133985.4,
         "errors": 0,
         "latency": {
-          "count": 747864,
-          "mean_us": 427.32,
-          "p50_us": 328.45,
-          "p99_us": 3051.52,
-          "p999_us": 9617.41,
-          "max_us": 23117.82
+          "count": 669983,
+          "mean_us": 477.14,
+          "p50_us": 329.47,
+          "p99_us": 3295.23,
+          "p999_us": 15761.41,
+          "max_us": 46628.86
         },
         "go_gc": {
-          "cycles": 16,
-          "stw_pause_total_ms": 2.81,
-          "stw_pause_max_ms": 0.33,
-          "heap_inuse_end_mb": 525,
-          "gc_cpu_fraction_cumulative": 0.0018
+          "cycles": 14,
+          "stw_pause_total_ms": 6.96,
+          "stw_pause_max_ms": 4.96,
+          "heap_inuse_end_mb": 581,
+          "gc_cpu_fraction_cumulative": 0.0021
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 373897,
-        "ops_per_sec": 74772.3,
-        "target_ops_per_sec": 74779.4,
+        "ops": 334963,
+        "ops_per_sec": 66981,
+        "target_ops_per_sec": 66992.7,
         "errors": 0,
         "latency": {
-          "count": 373897,
-          "mean_us": 3640.59,
-          "p50_us": 1261.57,
-          "p99_us": 54558.72,
-          "p999_us": 71303.17,
-          "max_us": 79626.24
+          "count": 334963,
+          "mean_us": 3219.47,
+          "p50_us": 1003.52,
+          "p99_us": 36896.77,
+          "p999_us": 41877.5,
+          "max_us": 46006.27
         },
         "go_gc": {
           "cycles": 8,
-          "stw_pause_total_ms": 1.31,
-          "stw_pause_max_ms": 0.24,
-          "heap_inuse_end_mb": 790,
-          "gc_cpu_fraction_cumulative": 0.0021
+          "stw_pause_total_ms": 1.19,
+          "stw_pause_max_ms": 0.2,
+          "heap_inuse_end_mb": 597,
+          "gc_cpu_fraction_cumulative": 0.0022
         }
       }
     },
@@ -364,46 +364,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 308556,
-        "ops_per_sec": 61711,
+        "ops": 294891,
+        "ops_per_sec": 58977.9,
         "errors": 0,
         "latency": {
-          "count": 308556,
-          "mean_us": 16.08,
-          "p50_us": 16.25,
-          "p99_us": 32.53,
-          "p999_us": 48.54,
-          "max_us": 529.92
+          "count": 294891,
+          "mean_us": 16.83,
+          "p50_us": 16.43,
+          "p99_us": 33.41,
+          "p999_us": 49.82,
+          "max_us": 365.06
         },
         "go_gc": {
-          "cycles": 8,
-          "stw_pause_total_ms": 1.14,
-          "stw_pause_max_ms": 0.25,
-          "heap_inuse_end_mb": 604,
-          "gc_cpu_fraction_cumulative": 0.0021
+          "cycles": 7,
+          "stw_pause_total_ms": 1.02,
+          "stw_pause_max_ms": 0.29,
+          "heap_inuse_end_mb": 741,
+          "gc_cpu_fraction_cumulative": 0.0023
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 154277,
-        "ops_per_sec": 30855.5,
-        "target_ops_per_sec": 30855.5,
+        "ops": 147444,
+        "ops_per_sec": 29489,
+        "target_ops_per_sec": 29489,
         "errors": 0,
         "latency": {
-          "count": 154277,
-          "mean_us": 27.71,
-          "p50_us": 21.89,
-          "p99_us": 82.24,
-          "p999_us": 1196.03,
-          "max_us": 2768.9
+          "count": 147444,
+          "mean_us": 25.19,
+          "p50_us": 21.25,
+          "p99_us": 73.15,
+          "p999_us": 513.79,
+          "max_us": 948.22
         },
         "go_gc": {
           "cycles": 4,
-          "stw_pause_total_ms": 0.31,
-          "stw_pause_max_ms": 0.11,
-          "heap_inuse_end_mb": 538,
-          "gc_cpu_fraction_cumulative": 0.0021
+          "stw_pause_total_ms": 0.58,
+          "stw_pause_max_ms": 0.25,
+          "heap_inuse_end_mb": 667,
+          "gc_cpu_fraction_cumulative": 0.0022
         }
       }
     },
@@ -417,45 +417,45 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 1254646,
-        "ops_per_sec": 250927,
+        "ops": 1295069,
+        "ops_per_sec": 259012.7,
         "errors": 0,
         "latency": {
-          "count": 1254646,
-          "mean_us": 31.67,
-          "p50_us": 19.66,
-          "p99_us": 362.24,
-          "p999_us": 1080.32,
-          "max_us": 48136.19
+          "count": 1295069,
+          "mean_us": 30.69,
+          "p50_us": 19.15,
+          "p99_us": 359.42,
+          "p999_us": 953.86,
+          "max_us": 6602.75
         },
         "go_gc": {
-          "cycles": 31,
-          "stw_pause_total_ms": 20.12,
-          "stw_pause_max_ms": 14.22,
-          "heap_inuse_end_mb": 518,
-          "gc_cpu_fraction_cumulative": 0.0033
+          "cycles": 32,
+          "stw_pause_total_ms": 6.1,
+          "stw_pause_max_ms": 0.67,
+          "heap_inuse_end_mb": 730,
+          "gc_cpu_fraction_cumulative": 0.0034
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 627317,
-        "ops_per_sec": 125463.1,
-        "target_ops_per_sec": 125463.5,
+        "ops": 647531,
+        "ops_per_sec": 129505.9,
+        "target_ops_per_sec": 129506.4,
         "errors": 0,
         "latency": {
-          "count": 627317,
-          "mean_us": 912.46,
-          "p50_us": 22.54,
-          "p99_us": 23183.36,
-          "p999_us": 73400.32,
-          "max_us": 86769.66
+          "count": 647531,
+          "mean_us": 498.9,
+          "p50_us": 22.75,
+          "p99_us": 11255.81,
+          "p999_us": 48988.16,
+          "max_us": 63668.22
         },
         "go_gc": {
-          "cycles": 14,
-          "stw_pause_total_ms": 29.05,
-          "stw_pause_max_ms": 24.2,
-          "heap_inuse_end_mb": 724,
+          "cycles": 16,
+          "stw_pause_total_ms": 2.77,
+          "stw_pause_max_ms": 0.21,
+          "heap_inuse_end_mb": 624,
           "gc_cpu_fraction_cumulative": 0.0039
         }
       }
@@ -470,46 +470,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 1384198,
-        "ops_per_sec": 276810.9,
+        "ops": 1395051,
+        "ops_per_sec": 278975.6,
         "errors": 0,
         "latency": {
-          "count": 1384198,
-          "mean_us": 230.88,
-          "p50_us": 19.66,
-          "p99_us": 5025.79,
-          "p999_us": 9773.06,
-          "max_us": 27983.87
+          "count": 1395051,
+          "mean_us": 229.1,
+          "p50_us": 19.36,
+          "p99_us": 5050.37,
+          "p999_us": 10010.62,
+          "max_us": 27443.2
         },
         "go_gc": {
-          "cycles": 32,
-          "stw_pause_total_ms": 5.53,
-          "stw_pause_max_ms": 0.33,
-          "heap_inuse_end_mb": 605,
-          "gc_cpu_fraction_cumulative": 0.0049
+          "cycles": 33,
+          "stw_pause_total_ms": 5.54,
+          "stw_pause_max_ms": 0.32,
+          "heap_inuse_end_mb": 783,
+          "gc_cpu_fraction_cumulative": 0.005
         }
       },
       "open_loop": {
         "mode": "open",
-        "seconds": 5.02,
-        "ops": 692027,
-        "ops_per_sec": 137869.3,
-        "target_ops_per_sec": 138405.5,
+        "seconds": 5.01,
+        "ops": 697439,
+        "ops_per_sec": 139186,
+        "target_ops_per_sec": 139487.8,
         "errors": 0,
         "latency": {
-          "count": 692027,
-          "mean_us": 26435.25,
-          "p50_us": 16924.67,
-          "p99_us": 129171.46,
-          "p999_us": 168951.81,
-          "max_us": 197001.22
+          "count": 697439,
+          "mean_us": 25536.27,
+          "p50_us": 17285.12,
+          "p99_us": 120848.38,
+          "p999_us": 179044.35,
+          "max_us": 228196.35
         },
         "go_gc": {
-          "cycles": 16,
-          "stw_pause_total_ms": 3.29,
-          "stw_pause_max_ms": 1,
-          "heap_inuse_end_mb": 569,
-          "gc_cpu_fraction_cumulative": 0.0053
+          "cycles": 17,
+          "stw_pause_total_ms": 2.6,
+          "stw_pause_max_ms": 0.22,
+          "heap_inuse_end_mb": 685,
+          "gc_cpu_fraction_cumulative": 0.0054
         }
       }
     },
@@ -523,46 +523,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 70973,
-        "ops_per_sec": 14194.3,
+        "ops": 68356,
+        "ops_per_sec": 13671.2,
         "errors": 0,
         "latency": {
-          "count": 70973,
-          "mean_us": 70.22,
-          "p50_us": 48.32,
-          "p99_us": 371.97,
-          "p999_us": 956.93,
-          "max_us": 21839.87
+          "count": 68356,
+          "mean_us": 72.93,
+          "p50_us": 49.7,
+          "p99_us": 386.56,
+          "p999_us": 1012.22,
+          "max_us": 11952.13
         },
         "go_gc": {
           "cycles": 2,
-          "stw_pause_total_ms": 0.23,
-          "stw_pause_max_ms": 0.13,
-          "heap_inuse_end_mb": 550,
+          "stw_pause_total_ms": 0.32,
+          "stw_pause_max_ms": 0.24,
+          "heap_inuse_end_mb": 488,
           "gc_cpu_fraction_cumulative": 0.0051
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 35485,
-        "ops_per_sec": 7095.1,
-        "target_ops_per_sec": 7097.2,
+        "ops": 34178,
+        "ops_per_sec": 6835.7,
+        "target_ops_per_sec": 6835.6,
         "errors": 0,
         "latency": {
-          "count": 35485,
-          "mean_us": 374.52,
-          "p50_us": 97.41,
-          "p99_us": 3287.04,
-          "p999_us": 6086.66,
-          "max_us": 7282.69
+          "count": 34178,
+          "mean_us": 387.65,
+          "p50_us": 93.06,
+          "p99_us": 4878.34,
+          "p999_us": 9560.06,
+          "max_us": 11051.01
         },
         "go_gc": {
           "cycles": 1,
-          "stw_pause_total_ms": 0.15,
-          "stw_pause_max_ms": 0.15,
-          "heap_inuse_end_mb": 578,
-          "gc_cpu_fraction_cumulative": 0.0049
+          "stw_pause_total_ms": 0.14,
+          "stw_pause_max_ms": 0.14,
+          "heap_inuse_end_mb": 505,
+          "gc_cpu_fraction_cumulative": 0.005
         }
       }
     },
@@ -576,46 +576,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 144575,
-        "ops_per_sec": 28912.3,
+        "ops": 126730,
+        "ops_per_sec": 25344.5,
         "errors": 0,
         "latency": {
-          "count": 144575,
-          "mean_us": 276.28,
-          "p50_us": 250.88,
-          "p99_us": 810.5,
-          "p999_us": 2787.33,
-          "max_us": 15491.07
+          "count": 126730,
+          "mean_us": 315.24,
+          "p50_us": 257.28,
+          "p99_us": 1254.4,
+          "p999_us": 9879.55,
+          "max_us": 39976.96
         },
         "go_gc": {
-          "cycles": 2,
-          "stw_pause_total_ms": 0.26,
-          "stw_pause_max_ms": 0.19,
-          "heap_inuse_end_mb": 1405,
+          "cycles": 3,
+          "stw_pause_total_ms": 0.79,
+          "stw_pause_max_ms": 0.37,
+          "heap_inuse_end_mb": 1309,
           "gc_cpu_fraction_cumulative": 0.0049
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 72280,
-        "ops_per_sec": 14456.1,
-        "target_ops_per_sec": 14456.2,
+        "ops": 63361,
+        "ops_per_sec": 12672.4,
+        "target_ops_per_sec": 12672.3,
         "errors": 0,
         "latency": {
-          "count": 72280,
-          "mean_us": 1158.28,
-          "p50_us": 153.47,
-          "p99_us": 22790.14,
-          "p999_us": 27934.72,
-          "max_us": 29966.34
+          "count": 63361,
+          "mean_us": 478.46,
+          "p50_us": 115.2,
+          "p99_us": 6922.24,
+          "p999_us": 18841.6,
+          "max_us": 20152.32
         },
         "go_gc": {
-          "cycles": 1,
-          "stw_pause_total_ms": 0.14,
-          "stw_pause_max_ms": 0.14,
-          "heap_inuse_end_mb": 1404,
-          "gc_cpu_fraction_cumulative": 0.0048
+          "cycles": 0,
+          "stw_pause_total_ms": 0,
+          "stw_pause_max_ms": 0,
+          "heap_inuse_end_mb": 1938,
+          "gc_cpu_fraction_cumulative": 0.0049
         }
       }
     },
@@ -629,49 +629,50 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 144949,
-        "ops_per_sec": 28972.1,
-        "errors": 1054,
+        "ops": 150115,
+        "ops_per_sec": 30006.8,
+        "errors": 1093,
         "first_error": "Transaction Conflict. Please retry",
         "latency": {
-          "count": 144949,
-          "mean_us": 2207.11,
-          "p50_us": 1641.47,
-          "p99_us": 19513.34,
-          "p999_us": 38535.17,
-          "max_us": 84803.58
+          "count": 150115,
+          "mean_us": 2131.45,
+          "p50_us": 1581.06,
+          "p99_us": 19169.28,
+          "p999_us": 42991.62,
+          "max_us": 80084.99
         },
         "go_gc": {
-          "cycles": 3,
-          "stw_pause_total_ms": 0.55,
-          "stw_pause_max_ms": 0.34,
-          "heap_inuse_end_mb": 1462,
+          "cycles": 2,
+          "stw_pause_total_ms": 0.23,
+          "stw_pause_max_ms": 0.17,
+          "heap_inuse_end_mb": 1829,
           "gc_cpu_fraction_cumulative": 0.0045
         }
       },
       "open_loop": {
         "mode": "open",
-        "seconds": 5,
-        "ops": 72430,
-        "ops_per_sec": 14474.6,
-        "target_ops_per_sec": 14486.1,
-        "errors": 112,
+        "seconds": 247.91,
+        "ops": 27475,
+        "ops_per_sec": 110.8,
+        "target_ops_per_sec": 15003.4,
+        "errors": 49,
         "first_error": "Transaction Conflict. Please retry",
         "latency": {
-          "count": 72430,
-          "mean_us": 5702.88,
-          "p50_us": 2594.82,
-          "p99_us": 49905.66,
-          "p999_us": 72024.06,
-          "max_us": 87228.42
+          "count": 27475,
+          "mean_us": 287124.77,
+          "p50_us": 2889.73,
+          "p99_us": 54263.81,
+          "p999_us": 120057757.7,
+          "max_us": 120057757.7
         },
         "go_gc": {
-          "cycles": 1,
-          "stw_pause_total_ms": 0.13,
-          "stw_pause_max_ms": 0.13,
-          "heap_inuse_end_mb": 893,
-          "gc_cpu_fraction_cumulative": 0.0044
-        }
+          "cycles": 0,
+          "stw_pause_total_ms": 0,
+          "stw_pause_max_ms": 0,
+          "heap_inuse_end_mb": 2141,
+          "gc_cpu_fraction_cumulative": 0.0045
+        },
+        "not_issued_overload": 47542
       }
     },
     {
@@ -684,46 +685,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 344381,
-        "ops_per_sec": 68876.1,
+        "ops": 352846,
+        "ops_per_sec": 70568.7,
         "errors": 0,
         "latency": {
-          "count": 344381,
-          "mean_us": 14.36,
-          "p50_us": 5.31,
-          "p99_us": 165.76,
-          "p999_us": 609.79,
-          "max_us": 45318.14
+          "count": 352846,
+          "mean_us": 14.02,
+          "p50_us": 4.86,
+          "p99_us": 187.9,
+          "p999_us": 471.04,
+          "max_us": 43155.46
         },
         "go_gc": {
           "cycles": 4,
-          "stw_pause_total_ms": 0.66,
-          "stw_pause_max_ms": 0.19,
-          "heap_inuse_end_mb": 676,
-          "gc_cpu_fraction_cumulative": 0.0043
+          "stw_pause_total_ms": 0.6,
+          "stw_pause_max_ms": 0.18,
+          "heap_inuse_end_mb": 765,
+          "gc_cpu_fraction_cumulative": 0.0017
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 172190,
-        "ops_per_sec": 34436.9,
-        "target_ops_per_sec": 34438.1,
+        "ops": 176421,
+        "ops_per_sec": 35284.5,
+        "target_ops_per_sec": 35284.4,
         "errors": 0,
         "latency": {
-          "count": 172190,
-          "mean_us": 1926.99,
-          "p50_us": 29.15,
-          "p99_us": 32817.15,
-          "p999_us": 42696.7,
-          "max_us": 43941.89
+          "count": 176421,
+          "mean_us": 2764.44,
+          "p50_us": 26.64,
+          "p99_us": 51249.15,
+          "p999_us": 66322.43,
+          "max_us": 67960.83
         },
         "go_gc": {
-          "cycles": 2,
-          "stw_pause_total_ms": 0.23,
-          "stw_pause_max_ms": 0.12,
-          "heap_inuse_end_mb": 729,
-          "gc_cpu_fraction_cumulative": 0.0042
+          "cycles": 3,
+          "stw_pause_total_ms": 0.43,
+          "stw_pause_max_ms": 0.15,
+          "heap_inuse_end_mb": 977,
+          "gc_cpu_fraction_cumulative": 0.0017
         }
       }
     },
@@ -737,46 +738,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 462663,
-        "ops_per_sec": 92532,
+        "ops": 771205,
+        "ops_per_sec": 154240.6,
         "errors": 0,
         "latency": {
-          "count": 462663,
-          "mean_us": 86.18,
-          "p50_us": 10.58,
-          "p99_us": 597.5,
-          "p999_us": 8577.02,
-          "max_us": 170786.82
+          "count": 771205,
+          "mean_us": 51.6,
+          "p50_us": 10.77,
+          "p99_us": 310.02,
+          "p999_us": 873.98,
+          "max_us": 21774.34
         },
         "go_gc": {
           "cycles": 10,
-          "stw_pause_total_ms": 27.32,
-          "stw_pause_max_ms": 13.88,
-          "heap_inuse_end_mb": 1064,
-          "gc_cpu_fraction_cumulative": 0.0044
+          "stw_pause_total_ms": 1.38,
+          "stw_pause_max_ms": 0.21,
+          "heap_inuse_end_mb": 534,
+          "gc_cpu_fraction_cumulative": 0.0017
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 231330,
-        "ops_per_sec": 46262.3,
-        "target_ops_per_sec": 46266,
+        "ops": 385601,
+        "ops_per_sec": 77107.7,
+        "target_ops_per_sec": 77120.3,
         "errors": 0,
         "latency": {
-          "count": 231330,
-          "mean_us": 670.11,
-          "p50_us": 17.07,
-          "p99_us": 23642.11,
-          "p999_us": 38600.7,
-          "max_us": 42106.88
+          "count": 385601,
+          "mean_us": 235288.4,
+          "p50_us": 34373.63,
+          "p99_us": 997720.06,
+          "p999_us": 1045430.27,
+          "max_us": 1059586.05
         },
         "go_gc": {
-          "cycles": 1,
-          "stw_pause_total_ms": 0.12,
-          "stw_pause_max_ms": 0.12,
-          "heap_inuse_end_mb": 1297,
-          "gc_cpu_fraction_cumulative": 0.0043
+          "cycles": 7,
+          "stw_pause_total_ms": 27.66,
+          "stw_pause_max_ms": 26.52,
+          "heap_inuse_end_mb": 1059,
+          "gc_cpu_fraction_cumulative": 0.0018
         }
       }
     },
@@ -790,46 +791,46 @@
       "closed_loop": {
         "mode": "closed",
         "seconds": 5,
-        "ops": 1090968,
-        "ops_per_sec": 218182,
+        "ops": 1057359,
+        "ops_per_sec": 211460.4,
         "errors": 0,
         "latency": {
-          "count": 1090968,
-          "mean_us": 292.87,
-          "p50_us": 211.07,
-          "p99_us": 2306.05,
-          "p999_us": 7147.52,
-          "max_us": 40632.32
+          "count": 1057359,
+          "mean_us": 302.21,
+          "p50_us": 209.66,
+          "p99_us": 2412.54,
+          "p999_us": 5120,
+          "max_us": 52428.8
         },
         "go_gc": {
-          "cycles": 6,
-          "stw_pause_total_ms": 17.71,
-          "stw_pause_max_ms": 17.02,
-          "heap_inuse_end_mb": 1649,
-          "gc_cpu_fraction_cumulative": 0.0043
+          "cycles": 7,
+          "stw_pause_total_ms": 0.98,
+          "stw_pause_max_ms": 0.27,
+          "heap_inuse_end_mb": 1268,
+          "gc_cpu_fraction_cumulative": 0.0019
         }
       },
       "open_loop": {
         "mode": "open",
         "seconds": 5,
-        "ops": 545455,
-        "ops_per_sec": 109072.4,
-        "target_ops_per_sec": 109091,
+        "ops": 528651,
+        "ops_per_sec": 105670.9,
+        "target_ops_per_sec": 105730.2,
         "errors": 0,
         "latency": {
-          "count": 545455,
-          "mean_us": 4017.65,
-          "p50_us": 502.27,
-          "p99_us": 54263.81,
-          "p999_us": 86573.06,
-          "max_us": 109379.58
+          "count": 528651,
+          "mean_us": 1790.57,
+          "p50_us": 438.53,
+          "p99_us": 31735.81,
+          "p999_us": 39518.21,
+          "max_us": 44892.16
         },
         "go_gc": {
-          "cycles": 4,
-          "stw_pause_total_ms": 1.14,
-          "stw_pause_max_ms": 0.43,
-          "heap_inuse_end_mb": 1223,
-          "gc_cpu_fraction_cumulative": 0.0043
+          "cycles": 3,
+          "stw_pause_total_ms": 0.39,
+          "stw_pause_max_ms": 0.15,
+          "heap_inuse_end_mb": 1349,
+          "gc_cpu_fraction_cumulative": 0.0019
         }
       }
     }
