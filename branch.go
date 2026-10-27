@@ -155,7 +155,10 @@ func (db *DB) ViewLog(ctx context.Context, logID string, at uint64, fn func(*Tx)
 	if at == 0 || at > l.head() {
 		at = l.head()
 	}
-	v := buildView(l, at, db.env, idx, nil)
+	v, err := buildView(ctx, l, at, db.env, idx, nil, db.opts.InlineMax)
+	if err != nil {
+		return err
+	}
 	return fn(&Tx{db: db, v: v, at: at, reads: map[rkey]bool{}, local: map[rkey]*localVal{}})
 }
 
@@ -179,11 +182,14 @@ func (db *DB) RegisterIndex(ctx context.Context, coll, field string) error {
 		v := db.views[id]
 		v.mu.Lock() // blocks the writer's apply: the replay is consistent
 		ix := lens.NewDocIndex(coll, field)
-		for _, e := range v.log.lineage(v.head) {
-			ix.Apply(e, v.env)
+		err := v.log.each(ctx, v.head, func(e *lens.Entry) error { ix.Apply(e, v.env); return nil })
+		if err == nil {
+			v.idx[idxKey(coll, field)] = ix
 		}
-		v.idx[idxKey(coll, field)] = ix
 		v.mu.Unlock()
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -217,7 +223,10 @@ func (db *DB) RebuildDigests(branch string) (map[string][32]byte, error) {
 	w.v.mu.RLock()
 	h := w.v.head
 	w.v.mu.RUnlock()
-	v := buildView(w.l, h, db.env, idx, nil)
+	v, err := buildView(context.Background(), w.l, h, db.env, idx, nil, db.opts.InlineMax)
+	if err != nil {
+		return nil, err
+	}
 	out := map[string][32]byte{}
 	for _, l := range v.lenses() {
 		out[l.Name()] = l.Digest()

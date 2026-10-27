@@ -20,6 +20,7 @@ import (
 type FS struct {
 	root   string
 	noSync bool
+	fds    fdCache
 }
 
 // SetUnsafeNoSync disables every fsync. A crash or power loss can then lose
@@ -145,6 +146,7 @@ func (s *FS) Delete(_ context.Context, key string) error {
 	if err != nil {
 		return err
 	}
+	s.fds.drop(p)
 	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}

@@ -90,25 +90,33 @@ func (tx *Tx) get(space, key string) ([]byte, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	return tx.open(ver.Subject, ver.Val, ver.LSN, space, key)
+	return tx.open(ver, space, key)
 }
 
-// open decrypts a stored value. The op index is recovered from the entry.
-func (tx *Tx) open(subject string, val []byte, lsn uint64, space, key string) ([]byte, error) {
-	if subject == "" {
+// open returns the plaintext of a stored version: it reads the bytes from
+// the log when the lens keeps only their position, and decrypts subject
+// data. Shredded data is indistinguishable from absent (ErrNotFound).
+func (tx *Tx) open(ver lens.Version, space, key string) ([]byte, error) {
+	val := ver.Val
+	var logID string
+	if ver.Ref() || ver.Subject != "" {
+		x, s, ok := tx.v.log.locate(ver.LSN)
+		if !ok {
+			return nil, fmt.Errorf("%w: LSN %d of %s/%s not in the log", ErrCorrupt, ver.LSN, space, key)
+		}
+		logID = x.meta.ID
+		if ver.Ref() {
+			var err error
+			if val, err = tx.db.readValue(x, s.seq, ver); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if ver.Subject == "" {
 		return val, nil
 	}
-	e := tx.v.log.entryAt(lsn)
-	if e == nil {
-		return nil, ErrNotFound
-	}
-	for i, op := range e.Ops {
-		if op.Space == space && op.Key == key && bytes.Equal(op.Value, val) {
-			if p, ok := tx.db.env.Open(e, i); ok {
-				return p, nil
-			}
-			return nil, ErrNotFound // shredded: indistinguishable from absent
-		}
+	if p, ok := tx.db.keys.open(ver.Subject, val, aad(logID, ver.LSN, int(ver.Op), space, key)); ok {
+		return p, nil
 	}
 	return nil, ErrNotFound
 }
@@ -140,9 +148,14 @@ func (tx *Tx) scan(space, prefix string) ([]KV, error) {
 	tx.v.mu.RUnlock()
 	m := map[string][]byte{}
 	for _, p := range ps {
-		if v, err := tx.open(p.Subject, p.Val, p.LSN, space, p.Key); err == nil {
-			m[p.Key] = v
+		v, err := tx.open(p.Version, space, p.Key)
+		if errors.Is(err, ErrNotFound) {
+			continue // shredded
 		}
+		if err != nil {
+			return nil, err
+		}
+		m[p.Key] = v
 	}
 	for k, l := range tx.local {
 		if k.space == space && strings.HasPrefix(k.key, prefix) {
@@ -316,9 +329,9 @@ func (t TopicTx) Read(from uint64, max int) ([]Message, error) {
 }
 
 func (tx *Tx) openAppend(m lens.Msg) ([]byte, error) {
-	e := tx.v.log.entryAt(m.LSN)
-	if e == nil {
-		return nil, ErrNotFound
+	e, err := tx.v.log.entryAt(context.Background(), m.LSN)
+	if err != nil {
+		return nil, err
 	}
 	for i, op := range e.Ops {
 		if op.Kind == format.OpAppend && bytes.Equal(op.Value, m.Val) {
@@ -466,7 +479,11 @@ func (b *Branch) ViewAt(ctx context.Context, at uint64, fn func(*Tx) error) erro
 			b.db.mu.Lock()
 			idx := append([]IndexDecl{}, b.db.man.Indexes...)
 			b.db.mu.Unlock()
-			eph = buildView(w.l, at, b.db.env, idx, nil)
+			v, err := buildView(ctx, w.l, at, b.db.env, idx, nil, b.db.opts.InlineMax)
+			if err != nil {
+				return nil, err
+			}
+			eph = v
 		}
 		return eph, nil
 	}

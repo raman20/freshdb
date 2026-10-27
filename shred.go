@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/raman20/freshdb/format"
+	"github.com/raman20/freshdb/lens"
 	"github.com/raman20/freshdb/store"
 )
 
@@ -87,7 +88,10 @@ func (db *DB) Shred(ctx context.Context, subject string) (*Certificate, error) {
 	if err != nil {
 		return nil, err
 	}
-	ch := w.l.chainAt(lsn)
+	ch, err := w.l.chainAt(ctx, lsn)
+	if err != nil {
+		return nil, err
+	}
 	db.mu.Lock()
 	mid := db.man.ID
 	db.mu.Unlock()
@@ -167,8 +171,8 @@ func (db *DB) Verify(ctx context.Context) (*VerifyReport, error) {
 		r.Logs++
 		segs, _ := db.st.List(ctx, "log/"+id+"/")
 		r.Segments += len(segs)
-		r.Entries += len(l.entries)
-		for _, e := range l.entries {
+		err = l.eachOwn(ctx, l.head(), func(e *lens.Entry) error { // the parent is verified on its own
+			r.Entries++
 			for i, op := range e.Ops {
 				if op.Subject == "" || op.Kind == format.OpDel || op.Kind == format.OpShred {
 					continue
@@ -182,12 +186,19 @@ func (db *DB) Verify(ctx context.Context) (*VerifyReport, error) {
 					bad("log %s LSN %d op %d: AEAD check failed", id, e.LSN, i)
 				}
 			}
+			return nil
+		})
+		if err != nil {
+			bad("log %s: %v", id, err)
 		}
 	}
 	for name, id := range last.Refs {
 		if l := fresh.logs[id]; l != nil {
 			h := l.head()
-			c := l.chainAt(h)
+			c, err := l.chainAt(ctx, h)
+			if err != nil {
+				bad("log %s: %v", id, err)
+			}
 			r.ChainHeads[name] = fmt.Sprintf("%d:%s", h, hex.EncodeToString(c[:8]))
 		}
 	}

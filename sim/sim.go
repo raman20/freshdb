@@ -110,7 +110,10 @@ func (s *sim) open() (*freshdb.DB, error) {
 		db, err := freshdb.OpenStore(s.ctx, s.st,
 			freshdb.WithClock(func() int64 { return s.clock.Add(1) }),
 			freshdb.WithRand(s.rnd), freshdb.WithSnapshotEvery(1+int(s.seed%7)),
-			freshdb.WithLogf(func(string, ...any) {}))
+			freshdb.WithLogf(func(string, ...any) {}),
+			// even seeds keep every value as a log position (none inline),
+			// and every third seed reads them without the value cache
+			freshdb.WithInlineMax(int(s.seed%2)*64-1), freshdb.WithValueCacheBytes(map[bool]int{true: -1}[s.seed%3 == 0]))
 		if err == nil {
 			return db, nil
 		}

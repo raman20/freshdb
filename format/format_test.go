@@ -36,6 +36,38 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+// ValOff must locate every op's value inside the segment, both for the
+// writer (AppendFrame) and for recovery (DecodeSegment).
+func TestValueOffsets(t *testing.T) {
+	b := EncodeHeader(SegHeader{Epoch: 1, Seq: 1})
+	var written []Op
+	for i := 0; i < 3; i++ {
+		f := &Frame{LSN: uint64(i + 1), Ops: []Op{
+			{Kind: OpPut, Space: "kv", Key: "k", Value: bytes.Repeat([]byte{byte('a' + i)}, 200*i+1)},
+			{Kind: OpDel, Space: "kv", Key: "gone"},
+			{Kind: OpAppend, Subject: "s", Space: "topic:t", Value: []byte("msg")},
+		}}
+		b, _ = AppendFrame(b, f)
+		written = append(written, f.Ops...)
+	}
+	_, fr, _, err := DecodeSegment(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var read []Op
+	for _, d := range fr {
+		read = append(read, d.Frame.Ops...)
+	}
+	for i, op := range written {
+		if op.ValOff == 0 || op.ValOff != read[i].ValOff {
+			t.Fatalf("op %d: writer offset %d, decoder offset %d", i, op.ValOff, read[i].ValOff)
+		}
+		if got := b[op.ValOff : int(op.ValOff)+len(op.Value)]; !bytes.Equal(got, op.Value) {
+			t.Fatalf("op %d: offset %d does not point at its value", i, op.ValOff)
+		}
+	}
+}
+
 func TestTornTailEveryPrefix(t *testing.T) {
 	b := sample()
 	_, full, _, _ := DecodeSegment(b)

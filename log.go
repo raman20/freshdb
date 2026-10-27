@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/raman20/freshdb/format"
@@ -11,18 +12,31 @@ import (
 	"github.com/raman20/freshdb/store"
 )
 
-// logState is the in-memory image of one log (one branch lineage segment).
+// logState is the in-memory index of one log (one branch lineage segment).
 // Segments are immutable objects log/<id>/<seq>.seg, seq dense from 1.
+// Frames are not kept in memory: lenses fold them as they are written or
+// recovered, and anything that needs them again (time-travel views of
+// other lenses, Entries, Verify, index builds) re-reads the segments.
 type logState struct {
 	meta    LogMeta
 	parent  *logState
+	st      store.Store
 	mu      sync.RWMutex
-	entries []*lens.Entry // own frames only, LSN = meta.ParentLSN+1 ...
-	chains  [][32]byte    // chain head after each entry
-	base    [32]byte      // chain head at ParentLSN (from parent)
+	segs    []segIdx // segments holding at least one frame, ascending
+	n       uint64   // own frames: LSN = meta.ParentLSN+1 ... ParentLSN+n
+	lastTS  int64
+	base    [32]byte // chain head at ParentLSN (from parent)
 	nextSeq uint64
 	lastEp  uint64
 	repairs int
+}
+
+// segIdx locates the frames of one segment.
+type segIdx struct {
+	seq   uint64
+	first uint64   // LSN of its first frame
+	n     uint64   // frame count
+	chain [32]byte // chain head after its last frame
 }
 
 func segKey(log string, seq uint64) string { return fmt.Sprintf("log/%s/%020d.seg", log, seq) }
@@ -30,38 +44,137 @@ func segKey(log string, seq uint64) string { return fmt.Sprintf("log/%s/%020d.se
 func (l *logState) head() uint64 {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	return l.meta.ParentLSN + uint64(len(l.entries))
+	return l.meta.ParentLSN + l.n
+}
+
+// tip returns the chain head after the last frame. Caller holds l.mu.
+func (l *logState) tip() [32]byte {
+	if n := len(l.segs); n > 0 {
+		return l.segs[n-1].chain
+	}
+	return l.base
+}
+
+// addSeg indexes a segment's frames. Caller holds l.mu (write).
+func (l *logState) addSeg(seq, first, n uint64, ts int64, chain [32]byte) {
+	l.segs = append(l.segs, segIdx{seq: seq, first: first, n: n, chain: chain})
+	l.n += n
+	l.lastTS = ts
+}
+
+// locate returns the log (in this lineage) and segment holding lsn.
+func (l *logState) locate(lsn uint64) (*logState, segIdx, bool) {
+	for x := l; x != nil; x = x.parent {
+		if lsn > x.meta.ParentLSN {
+			x.mu.RLock()
+			defer x.mu.RUnlock()
+			i := sort.Search(len(x.segs), func(i int) bool { return x.segs[i].first+x.segs[i].n > lsn })
+			if i == len(x.segs) || x.segs[i].first > lsn {
+				return nil, segIdx{}, false
+			}
+			return x, x.segs[i], true
+		}
+		if lsn == 0 {
+			break
+		}
+	}
+	return nil, segIdx{}, false
+}
+
+// readSeg reads and decodes one indexed segment of this log.
+func (l *logState) readSeg(ctx context.Context, s segIdx) ([]format.Decoded, error) {
+	data, err := l.st.Get(ctx, segKey(l.meta.ID, s.seq))
+	if err != nil {
+		return nil, err
+	}
+	_, frames, _, derr := format.DecodeSegment(data)
+	if uint64(len(frames)) < s.n {
+		return nil, fmt.Errorf("%w: log %s segment %d: %d of %d frames readable: %v", ErrCorrupt, l.meta.ID, s.seq, len(frames), s.n, derr)
+	}
+	frames = frames[:s.n]
+	if frames[0].Frame.LSN != s.first {
+		return nil, fmt.Errorf("%w: log %s segment %d starts at LSN %d, indexed %d", ErrCorrupt, l.meta.ID, s.seq, frames[0].Frame.LSN, s.first)
+	}
+	return frames, nil
+}
+
+func (l *logState) entry(d format.Decoded) *lens.Entry {
+	return &lens.Entry{Log: l.meta.ID, LSN: d.Frame.LSN, TS: d.Frame.TS, Ops: d.Frame.Ops}
 }
 
 // chainAt returns the hash-chain head after LSN lsn in this lineage.
-func (l *logState) chainAt(lsn uint64) [32]byte {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	if lsn <= l.meta.ParentLSN {
-		if l.parent == nil {
-			return [32]byte{}
-		}
-		return l.parent.chainAt(lsn)
+func (l *logState) chainAt(ctx context.Context, lsn uint64) ([32]byte, error) {
+	if lsn == 0 {
+		return [32]byte{}, nil
 	}
-	return l.chains[lsn-l.meta.ParentLSN-1]
+	x, s, ok := l.locate(lsn)
+	if !ok {
+		return [32]byte{}, fmt.Errorf("%w: LSN %d not in log %s", ErrBadLSN, lsn, l.meta.ID)
+	}
+	if lsn == s.first+s.n-1 {
+		return s.chain, nil
+	}
+	frames, err := x.readSeg(ctx, s)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return frames[lsn-s.first+1].Frame.Prev, nil // the next frame names it
 }
 
-// lineage returns every entry visible on this log up to LSN `upto`, oldest
-// first (parent's entries up to ParentLSN, then our own).
-func (l *logState) lineage(upto uint64) []*lens.Entry {
-	var out []*lens.Entry
-	if l.parent != nil {
-		out = l.parent.lineage(min(upto, l.meta.ParentLSN))
+// each calls fn with every entry visible on this log up to LSN upto, oldest
+// first (parent's entries up to ParentLSN, then our own), reading segments.
+func (l *logState) each(ctx context.Context, upto uint64, fn func(*lens.Entry) error) error {
+	if l.parent != nil && l.meta.ParentLSN > 0 {
+		if err := l.parent.each(ctx, min(upto, l.meta.ParentLSN), fn); err != nil {
+			return err
+		}
 	}
+	return l.eachOwn(ctx, upto, fn)
+}
+
+// eachOwn is each restricted to this log's own frames.
+func (l *logState) eachOwn(ctx context.Context, upto uint64, fn func(*lens.Entry) error) error {
 	l.mu.RLock()
-	defer l.mu.RUnlock()
-	for _, e := range l.entries {
-		if e.LSN > upto {
+	segs := l.segs
+	l.mu.RUnlock()
+	for _, s := range segs {
+		if s.first > upto {
 			break
 		}
-		out = append(out, e)
+		frames, err := l.readSeg(ctx, s)
+		if err != nil {
+			return err
+		}
+		for _, d := range frames {
+			if d.Frame.LSN > upto {
+				break
+			}
+			if err := fn(l.entry(d)); err != nil {
+				return err
+			}
+		}
 	}
-	return out
+	return nil
+}
+
+// lineage returns every entry visible on this log up to LSN upto.
+func (l *logState) lineage(ctx context.Context, upto uint64) ([]*lens.Entry, error) {
+	var out []*lens.Entry
+	err := l.each(ctx, upto, func(e *lens.Entry) error { out = append(out, e); return nil })
+	return out, err
+}
+
+// entryAt returns the entry with the given LSN in this lineage.
+func (l *logState) entryAt(ctx context.Context, lsn uint64) (*lens.Entry, error) {
+	x, s, ok := l.locate(lsn)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	frames, err := x.readSeg(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+	return x.entry(frames[lsn-s.first]), nil
 }
 
 // recoverLog reads a log's segments. For the writable (lease-holding) log
@@ -129,21 +242,20 @@ func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error 
 				l.repairs++
 			}
 		}
-		for _, d := range frames {
-			f := d.Frame
-			want := l.meta.ParentLSN + uint64(len(l.entries)) + 1
-			if f.LSN != want {
-				return fmt.Errorf("%w: log %s: LSN %d, expected %d (duplicate or gap)", ErrCorrupt, l.meta.ID, f.LSN, want)
+		if len(frames) > 0 {
+			first := l.meta.ParentLSN + l.n + 1
+			prev := l.tip()
+			for i, d := range frames {
+				f := d.Frame
+				if want := first + uint64(i); f.LSN != want {
+					return fmt.Errorf("%w: log %s: LSN %d, expected %d (duplicate or gap)", ErrCorrupt, l.meta.ID, f.LSN, want)
+				}
+				if f.Prev != prev {
+					return fmt.Errorf("%w: log %s: hash chain broken at LSN %d", ErrCorrupt, l.meta.ID, f.LSN)
+				}
+				prev = format.ChainNext(prev, d.Payload)
 			}
-			prev := l.base
-			if n := len(l.chains); n > 0 {
-				prev = l.chains[n-1]
-			}
-			if f.Prev != prev {
-				return fmt.Errorf("%w: log %s: hash chain broken at LSN %d", ErrCorrupt, l.meta.ID, f.LSN)
-			}
-			l.entries = append(l.entries, &lens.Entry{Log: l.meta.ID, LSN: f.LSN, TS: f.TS, Ops: f.Ops})
-			l.chains = append(l.chains, format.ChainNext(prev, d.Payload))
+			l.addSeg(seq, first, uint64(len(frames)), frames[len(frames)-1].Frame.TS, prev)
 		}
 		if h.Epoch > l.lastEp {
 			l.lastEp = h.Epoch
@@ -203,23 +315,4 @@ func (db *DB) fence(ctx context.Context, l *logState) error {
 		}
 	}
 	return fmt.Errorf("%w: could not fence log %s", ErrFenced, l.meta.ID)
-}
-
-// entryAt returns the entry with the given LSN in this lineage.
-func (l *logState) entryAt(lsn uint64) *lens.Entry {
-	l.mu.RLock()
-	if lsn > l.meta.ParentLSN {
-		i := lsn - l.meta.ParentLSN - 1
-		var e *lens.Entry
-		if i < uint64(len(l.entries)) {
-			e = l.entries[i]
-		}
-		l.mu.RUnlock()
-		return e
-	}
-	l.mu.RUnlock()
-	if l.parent == nil || lsn == 0 {
-		return nil
-	}
-	return l.parent.entryAt(lsn)
 }

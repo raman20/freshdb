@@ -40,6 +40,27 @@ func conformance(t *testing.T, s Store) {
 	if _, err := s.Get(ctx, "a/b/0"); !errors.Is(err, ErrNotFound) {
 		t.Fatal("delete failed")
 	}
+	// ranged reads (positions of values inside immutable segments)
+	if err := s.PutIfAbsent(ctx, "r/obj", []byte("hello world")); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ { // twice: the second read may use a cached handle
+		if b, err := GetRange(ctx, s, "r/obj", 6, 5); err != nil || string(b) != "world" {
+			t.Fatalf("range %q %v", b, err)
+		}
+	}
+	if _, err := GetRange(ctx, s, "r/obj", 8, 10); err == nil {
+		t.Fatal("range past the end must fail")
+	}
+	if _, err := GetRange(ctx, s, "r/nope", 0, 1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("range notfound: %v", err)
+	}
+	if err := s.Delete(ctx, "r/obj"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := GetRange(ctx, s, "r/obj", 0, 1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("range after delete: %v", err)
+	}
 	// racing creators: exactly one wins
 	var wg sync.WaitGroup
 	wins := make(chan int, 16)

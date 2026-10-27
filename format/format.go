@@ -49,6 +49,12 @@ type Op struct {
 	Space   string
 	Key     string
 	Value   []byte
+	// ValOff is not encoded: it is the byte offset of Value inside the
+	// segment object that holds the frame (set by AppendFrame and
+	// DecodeSegment; relative to the payload after EncodePayload or
+	// DecodePayload alone; 0 = unknown). It lets lenses keep a position
+	// instead of a copy of the value.
+	ValOff uint32
 }
 
 // Frame is one committed transaction.
@@ -109,26 +115,36 @@ func putStr(b []byte, s []byte) []byte {
 }
 
 // EncodePayload encodes a frame body (without the len/crc frame header).
+// It records each op's value offset (relative to the payload) in f.Ops.
 func EncodePayload(f *Frame) []byte {
 	b := make([]byte, 0, 64)
 	b = binary.LittleEndian.AppendUint64(b, f.LSN)
 	b = binary.LittleEndian.AppendUint64(b, uint64(f.TS))
 	b = append(b, f.Prev[:]...)
 	b = binary.AppendUvarint(b, uint64(len(f.Ops)))
-	for _, op := range f.Ops {
+	for i, op := range f.Ops {
 		b = append(b, byte(op.Kind))
 		b = putStr(b, []byte(op.Subject))
 		b = putStr(b, []byte(op.Space))
 		b = putStr(b, []byte(op.Key))
-		b = putStr(b, op.Value)
+		b = binary.AppendUvarint(b, uint64(len(op.Value)))
+		f.Ops[i].ValOff = uint32(len(b))
+		b = append(b, op.Value...)
 	}
 	return b
+}
+
+func rebase(ops []Op, base int) {
+	for i := range ops {
+		ops[i].ValOff += uint32(base)
+	}
 }
 
 // AppendFrame appends a framed (len|crc|payload) encoding of f to dst and
 // returns the new slice plus the payload (for hash chaining).
 func AppendFrame(dst []byte, f *Frame) ([]byte, []byte) {
 	p := EncodePayload(f)
+	rebase(f.Ops, len(dst)+FrameHdrSize)
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(len(p)))
 	dst = binary.LittleEndian.AppendUint32(dst, CRC(p))
 	dst = append(dst, p...)
@@ -205,7 +221,9 @@ func DecodePayload(p []byte) (*Frame, error) {
 		if k < OpPut || k > OpShred {
 			return nil, ErrCorrupt
 		}
-		subj, space, key, val := r.bytes(), r.bytes(), r.bytes(), r.bytes()
+		subj, space, key := r.bytes(), r.bytes(), r.bytes()
+		valOff := len(p) - len(r.b)
+		val := r.bytes()
 		if r.err {
 			return nil, ErrCorrupt
 		}
@@ -213,7 +231,7 @@ func DecodePayload(p []byte) (*Frame, error) {
 		if val != nil {
 			v = append([]byte{}, val...)
 		}
-		f.Ops = append(f.Ops, Op{Kind: k, Subject: string(subj), Space: string(space), Key: string(key), Value: v})
+		f.Ops = append(f.Ops, Op{Kind: k, Subject: string(subj), Space: string(space), Key: string(key), Value: v, ValOff: uint32(valOff + uvarintLen(uint64(len(val))))})
 	}
 	if len(r.b) != 0 {
 		return nil, ErrCorrupt
@@ -254,6 +272,7 @@ func DecodeSegment(b []byte) (SegHeader, []Decoded, int, error) {
 		if err != nil {
 			return h, out, off, ErrTorn
 		}
+		rebase(f.Ops, off+FrameHdrSize)
 		out = append(out, Decoded{Frame: f, Payload: p})
 		off += FrameHdrSize + n
 	}

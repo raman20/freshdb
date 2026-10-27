@@ -63,9 +63,9 @@ func newWriter(db *DB, l *logState, v *view) *writer {
 	w := &writer{db: db, l: l, v: v, ch: make(chan *commitReq, 1024), done: make(chan struct{})}
 	w.head = l.head()
 	w.recentFloor = w.head
-	if n := len(l.entries); n > 0 {
-		w.lastTS = l.entries[n-1].TS
-	}
+	l.mu.RLock()
+	w.lastTS = l.lastTS
+	l.mu.RUnlock()
 	go w.loop()
 	return w
 }
@@ -197,10 +197,7 @@ func (w *writer) process(batch []*commitReq) {
 	}
 	w.l.mu.RLock()
 	seq := w.l.nextSeq
-	chain := w.l.base
-	if n := len(w.l.chains); n > 0 {
-		chain = w.l.chains[n-1]
-	}
+	chain := w.l.tip()
 	w.l.mu.RUnlock()
 
 	seg := format.EncodeHeader(format.SegHeader{Epoch: w.db.epoch, Seq: seq})
@@ -208,7 +205,6 @@ func (w *writer) process(batch []*commitReq) {
 	ts := w.lastTS
 	var accepted []*commitReq
 	var entries []*lens.Entry
-	var chains [][32]byte
 	var pending []recentCommit
 	for _, r := range batch {
 		if w.conflict(r, pending) {
@@ -231,7 +227,6 @@ func (w *writer) process(batch []*commitReq) {
 		head = lsn
 		accepted = append(accepted, r)
 		entries = append(entries, &lens.Entry{Log: w.l.meta.ID, LSN: lsn, TS: ts, Ops: ops})
-		chains = append(chains, chain)
 		rc := recentCommit{lsn: lsn}
 		for _, op := range ops {
 			if op.Kind == format.OpPut || op.Kind == format.OpDel {
@@ -260,8 +255,7 @@ func (w *writer) process(batch []*commitReq) {
 		return
 	}
 	w.l.mu.Lock()
-	w.l.entries = append(w.l.entries, entries...)
-	w.l.chains = append(w.l.chains, chains...)
+	w.l.addSeg(seq, entries[0].LSN, uint64(len(entries)), ts, chain)
 	w.l.nextSeq = seq + 1
 	w.l.lastEp = w.db.epoch
 	w.l.mu.Unlock()
@@ -342,7 +336,7 @@ func (db *DB) loadSnapshot(ctx context.Context, l *logState) *snapshot {
 	if n > uint64(len(body)) || lsn > l.head() {
 		return nil
 	}
-	kv, err1 := lens.LoadKV(body[:n])
+	kv, err1 := lens.LoadKV(body[:n], db.opts.InlineMax)
 	tp, err2 := lens.LoadTopic(body[n:])
 	if err1 != nil || err2 != nil {
 		db.logf("freshdb: ignoring corrupt snapshot %s", lm.SnapKey)

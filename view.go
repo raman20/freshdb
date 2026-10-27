@@ -1,6 +1,7 @@
 package freshdb
 
 import (
+	"context"
 	"sync"
 
 	"github.com/raman20/freshdb/lens"
@@ -38,8 +39,8 @@ func (v *view) apply(e *lens.Entry) {
 
 // buildView folds the lineage of log up to `upto`. KV and topic lenses may
 // start from a persisted snapshot checkpoint; other lenses replay from LSN 0.
-func buildView(l *logState, upto uint64, env lens.Env, idx []IndexDecl, snap *snapshot) *view {
-	v := &view{log: l, env: env, kv: lens.NewKV(), topic: lens.NewTopic(), vec: lens.NewVector(), idx: map[string]*lens.DocIndex{}}
+func buildView(ctx context.Context, l *logState, upto uint64, env lens.Env, idx []IndexDecl, snap *snapshot, inline int) (*view, error) {
+	v := &view{log: l, env: env, kv: lens.NewKVInline(inline), topic: lens.NewTopic(), vec: lens.NewVector(), idx: map[string]*lens.DocIndex{}}
 	for _, d := range idx {
 		v.idx[idxKey(d.Coll, d.Field)] = lens.NewDocIndex(d.Coll, d.Field)
 	}
@@ -57,7 +58,7 @@ func buildView(l *logState, upto uint64, env lens.Env, idx []IndexDecl, snap *sn
 	for _, k := range sortedMapKeys(v.idx) {
 		others = append(others, v.idx[k])
 	}
-	for _, e := range l.lineage(upto) {
+	err := l.each(ctx, upto, func(e *lens.Entry) error {
 		if e.LSN > from {
 			v.kv.Apply(e, env)
 			v.topic.Apply(e, env)
@@ -65,7 +66,11 @@ func buildView(l *logState, upto uint64, env lens.Env, idx []IndexDecl, snap *sn
 		for _, o := range others {
 			o.Apply(e, env)
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	v.head = upto
-	return v
+	return v, nil
 }

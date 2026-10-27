@@ -106,7 +106,7 @@ func TestPropSnapshotPlusTailEqualsFold(t *testing.T) {
 			kv.Apply(e, env)
 			tp.Apply(e, env)
 		}
-		kv2, err := LoadKV(kv.Snapshot())
+		kv2, err := LoadKV(kv.Snapshot(), kv.Inline())
 		if err != nil {
 			t.Fatal(err)
 		}

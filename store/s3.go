@@ -103,6 +103,33 @@ func (s *S3) Get(ctx context.Context, key string) ([]byte, error) {
 	return b, nil
 }
 
+// GetRange implements RangeReader with an HTTP Range request.
+func (s *S3) GetRange(ctx context.Context, key string, off, n int64) ([]byte, error) {
+	if off < 0 || n <= 0 {
+		if n == 0 && off >= 0 {
+			return []byte{}, nil
+		}
+		return nil, fmt.Errorf("store: bad range %d+%d", off, n)
+	}
+	opts := minio.GetObjectOptions{}
+	if err := opts.SetRange(off, off+n-1); err != nil {
+		return nil, err
+	}
+	o, err := s.c.GetObject(ctx, s.bucket, s.prefix+key, opts)
+	if err != nil {
+		return nil, mapNF(err)
+	}
+	defer o.Close()
+	b, err := io.ReadAll(o)
+	if err != nil {
+		return nil, mapNF(err)
+	}
+	if int64(len(b)) != n {
+		return nil, fmt.Errorf("store: range %d+%d of %s: got %d bytes", off, n, key, len(b))
+	}
+	return b, nil
+}
+
 func mapNF(err error) error {
 	if minio.ToErrorResponse(err).Code == "NoSuchKey" {
 		return ErrNotFound

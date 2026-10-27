@@ -18,7 +18,7 @@ func TestS3EndToEnd(t *testing.T) {
 	}
 	u, _ := url.Parse(raw)
 	u.Path += fmt.Sprintf("/e2e-%d", time.Now().UnixNano())
-	a, err := Open(ctx, u.String(), quiet())
+	a, err := Open(ctx, u.String(), quiet(), WithInlineMax(-1)) // every value read back by range GET
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestS3EndToEnd(t *testing.T) {
 		}
 	}
 	// second writer takes over via conditional PUT; first is fenced
-	b, err := Open(ctx, u.String(), quiet())
+	b, err := Open(ctx, u.String(), quiet(), WithInlineMax(-1))
 	if err != nil {
 		t.Fatal(err)
 	}

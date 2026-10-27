@@ -34,6 +34,13 @@ type Options struct {
 	MaxBatch int
 	// Logf receives operational messages (default: log.Printf; nil-safe).
 	Logf func(format string, args ...any)
+	// InlineMax: KV values up to this many bytes are kept in memory; larger
+	// ones are kept as (segment, offset, length) positions and read from
+	// the log on demand. 0 = default (64); negative = keep none inline.
+	InlineMax int
+	// ValueCacheBytes bounds the cache of values read from segments.
+	// 0 = default (64 MiB); negative = no cache.
+	ValueCacheBytes int
 }
 
 type Option func(*Options)
@@ -43,6 +50,13 @@ func WithRand(r io.Reader) Option            { return func(o *Options) { o.Rand 
 func WithKEK(k []byte) Option                { return func(o *Options) { o.KEK = k } }
 func WithSnapshotEvery(n int) Option         { return func(o *Options) { o.SnapshotEvery = n } }
 func WithLogf(f func(string, ...any)) Option { return func(o *Options) { o.Logf = f } }
+func WithInlineMax(n int) Option             { return func(o *Options) { o.InlineMax = n } }
+func WithValueCacheBytes(n int) Option       { return func(o *Options) { o.ValueCacheBytes = n } }
+
+const (
+	defaultInlineMax  = 64
+	defaultValueCache = 64 << 20
+)
 
 // DB is an open database. One process holds the write lease (epoch); a newer
 // Open anywhere fences this one, after which writes fail with ErrFenced.
@@ -58,6 +72,7 @@ type DB struct {
 	logs    map[string]*logState
 	views   map[string]*view   // live views of writable logs
 	writers map[string]*writer // by log id
+	vcache  *valueCache
 	failed  error
 	closed  bool
 }
@@ -95,8 +110,17 @@ func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
 	if o.Logf == nil {
 		o.Logf = log.Printf
 	}
+	switch {
+	case o.InlineMax == 0:
+		o.InlineMax = defaultInlineMax
+	case o.InlineMax < 0:
+		o.InlineMax = 0
+	}
+	if o.ValueCacheBytes == 0 {
+		o.ValueCacheBytes = defaultValueCache
+	}
 	var err error
-	db := &DB{st: st, opts: o, logs: map[string]*logState{}, views: map[string]*view{}, writers: map[string]*writer{}}
+	db := &DB{st: st, opts: o, vcache: newValueCache(o.ValueCacheBytes), logs: map[string]*logState{}, views: map[string]*view{}, writers: map[string]*writer{}}
 	if err := db.acquire(ctx); err != nil {
 		return nil, err
 	}
@@ -185,7 +209,7 @@ func (db *DB) loadLog(ctx context.Context, id string, writable bool) (*logState,
 	if !ok {
 		return nil, fmt.Errorf("%w: unknown log %s", ErrCorrupt, id)
 	}
-	l := &logState{meta: *meta}
+	l := &logState{meta: *meta, st: db.st}
 	if meta.Parent != "" {
 		p, err := db.loadLog(ctx, meta.Parent, false)
 		if err != nil {
@@ -195,7 +219,9 @@ func (db *DB) loadLog(ctx context.Context, id string, writable bool) (*logState,
 			return nil, fmt.Errorf("%w: log %s parent %s shorter than branch point %d", ErrCorrupt, id, meta.Parent, meta.ParentLSN)
 		}
 		l.parent = p
-		l.base = p.chainAt(meta.ParentLSN)
+		if l.base, err = p.chainAt(ctx, meta.ParentLSN); err != nil {
+			return nil, err
+		}
 	}
 	if err := db.recoverLog(ctx, l, writable); err != nil {
 		return nil, err
@@ -218,7 +244,10 @@ func (db *DB) openWritable(ctx context.Context, id string) (*writer, error) {
 		return nil, err
 	}
 	snap := db.loadSnapshot(ctx, l)
-	v := buildView(l, l.head(), db.env, db.man.Indexes, snap)
+	v, err := buildView(ctx, l, l.head(), db.env, db.man.Indexes, snap, db.opts.InlineMax)
+	if err != nil {
+		return nil, err
+	}
 	db.views[id] = v
 	w := newWriter(db, l, v)
 	db.writers[id] = w
@@ -307,5 +336,5 @@ func (db *DB) Entries(branch string) ([]*lens.Entry, error) {
 	w.v.mu.RLock()
 	h := w.v.head
 	w.v.mu.RUnlock()
-	return w.l.lineage(h), nil
+	return w.l.lineage(context.Background(), h)
 }
