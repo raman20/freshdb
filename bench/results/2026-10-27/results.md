@@ -131,76 +131,76 @@ Notes:
 ## txn-fsync-false.json
 
 Command: `bin/freshdb-bench txn -fsync=false -clients 8,64 -hot 1,16,256,65536 -partitions 1,8 -batch 1,10 -duration 5s -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27`  
-Started 2026-10-27T20:59:28+05:30, loadavg at start 5.17 4.03 3.59
+Started 2026-10-27T21:26:33+05:30, loadavg at start 3.00 3.31 3.27
 
-Params: duration=5s; fsync=false; multi_lens_txn=Fetch N from in-topic group, Put result/<offset> per msg, Publish each to out-topic, Ack last: one transaction; occ_txn=read 2 hot keys, write both (a-1, b+1); retried on conflict up to 16 times like freshdb.Update; peak_rss=482820 kB; seed=42;
+Params: duration=5s; fsync=false; multi_lens_txn=Fetch N from in-topic group, Put result/<offset> per msg, Publish each to out-topic, Ack last: one transaction; occ_txn=read 2 hot keys, write both (a-1, b+1); retried on conflict up to 16 times like freshdb.Update; peak_rss=1125412 kB; prefill=1e+06; seed=42;
 
 OCC transfers between hot keys:
 
 | sys | fsync | clients | hot keys | commits/s | abort rate | gave up | p50 | p99 | p99.9 | invariant |
 |---|---|---|---|---|---|---|---|---|---|---|
-| freshdb | false | 8 | 1 | 7015.2 | 0.8718 | 3242 | 0.69 | 3.59 | 4.53 | true |
-| freshdb | false | 8 | 16 | 15738 | 0.5901 | 159 | 0.26 | 2.84 | 5.88 | true |
-| freshdb | false | 8 | 256 | 25567.6 | 0.076 | 0 | 0.19 | 2.55 | 4.08 | true |
-| freshdb | false | 8 | 65536 | 25374.8 | 0.0004 | 0 | 0.18 | 3.52 | 6.00 | true |
-| freshdb | false | 64 | 1 | 7476.8 | 0.9849 | 138343 | 1.64 | 3.95 | 5.32 | true |
-| freshdb | false | 64 | 16 | 26250.4 | 0.929 | 68394 | 1.47 | 5.71 | 6.85 | true |
-| freshdb | false | 64 | 256 | 78534.7 | 0.4936 | 292 | 0.48 | 7.29 | 15.1 | true |
-| freshdb | false | 64 | 65536 | 81784.4 | 0.0036 | 0 | 0.56 | 7.23 | 20.3 | true |
-| badger | false | 8 | 1 | 50642.6 | 0.8518 | 25160 | 0.10 | 0.47 | 0.62 | true |
-| badger | false | 8 | 16 | 73035.2 | 0.5294 | 43 | 0.077 | 0.48 | 1.03 | true |
-| badger | false | 8 | 256 | 94441 | 0.0665 | 0 | 0.080 | 0.22 | 0.33 | true |
-| badger | false | 8 | 65536 | 79708.6 | 0.0002 | 0 | 0.097 | 0.22 | 0.37 | true |
-| badger | false | 64 | 1 | 34932.8 | 0.9282 | 81303 | 1.18 | 3.44 | 4.40 | true |
-| badger | false | 64 | 16 | 47086.4 | 0.8664 | 28678 | 0.89 | 3.85 | 8.75 | true |
-| badger | false | 64 | 256 | 110700.6 | 0.3788 | 0 | 0.45 | 1.93 | 3.02 | true |
-| badger | false | 64 | 65536 | 103533.6 | 0.0021 | 0 | 0.61 | 1.23 | 1.72 | true |
+| freshdb | false | 8 | 1 | 7270 | 0.8722 | 3376 | 0.67 | 3.38 | 4.25 | true |
+| freshdb | false | 8 | 16 | 12765.6 | 0.6051 | 167 | 0.35 | 3.35 | 4.78 | true |
+| freshdb | false | 8 | 256 | 20937.8 | 0.0768 | 0 | 0.25 | 2.88 | 4.41 | true |
+| freshdb | false | 8 | 65536 | 17154.4 | 0.0003 | 0 | 0.28 | 5.21 | 7.92 | true |
+| freshdb | false | 64 | 1 | 5269 | 0.9847 | 95638 | 2.53 | 4.99 | 20.0 | true |
+| freshdb | false | 64 | 16 | 17073.8 | 0.9305 | 46900 | 2.15 | 7.41 | 37.3 | true |
+| freshdb | false | 64 | 256 | 63071.4 | 0.499 | 340 | 0.62 | 7.72 | 13.1 | true |
+| freshdb | false | 64 | 65536 | 76046.4 | 0.0037 | 0 | 0.67 | 7.55 | 17.8 | true |
+| badger | false | 8 | 1 | 42615.4 | 0.8439 | 18235 | 0.12 | 0.60 | 0.73 | true |
+| badger | false | 8 | 16 | 82628.2 | 0.5293 | 37 | 0.072 | 0.40 | 0.62 | true |
+| badger | false | 8 | 256 | 97931 | 0.0645 | 0 | 0.078 | 0.21 | 0.30 | true |
+| badger | false | 8 | 65536 | 75745.4 | 0.0002 | 0 | 0.10 | 0.23 | 0.30 | true |
+| badger | false | 64 | 1 | 24865 | 0.9178 | 45187 | 1.61 | 5.76 | 20.5 | true |
+| badger | false | 64 | 16 | 41177.8 | 0.8284 | 12124 | 0.99 | 5.69 | 7.48 | true |
+| badger | false | 64 | 256 | 84477.4 | 0.3801 | 1 | 0.60 | 2.54 | 3.76 | true |
+| badger | false | 64 | 65536 | 89482.6 | 0.0021 | 0 | 0.71 | 1.37 | 2.04 | true |
 
 Multi-lens consume+write transaction (freshDB only):
 
-| fsync | partitions | batch | txns/s | msgs/s | p50 | p99 | p99.9 | exactly-once check | errors |
-|---|---|---|---|---|---|---|---|---|---|
-| false | 1 | 1 | 9330.8 | 9330.8 | 0.081 | 0.58 | 1.00 | true | 0 |
-| false | 1 | 10 | 778438.6 | 40000 | 0.000 | 0.002 | 0.16 | false | 0 |
-| false | 8 | 1 | 25345.4 | 25345.4 | 0.23 | 2.59 | 6.12 | true | 0 |
-| false | 8 | 10 | 2.782546e+06 | 40000 | 0.001 | 0.005 | 0.39 | false | 0 |
+| fsync | partitions | batch | txns/s | msgs/s | p50 | p99 | p99.9 | exactly-once check | input drained early | errors |
+|---|---|---|---|---|---|---|---|---|---|---|
+| false | 1 | 1 | 7621.2 | 7621.2 | 0.12 | 0.55 | 1.01 | true | false | 0 |
+| false | 1 | 10 | 5951.8 | 59518 | 0.14 | 0.80 | 2.03 | true | false | 0 |
+| false | 8 | 1 | 25067.8 | 25067.8 | 0.24 | 1.59 | 9.84 | true | false | 0 |
+| false | 8 | 10 | 13334.6 | 133346 | 0.47 | 3.55 | 17.7 | true | false | 0 |
 
 ## txn-fsync-true.json
 
 Command: `bin/freshdb-bench txn -fsync=true -clients 8,64 -hot 1,16,256,65536 -partitions 1,8 -batch 1,10 -duration 5s -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27`  
-Started 2026-10-27T20:39:19+05:30, loadavg at start 3.42 2.77 2.61
+Started 2026-10-27T21:24:41+05:30, loadavg at start 3.53 3.48 3.32
 
-Params: duration=5s; fsync=true; multi_lens_txn=Fetch N from in-topic group, Put result/<offset> per msg, Publish each to out-topic, Ack last: one transaction; occ_txn=read 2 hot keys, write both (a-1, b+1); retried on conflict up to 16 times like freshdb.Update; peak_rss=407640 kB; seed=42;
+Params: duration=5s; fsync=true; multi_lens_txn=Fetch N from in-topic group, Put result/<offset> per msg, Publish each to out-topic, Ack last: one transaction; occ_txn=read 2 hot keys, write both (a-1, b+1); retried on conflict up to 16 times like freshdb.Update; peak_rss=713092 kB; prefill=1e+06; seed=42;
 
 OCC transfers between hot keys:
 
 | sys | fsync | clients | hot keys | commits/s | abort rate | gave up | p50 | p99 | p99.9 | invariant |
 |---|---|---|---|---|---|---|---|---|---|---|
-| freshdb | true | 8 | 1 | 2733.6 | 0.8737 | 1448 | 1.88 | 9.20 | 29.1 | true |
-| freshdb | true | 8 | 16 | 5432.8 | 0.6548 | 212 | 0.96 | 6.31 | 19.2 | true |
-| freshdb | true | 8 | 256 | 9644.4 | 0.097 | 0 | 0.65 | 2.74 | 4.73 | true |
-| freshdb | true | 8 | 65536 | 8880.2 | 0.0006 | 0 | 0.66 | 3.40 | 9.32 | true |
-| freshdb | true | 64 | 1 | 2710.6 | 0.9874 | 61237 | 4.15 | 10.1 | 13.4 | true |
-| freshdb | true | 64 | 16 | 9129 | 0.9405 | 33104 | 4.49 | 10.2 | 47.3 | true |
-| freshdb | true | 64 | 256 | 41286 | 0.5102 | 385 | 0.96 | 7.41 | 21.4 | true |
-| freshdb | true | 64 | 65536 | 49541.8 | 0.0039 | 0 | 1.04 | 7.78 | 18.8 | true |
-| badger | true | 8 | 1 | 18178.6 | 0.8657 | 20280 | 0.15 | 1.24 | 4.53 | true |
-| badger | true | 8 | 16 | 22709.2 | 0.5171 | 14 | 0.25 | 1.42 | 2.89 | true |
-| badger | true | 8 | 256 | 24597.8 | 0.0558 | 0 | 0.29 | 0.86 | 2.58 | true |
-| badger | true | 8 | 65536 | 23829.6 | 0.0002 | 0 | 0.30 | 0.84 | 2.61 | true |
-| badger | true | 64 | 1 | 17359.2 | 0.9512 | 74442 | 2.05 | 4.75 | 35.3 | true |
-| badger | true | 64 | 16 | 23680 | 0.8978 | 26387 | 1.88 | 5.82 | 12.1 | true |
-| badger | true | 64 | 256 | 25605 | 0.3621 | 0 | 1.86 | 9.29 | 40.0 | true |
-| badger | true | 64 | 65536 | 24680.4 | 0.002 | 0 | 2.42 | 5.25 | 39.8 | true |
+| freshdb | true | 8 | 1 | 2366.4 | 0.875 | 1260 | 2.16 | 11.9 | 31.7 | true |
+| freshdb | true | 8 | 16 | 4346.8 | 0.6535 | 160 | 1.17 | 8.58 | 21.8 | true |
+| freshdb | true | 8 | 256 | 7520 | 0.1025 | 0 | 0.80 | 3.53 | 16.6 | true |
+| freshdb | true | 8 | 65536 | 7940.8 | 0.0005 | 0 | 0.80 | 3.66 | 4.69 | true |
+| freshdb | true | 64 | 1 | 2070.3 | 0.9879 | 48955 | 5.23 | 11.6 | 15.9 | true |
+| freshdb | true | 64 | 16 | 6564.7 | 0.9408 | 23979 | 6.14 | 15.0 | 50.5 | true |
+| freshdb | true | 64 | 256 | 30097 | 0.5098 | 282 | 1.37 | 10.0 | 24.5 | true |
+| freshdb | true | 64 | 65536 | 39962 | 0.0037 | 0 | 1.30 | 8.50 | 13.5 | true |
+| badger | true | 8 | 1 | 15929 | 0.8648 | 17628 | 0.17 | 1.54 | 4.51 | true |
+| badger | true | 8 | 16 | 18505.6 | 0.5148 | 16 | 0.32 | 1.81 | 4.44 | true |
+| badger | true | 8 | 256 | 23040 | 0.0549 | 0 | 0.31 | 1.02 | 2.68 | true |
+| badger | true | 8 | 65536 | 22882 | 0.0002 | 0 | 0.32 | 0.83 | 2.33 | true |
+| badger | true | 64 | 1 | 14121.6 | 0.9493 | 57501 | 2.58 | 5.94 | 39.2 | true |
+| badger | true | 64 | 16 | 17417.6 | 0.8973 | 19146 | 2.50 | 8.33 | 43.2 | true |
+| badger | true | 64 | 256 | 20970.8 | 0.3617 | 0 | 2.34 | 9.13 | 41.4 | true |
+| badger | true | 64 | 65536 | 24102.6 | 0.0021 | 0 | 2.48 | 5.86 | 30.0 | true |
 
 Multi-lens consume+write transaction (freshDB only):
 
-| fsync | partitions | batch | txns/s | msgs/s | p50 | p99 | p99.9 | exactly-once check | errors |
-|---|---|---|---|---|---|---|---|---|---|
-| true | 1 | 1 | 2922.6 | 2922.6 | 0.30 | 1.22 | 2.33 | true | 0 |
-| true | 1 | 10 | 2430 | 24300 | 0.34 | 1.69 | 3.44 | true | 0 |
-| true | 8 | 1 | 8559.2 | 8559.2 | 0.78 | 3.44 | 16.7 | true | 0 |
-| true | 8 | 10 | 1.2277128e+06 | 40000 | 0.001 | 0.007 | 1.26 | false | 0 |
+| fsync | partitions | batch | txns/s | msgs/s | p50 | p99 | p99.9 | exactly-once check | input drained early | errors |
+|---|---|---|---|---|---|---|---|---|---|---|
+| true | 1 | 1 | 2825 | 2825 | 0.31 | 1.38 | 2.39 | true | false | 0 |
+| true | 1 | 10 | 2411 | 24110 | 0.33 | 1.59 | 4.60 | true | false | 0 |
+| true | 8 | 1 | 8524.6 | 8524.6 | 0.77 | 3.51 | 9.10 | true | false | 0 |
+| true | 8 | 10 | 6190.2 | 61902 | 1.10 | 4.20 | 15.6 | true | false | 0 |
 
 ## vector.json
 
@@ -251,77 +251,77 @@ Params: clients=[1,8,64]; disk_after_run=1.5G; duration=5s; fsync=false; keys=1e
 ## ycsb-badger-fsync-true.json
 
 Command: `bin/freshdb-bench ycsb -system badger -fsync=true -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27`  
-Started 2026-10-27T20:14:55+05:30, loadavg at start 3.51 2.46 2.45
+Started 2026-10-27T21:18:14+05:30, loadavg at start 3.70 3.20 3.15
 
-Params: clients=[1,8,64]; disk_after_run=1.3G; duration=5s; fsync=true; keys=1e+06; load_keys_per_sec=137725; load_seconds=7.26; open_loop_cap_ops_per_sec=200000; open_loop_fraction_of_max=0.5; peak_rss=4404628 kB; seed=42; system=badger; value_bytes=1024; warmup=2s; workloads=A,B,C,F,D; zipf_theta=0.99;
+Params: clients=[1,8,64]; disk_after_run=1.3G; duration=5s; fsync=true; keys=1e+06; load_keys_per_sec=113498; load_seconds=8.81; open_loop_cap_ops_per_sec=200000; open_loop_fraction_of_max=0.5; peak_rss=3635584 kB; seed=42; system=badger; value_bytes=1024; warmup=2s; workloads=A,B,C,F,D; zipf_theta=0.99;
 
 | sys | fsync | wl | clients | closed ops/s | closed p50 | p99 | p99.9 | open target/s | open achieved/s | open p50 | p99 | p99.9 | errors (closed/open) | open not issued (overload) | open-phase Go GC (cycles, max STW ms) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| badger | true | A | 1 | 16520 | 0.032 | 0.38 | 2.46 | 8260 | 8260 | 0.11 | 88.8 | 102.8 | 0/0 | - | 0, 0 |
-| badger | true | A | 8 | 26406 | 0.25 | 1.33 | 5.85 | 13203 | 13203 | 0.15 | 139.3 | 154.8 | 0/0 | - | 1, 0.2 |
-| badger | true | A | 64 | 28398 | 1.93 | 10.6 | 36.0 | 14199 | 14199 | 0.100 | 9.85 | 32.2 | 0/0 | - | 1, 0.13 |
-| badger | true | B | 1 | 44665 | 0.014 | 0.19 | 0.88 | 22332 | 22332 | 0.025 | 6.52 | 17.8 | 0/0 | - | 2, 0.11 |
-| badger | true | B | 8 | 105904 | 0.022 | 0.47 | 1.97 | 52952 | 52952 | 0.049 | 24.9 | 35.4 | 0/0 | - | 6, 0.21 |
-| badger | true | B | 64 | 133985 | 0.33 | 3.30 | 15.8 | 66993 | 66981 | 1.00 | 36.9 | 41.9 | 0/0 | - | 8, 0.2 |
-| badger | true | C | 1 | 58978 | 0.016 | 0.033 | 0.050 | 29489 | 29489 | 0.021 | 0.073 | 0.51 | 0/0 | - | 4, 0.25 |
-| badger | true | C | 8 | 259013 | 0.019 | 0.36 | 0.95 | 129506 | 129506 | 0.023 | 11.3 | 49.0 | 0/0 | - | 16, 0.21 |
-| badger | true | C | 64 | 278976 | 0.019 | 5.05 | 10.0 | 139488 | 139186 | 17.3 | 120.8 | 179.0 | 0/0 | - | 17, 0.22 |
-| badger | true | F | 1 | 13671 | 0.050 | 0.39 | 1.01 | 6836 | 6836 | 0.093 | 4.88 | 9.56 | 0/0 | - | 1, 0.14 |
-| badger | true | F | 8 | 25344 | 0.26 | 1.25 | 9.88 | 12672 | 12672 | 0.12 | 6.92 | 18.8 | 0/0 | - | 0, 0 |
-| badger | true | F | 64 | 30007 | 1.58 | 19.2 | 43.0 | 15003 | 111 | 2.89 | 54.3 | 120057.8 | 1093/49 | 47542 | 0, 0 |
-| badger | true | D | 1 | 70569 | 0.005 | 0.19 | 0.47 | 35284 | 35284 | 0.027 | 51.2 | 66.3 | 0/0 | - | 3, 0.15 |
-| badger | true | D | 8 | 154241 | 0.011 | 0.31 | 0.87 | 77120 | 77108 | 34.4 | 997.7 | 1045.4 | 0/0 | - | 7, 26.52 |
-| badger | true | D | 64 | 211460 | 0.21 | 2.41 | 5.12 | 105730 | 105671 | 0.44 | 31.7 | 39.5 | 0/0 | - | 3, 0.15 |
+| badger | true | A | 1 | 18892 | 0.031 | 0.30 | 2.23 | 9446 | 9446 | 0.068 | 4.79 | 8.16 | 0/0 | - | 0, 0 |
+| badger | true | A | 8 | 22734 | 0.27 | 1.58 | 8.32 | 11367 | 11367 | 0.14 | 107.3 | 118.9 | 0/0 | - | 1, 0.54 |
+| badger | true | A | 64 | 25400 | 2.13 | 10.6 | 37.8 | 12700 | 12700 | 0.22 | 60.8 | 78.5 | 0/0 | - | 1, 0.17 |
+| badger | true | B | 1 | 32289 | 0.020 | 0.27 | 1.00 | 16144 | 16144 | 0.024 | 1.36 | 2.12 | 0/0 | - | 0, 0 |
+| badger | true | B | 8 | 117187 | 0.021 | 0.39 | 1.20 | 58594 | 58592 | 0.033 | 15.3 | 25.8 | 0/0 | - | 5, 0.22 |
+| badger | true | B | 64 | 159308 | 0.32 | 2.65 | 6.43 | 79654 | 79527 | 1.42 | 36.4 | 50.9 | 0/0 | - | 9, 0.24 |
+| badger | true | C | 1 | 58637 | 0.016 | 0.034 | 0.051 | 29318 | 29318 | 0.021 | 0.077 | 0.51 | 0/0 | - | 3, 0.13 |
+| badger | true | C | 8 | 261118 | 0.019 | 0.36 | 0.99 | 130559 | 130559 | 0.022 | 5.94 | 21.4 | 0/0 | - | 16, 0.76 |
+| badger | true | C | 64 | 246828 | 0.021 | 5.57 | 11.2 | 123414 | 122989 | 17.0 | 131.8 | 204.9 | 0/0 | - | 15, 0.3 |
+| badger | true | F | 1 | 12393 | 0.051 | 0.48 | 1.17 | 6196 | 6197 | 0.083 | 3.01 | 10.1 | 0/0 | - | 0, 0 |
+| badger | true | F | 8 | 23554 | 0.26 | 1.76 | 14.0 | 11777 | 11777 | 0.093 | 26.4 | 40.5 | 0/0 | - | 1, 0.32 |
+| badger | true | F | 64 | 28275 | 1.68 | 20.1 | 40.9 | 14138 | 14137 | 2.54 | 33.6 | 55.9 | 1045/47 | - | 1, 0.15 |
+| badger | true | D | 1 | 44275 | 0.006 | 0.18 | 0.91 | 22138 | 22133 | 180.6 | 738.2 | 753.4 | 0/0 | - | 2, 4.15 |
+| badger | true | D | 8 | 145727 | 0.011 | 0.33 | 1.04 | 72863 | 71856 | 10.0 | 993.5 | 1023.4 | 0/0 | - | 8, 10.66 |
+| badger | true | D | 64 | 221373 | 0.21 | 2.30 | 5.03 | 110687 | 110680 | 0.40 | 4.92 | 8.28 | 0/0 | - | 3, 0.44 |
 
 ## ycsb-bbolt-fsync-false.json
 
 Command: `bin/freshdb-bench ycsb -system bbolt -fsync=false -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27`  
-Started 2026-10-27T20:50:55+05:30, loadavg at start 4.64 4.45 3.60
+Started 2026-10-27T21:15:05+05:30, loadavg at start 3.27 3.08 3.13
 
-Params: clients=[1,8,64]; disk_after_run=1.5G; duration=5s; fsync=false; keys=1e+06; load_keys_per_sec=265121; load_seconds=3.77; open_loop_cap_ops_per_sec=200000; open_loop_fraction_of_max=0.5; peak_rss=1541948 kB; seed=42; system=bbolt; value_bytes=1024; warmup=2s; workloads=A,B,C,F,D; zipf_theta=0.99;
+Params: clients=[1,8,64]; disk_after_run=2.3G; duration=5s; fsync=false; keys=1e+06; load_keys_per_sec=326580; load_seconds=3.06; open_loop_cap_ops_per_sec=200000; open_loop_fraction_of_max=0.5; peak_rss=2440852 kB; seed=42; system=bbolt; value_bytes=1024; warmup=2s; workloads=A,B,C,F,D; zipf_theta=0.99;
 
 | sys | fsync | wl | clients | closed ops/s | closed p50 | p99 | p99.9 | open target/s | open achieved/s | open p50 | p99 | p99.9 | errors (closed/open) | open not issued (overload) | open-phase Go GC (cycles, max STW ms) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| bbolt | false | A | 1 | 200 | 0.028 | 10.6 | 10.9 | 100 | 100 | 10.3 | 12.4 | 13.1 | 0/0 | - | 4, 0.19 |
-| bbolt | false | A | 8 | 1513 | 0.068 | 11.3 | 30.0 | 757 | 756 | 1.49 | 31.6 | 68.9 | 0/0 | - | 11, 0.33 |
-| bbolt | false | A | 64 | 11101 | 0.26 | 12.4 | 15.1 | 5551 | 5546 | 0.69 | 10.7 | 16.4 | 0/0 | - | 13, 9.61 |
-| bbolt | false | B | 1 | 2017 | 0.004 | 10.4 | 10.7 | 1009 | 1009 | 0.028 | 34.0 | 42.9 | 0/0 | - | 5, 0.2 |
-| bbolt | false | B | 8 | 15150 | 0.004 | 10.8 | 11.2 | 7575 | 7531 | 0.021 | 66.2 | 101.4 | 0/0 | - | 23, 72.42 |
-| bbolt | false | B | 64 | 110479 | 0.007 | 11.6 | 12.2 | 55240 | 55084 | 0.023 | 25.4 | 43.6 | 0/0 | - | 36, 0.67 |
-| bbolt | false | C | 1 | 402753 | 0.002 | 0.008 | 0.044 | 200000 | 200000 | 0.004 | 0.26 | 0.50 | 0/0 | - | 424, 0.39 |
-| bbolt | false | C | 8 | 617818 | 0.004 | 0.15 | 0.41 | 200000 | 199999 | 0.006 | 26.0 | 46.1 | 0/0 | - | 305, 1.16 |
-| bbolt | false | C | 64 | 725994 | 0.013 | 0.74 | 1.71 | 200000 | 200000 | 0.019 | 0.46 | 2.89 | 0/0 | - | 96, 1.06 |
-| bbolt | false | F | 1 | 200 | 0.017 | 10.6 | 10.9 | 100 | 100 | 10.3 | 13.4 | 17.5 | 0/0 | - | 2, 0.06 |
-| bbolt | false | F | 8 | 1523 | 0.065 | 11.1 | 20.8 | 762 | 761 | 1.40 | 23.7 | 38.4 | 0/0 | - | 9, 0.25 |
-| bbolt | false | F | 64 | 11055 | 0.28 | 12.4 | 12.7 | 5528 | 5523 | 0.56 | 10.7 | 11.5 | 0/0 | - | 14, 0.27 |
-| bbolt | false | D | 1 | 1912 | 0.003 | 10.4 | 10.7 | 956 | 955 | 0.028 | 32.7 | 45.5 | 0/0 | - | 5, 0.17 |
-| bbolt | false | D | 8 | 15353 | 0.004 | 10.6 | 11.0 | 7676 | 7419 | 0.014 | 122.4 | 176.8 | 0/0 | - | 18, 0.29 |
-| bbolt | false | D | 64 | 115120 | 0.007 | 10.9 | 11.6 | 57560 | 57248 | 0.021 | 26.0 | 43.9 | 0/0 | - | 29, 0.66 |
+| bbolt | false | A | 1 | 92548 | 0.011 | 0.056 | 0.19 | 46274 | 46271 | 0.022 | 23.9 | 36.5 | 0/0 | - | 616, 10.85 |
+| bbolt | false | A | 8 | 76052 | 0.015 | 1.44 | 2.31 | 38026 | 38026 | 0.025 | 0.56 | 2.37 | 0/0 | - | 293, 0.93 |
+| bbolt | false | A | 64 | 88058 | 0.019 | 2.63 | 3.77 | 44029 | 44029 | 0.037 | 0.66 | 2.81 | 0/0 | - | 143, 0.63 |
+| bbolt | false | B | 1 | 304282 | 0.002 | 0.023 | 0.066 | 152141 | 152141 | 0.005 | 0.70 | 12.0 | 0/0 | - | 300, 0.19 |
+| bbolt | false | B | 8 | 343541 | 0.003 | 0.48 | 1.10 | 171770 | 171770 | 0.006 | 0.64 | 3.09 | 0/0 | - | 289, 2.76 |
+| bbolt | false | B | 64 | 301404 | 0.004 | 3.64 | 7.70 | 150702 | 150702 | 0.020 | 0.51 | 3.21 | 0/0 | - | 111, 2 |
+| bbolt | false | C | 1 | 510404 | 0.002 | 0.005 | 0.025 | 200000 | 200000 | 0.003 | 11.1 | 24.8 | 0/0 | - | 223, 9.76 |
+| bbolt | false | C | 8 | 748393 | 0.004 | 0.087 | 0.29 | 200000 | 200000 | 0.006 | 19.9 | 35.7 | 0/0 | - | 185, 1.49 |
+| bbolt | false | C | 64 | 668637 | 0.012 | 0.83 | 1.89 | 200000 | 198670 | 0.019 | 1.24 | 15.1 | 0/0 | - | 79, 14.03 |
+| bbolt | false | F | 1 | 79912 | 0.013 | 0.057 | 0.20 | 39956 | 39956 | 0.023 | 0.50 | 7.88 | 0/0 | - | 450, 4.37 |
+| bbolt | false | F | 8 | 68239 | 0.017 | 1.59 | 2.51 | 34119 | 34119 | 0.026 | 0.51 | 2.80 | 0/0 | - | 313, 1.25 |
+| bbolt | false | F | 64 | 82442 | 0.023 | 2.69 | 3.87 | 41221 | 41216 | 0.043 | 4.11 | 8.38 | 0/0 | - | 146, 1.73 |
+| bbolt | false | D | 1 | 344029 | 0.002 | 0.022 | 0.056 | 172014 | 172014 | 0.004 | 7.38 | 12.4 | 0/0 | - | 247, 0.32 |
+| bbolt | false | D | 8 | 361875 | 0.002 | 0.48 | 1.12 | 180938 | 180938 | 0.006 | 26.6 | 35.8 | 0/0 | - | 256, 35.22 |
+| bbolt | false | D | 64 | 425270 | 0.004 | 2.69 | 5.24 | 200000 | 199999 | 0.021 | 6.00 | 13.0 | 0/0 | - | 130, 1.12 |
 
 ## ycsb-bbolt-fsync-true.json
 
 Command: `bin/freshdb-bench ycsb -system bbolt -fsync=true -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27`  
-Started 2026-10-27T20:25:06+05:30, loadavg at start 3.99 3.59 3.07
+Started 2026-10-27T21:12:01+05:30, loadavg at start 4.26 2.85 3.07
 
-Params: clients=[1,8,64]; disk_after_run=1.4G; duration=5s; fsync=true; keys=1e+06; load_keys_per_sec=276039; load_seconds=3.62; open_loop_cap_ops_per_sec=200000; open_loop_fraction_of_max=0.5; peak_rss=1524904 kB; seed=42; system=bbolt; value_bytes=1024; warmup=2s; workloads=A,B,C,F,D; zipf_theta=0.99;
+Params: clients=[1,8,64]; disk_after_run=1.7G; duration=5s; fsync=true; keys=1e+06; load_keys_per_sec=279523; load_seconds=3.58; open_loop_cap_ops_per_sec=200000; open_loop_fraction_of_max=0.5; peak_rss=1797508 kB; seed=42; system=bbolt; value_bytes=1024; warmup=2s; workloads=A,B,C,F,D; zipf_theta=0.99;
 
 | sys | fsync | wl | clients | closed ops/s | closed p50 | p99 | p99.9 | open target/s | open achieved/s | open p50 | p99 | p99.9 | errors (closed/open) | open not issued (overload) | open-phase Go GC (cycles, max STW ms) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| bbolt | true | A | 1 | 184 | 0.032 | 11.8 | 20.5 | 92 | 92 | 10.5 | 54.1 | 64.9 | 0/0 | - | 0, 0 |
-| bbolt | true | A | 8 | 1397 | 0.059 | 12.3 | 62.2 | 698 | 698 | 1.88 | 36.1 | 51.1 | 0/0 | - | 11, 0.23 |
-| bbolt | true | A | 64 | 9976 | 0.34 | 13.9 | 35.1 | 4988 | 4978 | 1.45 | 25.4 | 42.1 | 0/0 | - | 12, 0.16 |
-| bbolt | true | B | 1 | 1834 | 0.004 | 11.3 | 11.9 | 917 | 917 | 0.026 | 38.9 | 51.9 | 0/0 | - | 5, 0.32 |
-| bbolt | true | B | 8 | 13845 | 0.004 | 11.7 | 12.6 | 6923 | 6901 | 0.013 | 24.4 | 42.5 | 0/0 | - | 22, 0.13 |
-| bbolt | true | B | 64 | 99334 | 0.008 | 12.7 | 13.8 | 49667 | 49473 | 0.022 | 28.0 | 47.4 | 0/0 | - | 35, 1.48 |
-| bbolt | true | C | 1 | 480528 | 0.002 | 0.007 | 0.040 | 200000 | 200000 | 0.003 | 0.94 | 8.57 | 0/0 | - | 422, 0.3 |
-| bbolt | true | C | 8 | 712862 | 0.004 | 0.11 | 0.34 | 200000 | 200000 | 0.005 | 32.6 | 57.3 | 0/0 | - | 307, 38.06 |
-| bbolt | true | C | 64 | 750849 | 0.014 | 0.68 | 1.44 | 200000 | 200000 | 0.018 | 0.21 | 2.14 | 0/0 | - | 94, 0.71 |
-| bbolt | true | F | 1 | 184 | 0.019 | 11.7 | 43.2 | 92 | 92 | 10.4 | 12.1 | 12.3 | 0/0 | - | 2, 0.18 |
-| bbolt | true | F | 8 | 1449 | 0.039 | 12.0 | 12.5 | 725 | 724 | 1.23 | 12.2 | 12.9 | 0/0 | - | 8, 0.19 |
-| bbolt | true | F | 64 | 10070 | 0.23 | 13.7 | 14.5 | 5035 | 5024 | 0.32 | 11.2 | 12.0 | 0/0 | - | 12, 0.11 |
-| bbolt | true | D | 1 | 1752 | 0.003 | 11.5 | 12.8 | 876 | 876 | 0.081 | 37.3 | 50.2 | 0/0 | - | 5, 28.27 |
-| bbolt | true | D | 8 | 14005 | 0.003 | 12.0 | 13.6 | 7002 | 6992 | 0.013 | 51.6 | 70.0 | 0/0 | - | 18, 0.64 |
-| bbolt | true | D | 64 | 101056 | 0.008 | 12.2 | 14.4 | 50528 | 50227 | 0.021 | 34.5 | 61.9 | 0/0 | - | 26, 0.14 |
+| bbolt | true | A | 1 | 22396 | 0.051 | 0.15 | 0.73 | 11198 | 11198 | 0.079 | 20.9 | 29.6 | 0/0 | - | 203, 28.26 |
+| bbolt | true | A | 8 | 23028 | 0.064 | 1.62 | 3.57 | 11514 | 11514 | 0.077 | 15.2 | 28.8 | 0/0 | - | 124, 0.38 |
+| bbolt | true | A | 64 | 23571 | 0.030 | 10.4 | 35.0 | 11786 | 11786 | 0.084 | 24.0 | 36.9 | 0/0 | - | 43, 0.27 |
+| bbolt | true | B | 1 | 138974 | 0.002 | 0.089 | 0.31 | 69487 | 69483 | 0.018 | 3.07 | 9.99 | 0/0 | - | 203, 0.32 |
+| bbolt | true | B | 8 | 168773 | 0.002 | 1.28 | 2.55 | 84386 | 84386 | 0.007 | 5.22 | 14.9 | 0/0 | - | 197, 6.26 |
+| bbolt | true | B | 64 | 242035 | 0.002 | 5.67 | 7.52 | 121017 | 121016 | 0.020 | 10.8 | 24.4 | 0/0 | - | 91, 0.71 |
+| bbolt | true | C | 1 | 530665 | 0.002 | 0.005 | 0.025 | 200000 | 200000 | 0.003 | 0.21 | 8.32 | 0/0 | - | 241, 10.59 |
+| bbolt | true | C | 8 | 752239 | 0.004 | 0.089 | 0.30 | 200000 | 200000 | 0.005 | 0.13 | 1.95 | 0/0 | - | 199, 0.65 |
+| bbolt | true | C | 64 | 765225 | 0.012 | 0.72 | 1.58 | 200000 | 200000 | 0.018 | 0.15 | 1.47 | 0/0 | - | 81, 0.83 |
+| bbolt | true | F | 1 | 24506 | 0.033 | 0.12 | 0.63 | 12253 | 12253 | 0.076 | 3.23 | 5.60 | 0/0 | - | 124, 0.31 |
+| bbolt | true | F | 8 | 22829 | 0.064 | 1.69 | 4.06 | 11415 | 11415 | 0.083 | 16.2 | 24.7 | 0/0 | - | 100, 0.72 |
+| bbolt | true | F | 64 | 21949 | 0.085 | 9.12 | 33.0 | 10975 | 10975 | 0.084 | 20.9 | 46.5 | 0/0 | - | 39, 0.12 |
+| bbolt | true | D | 1 | 91156 | 0.002 | 0.21 | 0.47 | 45578 | 45578 | 0.086 | 28.3 | 36.7 | 0/0 | - | 112, 22.38 |
+| bbolt | true | D | 8 | 143015 | 0.002 | 1.44 | 2.57 | 71508 | 71508 | 0.007 | 24.6 | 32.8 | 0/0 | - | 159, 27.72 |
+| bbolt | true | D | 64 | 161058 | 0.002 | 8.52 | 13.6 | 80529 | 80526 | 0.019 | 15.4 | 33.6 | 0/0 | - | 62, 0.95 |
 
 ## ycsb-freshdb-fsync-false.json
 
@@ -451,25 +451,25 @@ Params: clients=[1,8,64]; disk_after_run=4.6G; duration=5s; fsync=false; keys=1e
 ## ycsb-sqlite-fsync-true.json
 
 Command: `bin/freshdb-bench ycsb -system sqlite -fsync=true -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27`  
-Started 2026-10-27T20:28:31+05:30, loadavg at start 1.91 2.86 2.88
+Started 2026-10-27T21:21:39+05:30, loadavg at start 3.07 3.47 3.29
 
-Params: clients=[1,8,64]; disk_after_run=4.6G; duration=5s; fsync=true; keys=1e+06; load_keys_per_sec=40893; load_seconds=24.45; open_loop_cap_ops_per_sec=200000; open_loop_fraction_of_max=0.5; peak_rss=326996 kB; seed=42; system=sqlite; value_bytes=1024; warmup=2s; workloads=A,B,C,F,D; zipf_theta=0.99;
+Params: clients=[1,8,64]; disk_after_run=4.6G; duration=5s; fsync=true; keys=1e+06; load_keys_per_sec=41506; load_seconds=24.09; open_loop_cap_ops_per_sec=200000; open_loop_fraction_of_max=0.5; peak_rss=326496 kB; seed=42; system=sqlite; value_bytes=1024; warmup=2s; workloads=A,B,C,F,D; zipf_theta=0.99;
 
 | sys | fsync | wl | clients | closed ops/s | closed p50 | p99 | p99.9 | open target/s | open achieved/s | open p50 | p99 | p99.9 | errors (closed/open) | open not issued (overload) | open-phase Go GC (cycles, max STW ms) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| sqlite | true | A | 1 | 11684 | 0.062 | 0.47 | 5.47 | 5842 | 5842 | 0.10 | 17.8 | 31.0 | 0/0 | - | 24, 0.3 |
-| sqlite | true | A | 8 | 14136 | 0.13 | 5.39 | 10.4 | 7068 | 7068 | 0.087 | 33.1 | 45.1 | 0/0 | - | 19, 0.56 |
-| sqlite | true | A | 64 | 13237 | 0.21 | 40.2 | 64.3 | 6619 | 6619 | 0.085 | 22.5 | 44.5 | 0/0 | - | 7, 0.22 |
-| sqlite | true | B | 1 | 22522 | 0.028 | 0.38 | 1.41 | 11261 | 93 | 0.043 | 17.1 | 31.0 | 0/0 | 26455 | 30, 0.34 |
-| sqlite | true | B | 8 | 37101 | 0.12 | 1.56 | 5.66 | 18550 | 18549 | 0.044 | 33.6 | 47.2 | 0/0 | - | 62, 0.58 |
-| sqlite | true | B | 64 | 33174 | 0.21 | 50.1 | 129.4 | 16587 | 16490 | 0.053 | 36.6 | 80.9 | 0/0 | - | 14, 14.31 |
-| sqlite | true | C | 1 | 27173 | 0.035 | 0.071 | 0.16 | 13586 | 13586 | 0.044 | 0.15 | 0.55 | 0/0 | - | 65, 0.35 |
-| sqlite | true | C | 8 | 39652 | 0.14 | 0.95 | 1.50 | 19826 | 19826 | 0.048 | 0.57 | 2.35 | 0/0 | - | 63, 0.99 |
-| sqlite | true | C | 64 | 30091 | 1.03 | 11.7 | 22.8 | 15045 | 15045 | 0.052 | 3.54 | 24.4 | 0/0 | - | 13, 0.14 |
-| sqlite | true | F | 1 | 9503 | 0.088 | 0.63 | 5.50 | 4752 | 4752 | 0.15 | 10.2 | 24.7 | 0/0 | - | 31, 0.58 |
-| sqlite | true | F | 8 | 9788 | 0.17 | 6.84 | 11.7 | 4894 | 4894 | 0.14 | 36.5 | 57.9 | 0/0 | - | 22, 0.16 |
-| sqlite | true | F | 64 | 9957 | 0.19 | 49.6 | 81.3 | 4979 | 4979 | 0.10 | 5.31 | 18.9 | 0/0 | - | 8, 0.19 |
-| sqlite | true | D | 1 | 28188 | 0.022 | 0.28 | 1.23 | 14094 | 14094 | 0.046 | 2.50 | 4.51 | 0/0 | - | 61, 0.9 |
-| sqlite | true | D | 8 | 38177 | 0.13 | 1.48 | 4.37 | 19089 | 19088 | 0.046 | 47.1 | 67.8 | 0/0 | - | 58, 20.27 |
-| sqlite | true | D | 64 | 35826 | 0.16 | 49.9 | 117.8 | 17913 | 17911 | 0.069 | 225.2 | 353.4 | 0/0 | - | 15, 2.91 |
+| sqlite | true | A | 1 | 9314 | 0.061 | 1.15 | 6.25 | 4657 | 4657 | 0.15 | 531.9 | 547.9 | 0/0 | - | 19, 0.54 |
+| sqlite | true | A | 8 | 13482 | 0.13 | 5.89 | 11.9 | 6741 | 6741 | 0.090 | 34.6 | 49.0 | 0/0 | - | 18, 0.98 |
+| sqlite | true | A | 64 | 13353 | 0.20 | 38.2 | 59.7 | 6677 | 6676 | 0.082 | 6.96 | 23.1 | 0/0 | - | 6, 0.13 |
+| sqlite | true | B | 1 | 22244 | 0.029 | 0.34 | 1.29 | 11122 | 11122 | 0.057 | 49.9 | 68.3 | 0/0 | - | 56, 0.5 |
+| sqlite | true | B | 8 | 30756 | 0.14 | 1.88 | 8.90 | 15378 | 15378 | 0.052 | 20.8 | 38.4 | 0/0 | - | 51, 1.18 |
+| sqlite | true | B | 64 | 33557 | 0.22 | 51.1 | 123.9 | 16779 | 16779 | 0.049 | 0.83 | 3.53 | 0/0 | - | 14, 0.18 |
+| sqlite | true | C | 1 | 33790 | 0.029 | 0.055 | 0.14 | 16895 | 16895 | 0.040 | 0.19 | 1.82 | 0/0 | - | 82, 0.34 |
+| sqlite | true | C | 8 | 36729 | 0.13 | 1.16 | 1.89 | 18364 | 18364 | 0.060 | 38.4 | 45.7 | 0/0 | - | 58, 42.16 |
+| sqlite | true | C | 64 | 26828 | 1.29 | 12.2 | 18.3 | 13414 | 13414 | 0.050 | 1.66 | 8.54 | 0/0 | - | 12, 0.66 |
+| sqlite | true | F | 1 | 10100 | 0.087 | 0.50 | 4.24 | 5050 | 5009 | 0.17 | 18.2 | 42.4 | 0/0 | - | 33, 0.14 |
+| sqlite | true | F | 8 | 9544 | 0.15 | 7.22 | 12.4 | 4772 | 4772 | 0.12 | 6.07 | 9.22 | 0/0 | - | 22, 0.18 |
+| sqlite | true | F | 64 | 8920 | 0.26 | 58.2 | 91.5 | 4460 | 4460 | 0.11 | 5.27 | 9.58 | 0/0 | - | 6, 0.14 |
+| sqlite | true | D | 1 | 24906 | 0.026 | 0.28 | 1.15 | 12453 | 12453 | 0.052 | 3.72 | 10.9 | 0/0 | - | 55, 0.39 |
+| sqlite | true | D | 8 | 30604 | 0.16 | 1.74 | 4.98 | 15302 | 15302 | 0.052 | 10.9 | 35.0 | 0/0 | - | 46, 0.24 |
+| sqlite | true | D | 64 | 28300 | 0.23 | 60.9 | 158.1 | 14150 | 14142 | 0.066 | 20.9 | 60.7 | 0/0 | - | 12, 0.23 |
 

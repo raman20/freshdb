@@ -32,7 +32,7 @@ def ycsb(fsync, clients, metric):
                 else:
                     o = r["open_loop"]; l = o["latency"]
                     ni = o.get("not_issued_overload", 0)
-                    c2 = f"{ms(l['p50_us'])} / {ms(l['p99_us'])}"
+                    c2 = f"{ms(l['p50_us'])} / {ms(l['p99_us'])} / {ms(l['p999_us'])}"
                     if ni: c2 += f" ({ni} not issued)"
                     if o["errors"]: c2 += f" ({o['errors']} err)"
                     cells.append(c2)

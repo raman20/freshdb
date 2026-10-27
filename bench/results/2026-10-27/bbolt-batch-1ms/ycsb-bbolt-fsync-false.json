@@ -1,0 +1,835 @@
+{
+  "suite": "ycsb",
+  "env": {
+    "time": "2026-10-27T21:31:32+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "d1475a9-dirty",
+    "command": "bin/freshdb-bench ycsb -system bbolt -fsync=false -bolt-batch-delay 1ms -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27/bbolt-batch-1ms",
+    "loadavg_at_start": "3.67 3.28 3.24"
+  },
+  "params": {
+    "system": "bbolt",
+    "fsync": false,
+    "keys": 1000000,
+    "value_bytes": 1024,
+    "workloads": "A,B,C,F,D",
+    "clients": [
+      1,
+      8,
+      64
+    ],
+    "warmup": "2s",
+    "duration": "5s",
+    "open_loop_fraction_of_max": 0.5,
+    "open_loop_cap_ops_per_sec": 200000,
+    "seed": 42,
+    "zipf_theta": 0.99,
+    "load_seconds": 3.06,
+    "load_keys_per_sec": 326658,
+    "disk_after_run": "2.0G",
+    "peak_rss": "2148168 kB"
+  },
+  "runs": [
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 8648,
+        "ops_per_sec": 1729.3,
+        "errors": 0,
+        "latency": {
+          "count": 8648,
+          "mean_us": 577.88,
+          "p50_us": 21.06,
+          "p99_us": 1429.5,
+          "p999_us": 1655.81,
+          "max_us": 3516.42
+        },
+        "go_gc": {
+          "cycles": 44,
+          "stw_pause_total_ms": 4.34,
+          "stw_pause_max_ms": 0.3,
+          "heap_inuse_end_mb": 6,
+          "gc_cpu_fraction_cumulative": 0.0026
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 4323,
+        "ops_per_sec": 864.6,
+        "target_ops_per_sec": 864.7,
+        "errors": 0,
+        "latency": {
+          "count": 4323,
+          "mean_us": 925.67,
+          "p50_us": 1135.62,
+          "p99_us": 12124.16,
+          "p999_us": 20348.93,
+          "max_us": 21512.19
+        },
+        "go_gc": {
+          "cycles": 24,
+          "stw_pause_total_ms": 2.37,
+          "stw_pause_max_ms": 0.28,
+          "heap_inuse_end_mb": 5,
+          "gc_cpu_fraction_cumulative": 0.002
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 59664,
+        "ops_per_sec": 11931.7,
+        "errors": 0,
+        "latency": {
+          "count": 59664,
+          "mean_us": 670.09,
+          "p50_us": 69.44,
+          "p99_us": 1733.63,
+          "p999_us": 2181.12,
+          "max_us": 2355.2
+        },
+        "go_gc": {
+          "cycles": 122,
+          "stw_pause_total_ms": 13.14,
+          "stw_pause_max_ms": 0.38,
+          "heap_inuse_end_mb": 8,
+          "gc_cpu_fraction_cumulative": 0.0028
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 29829,
+        "ops_per_sec": 5965.2,
+        "target_ops_per_sec": 5965.9,
+        "errors": 0,
+        "latency": {
+          "count": 29829,
+          "mean_us": 424.26,
+          "p50_us": 138.88,
+          "p99_us": 1667.07,
+          "p999_us": 6762.5,
+          "max_us": 10199.04
+        },
+        "go_gc": {
+          "cycles": 76,
+          "stw_pause_total_ms": 10.22,
+          "stw_pause_max_ms": 2.06,
+          "heap_inuse_end_mb": 10,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 305461,
+        "ops_per_sec": 61078.1,
+        "errors": 0,
+        "latency": {
+          "count": 305461,
+          "mean_us": 1047.15,
+          "p50_us": 1052.67,
+          "p99_us": 2727.94,
+          "p999_us": 3158.02,
+          "max_us": 3399.68
+        },
+        "go_gc": {
+          "cycles": 107,
+          "stw_pause_total_ms": 11.46,
+          "stw_pause_max_ms": 0.43,
+          "heap_inuse_end_mb": 29,
+          "gc_cpu_fraction_cumulative": 0.0032
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 152695,
+        "ops_per_sec": 30532.4,
+        "target_ops_per_sec": 30539.1,
+        "errors": 0,
+        "latency": {
+          "count": 152695,
+          "mean_us": 496.92,
+          "p50_us": 324.86,
+          "p99_us": 2058.24,
+          "p999_us": 5423.1,
+          "max_us": 11059.2
+        },
+        "go_gc": {
+          "cycles": 68,
+          "stw_pause_total_ms": 7,
+          "stw_pause_max_ms": 0.89,
+          "heap_inuse_end_mb": 27,
+          "gc_cpu_fraction_cumulative": 0.0032
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 83763,
+        "ops_per_sec": 16749.7,
+        "errors": 0,
+        "latency": {
+          "count": 83763,
+          "mean_us": 59.55,
+          "p50_us": 3.02,
+          "p99_us": 1180.67,
+          "p999_us": 1435.65,
+          "max_us": 2075.65
+        },
+        "go_gc": {
+          "cycles": 50,
+          "stw_pause_total_ms": 4.97,
+          "stw_pause_max_ms": 0.28,
+          "heap_inuse_end_mb": 7,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 41874,
+        "ops_per_sec": 8375,
+        "target_ops_per_sec": 8374.9,
+        "errors": 0,
+        "latency": {
+          "count": 41874,
+          "mean_us": 737.42,
+          "p50_us": 119.62,
+          "p99_us": 5115.9,
+          "p999_us": 21839.87,
+          "max_us": 23789.57
+        },
+        "go_gc": {
+          "cycles": 25,
+          "stw_pause_total_ms": 2.47,
+          "stw_pause_max_ms": 0.26,
+          "heap_inuse_end_mb": 10,
+          "gc_cpu_fraction_cumulative": 0.0027
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 547145,
+        "ops_per_sec": 109404.3,
+        "errors": 0,
+        "latency": {
+          "count": 547145,
+          "mean_us": 72.91,
+          "p50_us": 3.22,
+          "p99_us": 1471.49,
+          "p999_us": 1837.06,
+          "max_us": 9076.74
+        },
+        "go_gc": {
+          "cycles": 219,
+          "stw_pause_total_ms": 21.65,
+          "stw_pause_max_ms": 0.5,
+          "heap_inuse_end_mb": 12,
+          "gc_cpu_fraction_cumulative": 0.0032
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 273510,
+        "ops_per_sec": 54702.3,
+        "target_ops_per_sec": 54702.2,
+        "errors": 0,
+        "latency": {
+          "count": 273510,
+          "mean_us": 332.91,
+          "p50_us": 10.29,
+          "p99_us": 3158.02,
+          "p999_us": 9650.18,
+          "max_us": 15187.97
+        },
+        "go_gc": {
+          "cycles": 121,
+          "stw_pause_total_ms": 21.03,
+          "stw_pause_max_ms": 5.1,
+          "heap_inuse_end_mb": 14,
+          "gc_cpu_fraction_cumulative": 0.0034
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 3139611,
+        "ops_per_sec": 627850.4,
+        "errors": 0,
+        "latency": {
+          "count": 3139611,
+          "mean_us": 101.6,
+          "p50_us": 7.61,
+          "p99_us": 1543.17,
+          "p999_us": 2250.75,
+          "max_us": 4759.55
+        },
+        "go_gc": {
+          "cycles": 352,
+          "stw_pause_total_ms": 39.15,
+          "stw_pause_max_ms": 0.48,
+          "heap_inuse_end_mb": 29,
+          "gc_cpu_fraction_cumulative": 0.0046
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199952.8,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 167.98,
+          "p50_us": 20.32,
+          "p99_us": 1673.22,
+          "p999_us": 8609.79,
+          "max_us": 16228.35
+        },
+        "go_gc": {
+          "cycles": 116,
+          "stw_pause_total_ms": 13.49,
+          "stw_pause_max_ms": 0.98,
+          "heap_inuse_end_mb": 38,
+          "gc_cpu_fraction_cumulative": 0.0047
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 2555042,
+        "ops_per_sec": 511007.6,
+        "errors": 0,
+        "latency": {
+          "count": 2555042,
+          "mean_us": 1.87,
+          "p50_us": 1.75,
+          "p99_us": 5.1,
+          "p999_us": 24.37,
+          "max_us": 603.14
+        },
+        "go_gc": {
+          "cycles": 555,
+          "stw_pause_total_ms": 35.17,
+          "stw_pause_max_ms": 0.38,
+          "heap_inuse_end_mb": 14,
+          "gc_cpu_fraction_cumulative": 0.0055
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199999.8,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 7.12,
+          "p50_us": 2.87,
+          "p99_us": 129.6,
+          "p999_us": 413.95,
+          "max_us": 1376.26
+        },
+        "go_gc": {
+          "cycles": 221,
+          "stw_pause_total_ms": 10.06,
+          "stw_pause_max_ms": 0.35,
+          "heap_inuse_end_mb": 15,
+          "gc_cpu_fraction_cumulative": 0.0055
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 3822442,
+        "ops_per_sec": 764486.9,
+        "errors": 0,
+        "latency": {
+          "count": 3822442,
+          "mean_us": 10.26,
+          "p50_us": 4.28,
+          "p99_us": 85.7,
+          "p999_us": 273.41,
+          "max_us": 3209.22
+        },
+        "go_gc": {
+          "cycles": 688,
+          "stw_pause_total_ms": 140.55,
+          "stw_pause_max_ms": 0.55,
+          "heap_inuse_end_mb": 12,
+          "gc_cpu_fraction_cumulative": 0.0076
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199999.8,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 31.78,
+          "p50_us": 5.2,
+          "p99_us": 588.8,
+          "p999_us": 4337.66,
+          "max_us": 9371.65
+        },
+        "go_gc": {
+          "cycles": 186,
+          "stw_pause_total_ms": 19.74,
+          "stw_pause_max_ms": 1.14,
+          "heap_inuse_end_mb": 16,
+          "gc_cpu_fraction_cumulative": 0.0076
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 3688552,
+        "ops_per_sec": 737699.9,
+        "errors": 0,
+        "latency": {
+          "count": 3688552,
+          "mean_us": 86.39,
+          "p50_us": 12.6,
+          "p99_us": 713.73,
+          "p999_us": 1677.31,
+          "max_us": 7016.45
+        },
+        "go_gc": {
+          "cycles": 288,
+          "stw_pause_total_ms": 27.44,
+          "stw_pause_max_ms": 1.23,
+          "heap_inuse_end_mb": 32,
+          "gc_cpu_fraction_cumulative": 0.0079
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 200000,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 29.83,
+          "p50_us": 18.32,
+          "p99_us": 208.26,
+          "p999_us": 2174.98,
+          "max_us": 7999.49
+        },
+        "go_gc": {
+          "cycles": 79,
+          "stw_pause_total_ms": 8.82,
+          "stw_pause_max_ms": 0.73,
+          "heap_inuse_end_mb": 37,
+          "gc_cpu_fraction_cumulative": 0.0077
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 8576,
+        "ops_per_sec": 1715,
+        "errors": 0,
+        "latency": {
+          "count": 8576,
+          "mean_us": 582.73,
+          "p50_us": 16.54,
+          "p99_us": 1412.1,
+          "p999_us": 1720.32,
+          "max_us": 33030.14
+        },
+        "go_gc": {
+          "cycles": 18,
+          "stw_pause_total_ms": 2.18,
+          "stw_pause_max_ms": 0.27,
+          "heap_inuse_end_mb": 14,
+          "gc_cpu_fraction_cumulative": 0.0073
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 4287,
+        "ops_per_sec": 857.7,
+        "target_ops_per_sec": 857.5,
+        "errors": 0,
+        "latency": {
+          "count": 4287,
+          "mean_us": 671.72,
+          "p50_us": 1113.09,
+          "p99_us": 1589.25,
+          "p999_us": 2012.16,
+          "max_us": 2172.93
+        },
+        "go_gc": {
+          "cycles": 10,
+          "stw_pause_total_ms": 1.24,
+          "stw_pause_max_ms": 0.22,
+          "heap_inuse_end_mb": 11,
+          "gc_cpu_fraction_cumulative": 0.007
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 59364,
+        "ops_per_sec": 11872,
+        "errors": 0,
+        "latency": {
+          "count": 59364,
+          "mean_us": 673.5,
+          "p50_us": 58.43,
+          "p99_us": 1769.47,
+          "p999_us": 2256.9,
+          "max_us": 2664.45
+        },
+        "go_gc": {
+          "cycles": 66,
+          "stw_pause_total_ms": 7.85,
+          "stw_pause_max_ms": 0.44,
+          "heap_inuse_end_mb": 16,
+          "gc_cpu_fraction_cumulative": 0.0068
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 29680,
+        "ops_per_sec": 5935.2,
+        "target_ops_per_sec": 5936,
+        "errors": 0,
+        "latency": {
+          "count": 29680,
+          "mean_us": 401.66,
+          "p50_us": 135.42,
+          "p99_us": 1353.73,
+          "p999_us": 2166.78,
+          "max_us": 5439.49
+        },
+        "go_gc": {
+          "cycles": 40,
+          "stw_pause_total_ms": 3.42,
+          "stw_pause_max_ms": 0.28,
+          "heap_inuse_end_mb": 18,
+          "gc_cpu_fraction_cumulative": 0.0066
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 291514,
+        "ops_per_sec": 58280.7,
+        "errors": 0,
+        "latency": {
+          "count": 291514,
+          "mean_us": 1097.28,
+          "p50_us": 1366.02,
+          "p99_us": 2965.5,
+          "p999_us": 3383.3,
+          "max_us": 4102.14
+        },
+        "go_gc": {
+          "cycles": 96,
+          "stw_pause_total_ms": 8.52,
+          "stw_pause_max_ms": 0.39,
+          "heap_inuse_end_mb": 41,
+          "gc_cpu_fraction_cumulative": 0.0064
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 145701,
+        "ops_per_sec": 29138.7,
+        "target_ops_per_sec": 29140.4,
+        "errors": 0,
+        "latency": {
+          "count": 145701,
+          "mean_us": 724.98,
+          "p50_us": 382.98,
+          "p99_us": 11255.81,
+          "p999_us": 24576,
+          "max_us": 34406.4
+        },
+        "go_gc": {
+          "cycles": 63,
+          "stw_pause_total_ms": 62.13,
+          "stw_pause_max_ms": 24.05,
+          "heap_inuse_end_mb": 28,
+          "gc_cpu_fraction_cumulative": 0.0067
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 78994,
+        "ops_per_sec": 15797.3,
+        "errors": 0,
+        "latency": {
+          "count": 78994,
+          "mean_us": 63.12,
+          "p50_us": 2.82,
+          "p99_us": 1196.03,
+          "p999_us": 1484.8,
+          "max_us": 52527.1
+        },
+        "go_gc": {
+          "cycles": 38,
+          "stw_pause_total_ms": 3.72,
+          "stw_pause_max_ms": 0.33,
+          "heap_inuse_end_mb": 11,
+          "gc_cpu_fraction_cumulative": 0.0064
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 39493,
+        "ops_per_sec": 7897.2,
+        "target_ops_per_sec": 7898.7,
+        "errors": 0,
+        "latency": {
+          "count": 39493,
+          "mean_us": 593.8,
+          "p50_us": 34.14,
+          "p99_us": 3731.46,
+          "p999_us": 6348.8,
+          "max_us": 7946.24
+        },
+        "go_gc": {
+          "cycles": 20,
+          "stw_pause_total_ms": 2.91,
+          "stw_pause_max_ms": 0.44,
+          "heap_inuse_end_mb": 10,
+          "gc_cpu_fraction_cumulative": 0.0063
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 566753,
+        "ops_per_sec": 113341.8,
+        "errors": 0,
+        "latency": {
+          "count": 566753,
+          "mean_us": 70.37,
+          "p50_us": 2.84,
+          "p99_us": 1389.57,
+          "p999_us": 1802.24,
+          "max_us": 23789.57
+        },
+        "go_gc": {
+          "cycles": 140,
+          "stw_pause_total_ms": 15.97,
+          "stw_pause_max_ms": 0.75,
+          "heap_inuse_end_mb": 14,
+          "gc_cpu_fraction_cumulative": 0.0062
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 283354,
+        "ops_per_sec": 56660.4,
+        "target_ops_per_sec": 56670.9,
+        "errors": 0,
+        "latency": {
+          "count": 283354,
+          "mean_us": 313.3,
+          "p50_us": 8.63,
+          "p99_us": 2793.47,
+          "p999_us": 17006.59,
+          "max_us": 22577.15
+        },
+        "go_gc": {
+          "cycles": 89,
+          "stw_pause_total_ms": 7.38,
+          "stw_pause_max_ms": 0.99,
+          "heap_inuse_end_mb": 12,
+          "gc_cpu_fraction_cumulative": 0.0061
+        }
+      }
+    },
+    {
+      "system": "bbolt",
+      "fsync": false,
+      "durability": "NoSync=true, writes via db.Batch, MaxBatchDelay=1ms",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 3524018,
+        "ops_per_sec": 704629.2,
+        "errors": 0,
+        "latency": {
+          "count": 3524018,
+          "mean_us": 90.48,
+          "p50_us": 9.75,
+          "p99_us": 1210.37,
+          "p999_us": 2032.64,
+          "max_us": 23904.26
+        },
+        "go_gc": {
+          "cycles": 299,
+          "stw_pause_total_ms": 31.82,
+          "stw_pause_max_ms": 0.54,
+          "heap_inuse_end_mb": 33,
+          "gc_cpu_fraction_cumulative": 0.0064
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199914.1,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 264.18,
+          "p50_us": 19.47,
+          "p99_us": 6037.5,
+          "p999_us": 13197.31,
+          "max_us": 19349.5
+        },
+        "go_gc": {
+          "cycles": 90,
+          "stw_pause_total_ms": 18.53,
+          "stw_pause_max_ms": 3.17,
+          "heap_inuse_end_mb": 40,
+          "gc_cpu_fraction_cumulative": 0.0064
+        }
+      }
+    }
+  ]
+}

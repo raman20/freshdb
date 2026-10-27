@@ -219,7 +219,26 @@ fsync off:
 
 freshDB keeps lens state, including MVCC history, in memory. That is the RSS column, and it is the main thing keeping freshDB from larger-than-RAM data today.
 
-BBOLT_BATCH_PLACEHOLDER
+### bbolt: `db.Update` (headline) vs `db.Batch` with 1 ms delay
+
+Closed-loop successful ops/s on the write-heavy workloads A and F. Raw data: [`bbolt-batch-1ms/`](../bench/results/2026-10-27/bbolt-batch-1ms/results.md).
+
+| fsync | workload | clients | Update | Batch 1ms |
+|---|---|---|---|---|
+| true | A | 1 | 22k | 1.3k |
+| true | A | 8 | 23k | 8.8k |
+| true | A | 64 | 24k | 41k |
+| true | F | 1 | 25k | 1.3k |
+| true | F | 8 | 23k | 8.4k |
+| true | F | 64 | 22k | 36k |
+| false | A | 1 | 93k | 1.7k |
+| false | A | 8 | 76k | 12k |
+| false | A | 64 | 88k | 61k |
+| false | F | 1 | 80k | 1.7k |
+| false | F | 8 | 68k | 12k |
+| false | F | 64 | 82k | 58k |
+
+Batch helps bbolt only with many concurrent fsync'd writers. Even then, it doesn't change the ranking in the tables above.
 
 ## Streaming (vs NATS JetStream)
 
