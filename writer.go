@@ -250,26 +250,23 @@ func (w *writer) process(batch []*commitReq) {
 	// chooses which of several conflicting transactions commits; each
 	// accepted one is still validated against everything before it.
 	sort.SliceStable(batch, func(i, j int) bool { return batch[i].attempt > batch[j].attempt })
-	// At most one escalated transaction runs per batch: it executes at the
-	// applied head and is validated first, so it cannot conflict. Others
-	// wait for the next batch, which sees its writes.
-	kept, ran := batch[:0], false
+	// Escalated transactions run here, at the applied head, before the batch
+	// is validated. The first one is validated first and cannot conflict;
+	// a later one that conflicts with what this batch already accepted is
+	// carried to the next batch (and re-run there) instead of failing.
+	kept := batch[:0]
 	for _, r := range batch {
-		switch {
-		case r.exec == nil:
+		if r.exec == nil || w.runExec(r) {
 			kept = append(kept, r)
-		case ran:
-			w.carry = append(w.carry, r)
-		default:
-			ran = true
-			if w.runExec(r) {
-				kept = append(kept, r)
-			}
 		}
 	}
 	batch = kept
 	for _, r := range batch {
 		if w.conflict(r, pending) {
+			if r.exec != nil {
+				w.carry = append(w.carry, r)
+				continue
+			}
 			r.done <- commitRes{err: ErrConflict}
 			continue
 		}
