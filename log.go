@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/raman20/goli/format"
-	"github.com/raman20/goli/lens"
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb/format"
+	"github.com/raman20/freshdb/lens"
+	"github.com/raman20/freshdb/store"
 )
 
 // logState is the in-memory image of one log (one branch lineage segment).
@@ -152,7 +152,7 @@ func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error 
 	}
 	l.nextSeq = expectSeq
 	if writable && l.lastEp > db.epoch {
-		// A newer writer already fenced this log (found by TLC, GoliLog.tla:
+		// A newer writer already fenced this log (found by TLC, FreshLog.tla:
 		// a slow opener must not append an older-epoch fence after a newer
 		// one, which would make the log unrecoverable).
 		return fmt.Errorf("%w: log %s has epoch %d > ours %d", ErrFenced, l.meta.ID, l.lastEp, db.epoch)
@@ -174,7 +174,7 @@ func (db *DB) repairTail(ctx context.Context, l *logState, k string, seq uint64,
 	} else {
 		fixed = append([]byte{}, data[:valid]...)
 	}
-	db.logf("goli: repaired torn tail of %s (%d valid frames kept, damaged copy at %s)", k, len(frames), q)
+	db.logf("freshdb: repaired torn tail of %s (%d valid frames kept, damaged copy at %s)", k, len(frames), q)
 	return putExactlyOnce(ctx, db.st, k, fixed)
 }
 

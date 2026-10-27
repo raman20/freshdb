@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb/store"
 )
 
 var ctx = context.Background()
@@ -68,7 +68,7 @@ func TestKVRoundTripAndRestart(t *testing.T) {
 	}
 }
 
-// Regression for old goli bug #1: stale reads after restart (random WAL
+// Regression for previous-prototype bug #1: stale reads after restart (random WAL
 // replay order lost latest writes, 30/50 runs). Overwrite the same keys
 // many times across many restarts; the latest value must always win.
 func TestRegressionStaleReadsAfterRestart(t *testing.T) {
@@ -91,7 +91,7 @@ func TestRegressionStaleReadsAfterRestart(t *testing.T) {
 	}
 }
 
-// Regression for old goli bugs #2 and #3: deleted vectors returned by
+// Regression for previous-prototype bugs #2 and #3: deleted vectors returned by
 // search, and vectors lost on restart.
 func TestRegressionVectorsDeleteAndRestart(t *testing.T) {
 	st := store.NewMem()
@@ -123,7 +123,7 @@ func TestRegressionVectorsDeleteAndRestart(t *testing.T) {
 	check(db) // persisted by replay: nothing lost on restart
 }
 
-// Regression for old goli bug #4: one partial/torn index file bricked open.
+// Regression for previous-prototype bug #4: one partial/torn index file bricked open.
 // Here: a torn tail segment is repaired, a corrupt snapshot is ignored.
 func TestRegressionTornFilesDoNotBlockOpen(t *testing.T) {
 	st := store.NewMem()
@@ -501,7 +501,7 @@ func TestSnapshotEqualsFold(t *testing.T) {
 	}
 }
 
-// Regression for the race found by TLC (spec/GoliLog.tla): concurrent
+// Regression for the race found by TLC (spec/FreshLog.tla): concurrent
 // openers must never leave the log with epochs going backwards.
 func TestConcurrentOpenersNeverBrickLog(t *testing.T) {
 	for round := 0; round < 30; round++ {

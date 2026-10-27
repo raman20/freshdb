@@ -1,11 +1,11 @@
-package goli
+package freshdb
 
 import (
 	"fmt"
 	"math/rand"
 	"testing"
 
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb/store"
 	"pgregory.net/rapid"
 )
 

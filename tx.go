@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import (
 	"bytes"
@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/raman20/goli/format"
-	"github.com/raman20/goli/lens"
+	"github.com/raman20/freshdb/format"
+	"github.com/raman20/freshdb/lens"
 )
 
 // Space names: every model is a key space in the one log.
@@ -175,7 +175,7 @@ func (d DocTx) Put(id string, doc any, opts ...WriteOpt) error {
 		return err
 	}
 	if !json.Valid(b) || len(b) == 0 || b[0] != '{' {
-		return fmt.Errorf("goli: document must be a JSON object")
+		return fmt.Errorf("freshdb: document must be a JSON object")
 	}
 	return d.tx.write(format.Op{Kind: format.OpPut, Space: docSpace(d.coll), Key: id, Value: b}, opts)
 }
@@ -192,7 +192,7 @@ func (d DocTx) Get(id string) (json.RawMessage, error) { return d.tx.get(docSpac
 func (d DocTx) Find(field string, value any) ([]string, error) {
 	canon, ok := lens.CanonicalJSON(value)
 	if !ok {
-		return nil, fmt.Errorf("goli: unindexable value")
+		return nil, fmt.Errorf("freshdb: unindexable value")
 	}
 	v, err := d.tx.lensView()
 	if err != nil {
@@ -237,7 +237,7 @@ func (tx *Tx) Vector(coll string) VecTx { return VecTx{tx, coll} }
 
 func (v VecTx) Put(id string, vec []float32, opts ...WriteOpt) error {
 	if _, ok := lens.DecodeVec(lens.EncodeVec(vec)); !ok {
-		return fmt.Errorf("goli: vector must be non-empty and finite")
+		return fmt.Errorf("freshdb: vector must be non-empty and finite")
 	}
 	return v.tx.write(format.Op{Kind: format.OpPut, Space: vecSpace(v.coll), Key: id, Value: lens.EncodeVec(vec)}, opts)
 }

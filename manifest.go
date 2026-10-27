@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/raman20/goli/format"
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb/format"
+	"github.com/raman20/freshdb/store"
 )
 
 // Manifest is a full snapshot of database metadata. Manifests are numbered
@@ -82,7 +82,7 @@ func decodeManifest(b []byte) (*Manifest, error) {
 		return nil, fmt.Errorf("%w: manifest: %v", ErrCorrupt, err)
 	}
 	if m.Format != manifestFormat {
-		return nil, fmt.Errorf("goli: manifest format %d not supported by this binary (refusing to downgrade)", m.Format)
+		return nil, fmt.Errorf("freshdb: manifest format %d not supported by this binary (refusing to downgrade)", m.Format)
 	}
 	c := m.clone2()
 	return &c, nil

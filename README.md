@@ -1,6 +1,6 @@
-# goli — one log, many lenses
+# freshDB — one log, every data model
 
-goli is an embeddable (and servable) storage engine built on **one append-only
+freshDB is an embeddable (and servable) storage engine built on **one append-only
 log** kept as immutable objects on S3-compatible storage (or a local
 directory). The KV store, topics, consumer groups, documents, vectors and
 transactions are not separate engines. Each is a **lens**: a pure fold over
@@ -22,33 +22,33 @@ The whole thing is a single static Go binary (pure Go, no CGO), configured by on
 ## 5-minute quickstart
 
 ```sh
-go install github.com/raman20/goli/cmd/goli@latest   # or: go build -o goli ./cmd/goli
+go install github.com/raman20/freshdb/cmd/freshdb@latest   # or: go build -o freshdb ./cmd/freshdb
 
-# Embedded: the CLI opens the database directly (default ./goli-data)
-goli put greeting "hello"
-goli get greeting                       # hello
-goli put greeting "hello, world"
-goli get greeting --at 1                # hello   (time travel)
-goli log                                # the raw log: every lens is a fold of this
+# Embedded: the CLI opens the database directly (default ./freshdb-data)
+freshdb put greeting "hello"
+freshdb get greeting                       # hello
+freshdb put greeting "hello, world"
+freshdb get greeting --at 1                # hello   (time travel)
+freshdb log                                # the raw log: every lens is a fold of this
 
 # Topics + consumer groups
-goli pub events "signup alice"
-goli sub events --group mailer          # fetch + ack atomically
+freshdb pub events "signup alice"
+freshdb sub events --group mailer          # fetch + ack atomically
 
 # Branch, experiment, throw away or promote
-goli branch create exp
-goli put greeting "experimental" --branch exp
-goli get greeting                       # hello, world (main is untouched)
-goli branch promote exp main
+freshdb branch create exp
+freshdb put greeting "experimental" --branch exp
+freshdb get greeting                       # hello, world (main is untouched)
+freshdb branch promote exp main
 
 # Undo
-goli rewind main 2                      # main back to LSN 2 (old head kept in reflog)
+freshdb rewind main 2                      # main back to LSN 2 (old head kept in reflog)
 
 # Forget a person everywhere
-goli put user/alice/email a@x.com --subject alice
-goli shred alice                        # prints a signed certificate
-goli get user/alice/email               # error (404)
-goli verify                             # CRCs, hash chains, fencing, shred proofs
+freshdb put user/alice/email a@x.com --subject alice
+freshdb shred alice                        # prints a signed certificate
+freshdb get user/alice/email               # error (404)
+freshdb verify                             # CRCs, hash chains, fencing, shred proofs
 ```
 
 ### One URL
@@ -59,14 +59,14 @@ goli verify                             # CRCs, hash chains, fencing, shred proo
 | `s3://bucket/prefix?endpoint=host:9000&insecure=1&create=1` | any S3 with conditional writes (`If-None-Match: *`) — AWS S3, MinIO, … |
 | `mem://` | in-memory, for tests |
 
-Set it with `--db URL` or `GOLI_URL`. S3 credentials come from `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`.
+Set it with `--db URL` or `FRESHDB_URL`. S3 credentials come from `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`.
 
 ### Server mode
 
 ```sh
-GOLI_URL='s3://my-bucket/goli?endpoint=127.0.0.1:9000&insecure=1' goli serve --listen 127.0.0.1:7070
-export GOLI_ADDR=http://127.0.0.1:7070   # now every CLI command talks to the server
-goli put k v
+FRESHDB_URL='s3://my-bucket/freshdb?endpoint=127.0.0.1:9000&insecure=1' freshdb serve --listen 127.0.0.1:7070
+export FRESHDB_ADDR=http://127.0.0.1:7070   # now every CLI command talks to the server
+freshdb put k v
 curl -X PUT  localhost:7070/v1/kv/k -d v
 curl         localhost:7070/v1/kv/k?at=1
 curl -X POST localhost:7070/v1/tx -d '[{"op":"put","key":"a","value":"1"},{"op":"pub","topic":"t","value":"m"}]'
@@ -75,7 +75,7 @@ curl -X POST localhost:7070/v1/tx -d '[{"op":"put","key":"a","value":"1"},{"op":
 The CLI and server share one code path: in embedded mode the CLI calls the
 same HTTP handler in-process. **Opening a database takes the write lease and
 fences every other writer.** If a server is running, embedded CLI commands on
-the same URL will fence it, so use `--addr`/`GOLI_ADDR` instead.
+the same URL will fence it, so use `--addr`/`FRESHDB_ADDR` instead.
 
 HTTP API (JSON; `?branch=`, `?subject=` for writes, `?at=` for time travel):
 
@@ -94,15 +94,15 @@ Errors: 404 not found, 409 conflict, 410 subject shredded, 503 fenced by a newer
 ### Go API
 
 ```go
-db, _ := goli.Open(ctx, "s3://bucket/app?endpoint=...")
-db.Update(ctx, func(tx *goli.Tx) error {
+db, _ := freshdb.Open(ctx, "s3://bucket/app?endpoint=...")
+db.Update(ctx, func(tx *freshdb.Tx) error {
     g := tx.Topic("tasks").Group("worker")
     msgs, err := g.Fetch(1)
     if err != nil || len(msgs) == 0 { return err }
-    tx.Put("result/1", []byte("done"), goli.Subject("alice"))
+    tx.Put("result/1", []byte("done"), freshdb.Subject("alice"))
     return g.Ack(msgs[0])                     // result + ack: all-or-nothing
 })
-db.Branch("main").ViewAt(ctx, 42, func(tx *goli.Tx) error { ... })
+db.Branch("main").ViewAt(ctx, 42, func(tx *freshdb.Tx) error { ... })
 cert, _ := db.Shred(ctx, "alice")
 ```
 
@@ -118,27 +118,27 @@ AI agent through these steps:
 5. Alice asks to be forgotten: `shred alice`.
 
 ```sh
-go build -o /tmp/goli ./cmd/goli && GOLI=/tmp/goli ./examples/agent-demo.sh   # needs jq, curl
+go build -o /tmp/freshdb ./cmd/freshdb && FRESHDB=/tmp/freshdb ./examples/agent-demo.sh   # needs jq, curl
 ```
 
 The full output from a real run is in [`examples/agent-demo.out`](examples/agent-demo.out). The ending:
 
 ```
 == 5. Forget: alice invokes her right to erasure — crypto-shred subject 'alice'
-{"valid_signature":true,"shred_lsn":12,"dek_deleted":true,"chain_head":"0c0f74716ce63485...","signature":"aa5c5c10eefc3d82..."}
+{"valid_signature":true,"shred_lsn":12,"dek_deleted":true,"chain_head":"8c2b5cf3c64dcacb...","signature":"2ebac16f502fa837..."}
 -- KV:
-error (404): goli: not found
+error (404): freshdb: not found
 -- time travel:
-error (404): goli: not found
+error (404): freshdb: not found
 -- old branch:
-error (404): goli: not found
+error (404): freshdb: not found
 -- docs about alice:
 []
 -- vector recall [1,0,0]:
 {"id":"m2","score":0.11043153}
 -- bob is untouched: {"user":"bob","text":"bob prefers window seats"}
 -- new writes for alice are refused:
-error (410): goli: subject has been crypto-shredded
+error (410): freshdb: subject has been crypto-shredded
 
 == 6. Verify the whole history (CRCs, hash chains, fencing, shred proofs)
 {"ok":true,"logs":3,"segments":17,"entries":14,"encrypted_values":7,"unreadable_shredded_values":5,"problems":null}
@@ -185,10 +185,10 @@ Every run explored its complete bounded state space with no errors:
 
 | Spec | Distinct states | Checks |
 |---|---:|---|
-| GoliLog | 2,475,220 | durability, no holes, epoch monotone (no split brain), no double-apply, torn tail only unacked, immutability |
-| GoliTxn | 2,421,454 | exactly-once, atomic cursor, serializable, durable prefix |
-| GoliBranch | 1,845,287 | rewind exact, old head kept, append-only, time travel stable |
-| GoliShred | 6,481 | shredded never revealed, no writes after shred, chain verifiable, key eventually gone (liveness) |
+| FreshLog | 2,475,220 | durability, no holes, epoch monotone (no split brain), no double-apply, torn tail only unacked, immutability |
+| FreshTxn | 2,421,454 | exactly-once, atomic cursor, serializable, durable prefix |
+| FreshBranch | 1,845,287 | rewind exact, old head kept, append-only, time travel stable |
+| FreshShred | 6,481 | shredded never revealed, no writes after shred, chain verifiable, key eventually gone (liveness) |
 
 TLC found a **real bug**: a slow opener could append an older-epoch fence after
 a newer one, after which the next open refused the log as corrupt (bricked).
@@ -219,12 +219,12 @@ no lost acks, atomicity, prefix consistency, no double-apply, and Verify.
 **Fuzzing** covers the segment and payload decoders. Fuzzing found that
 non-minimal varints were accepted, so the decoder is now canonical.
 
-**Regression tests for the old goli's bugs:** stale reads after restart, deleted
+**Regression tests for the previous prototype's bugs:** stale reads after restart, deleted
 vectors returned by search, vectors lost on restart, and a torn file blocking open.
 
 ```sh
-go test -race ./...                                  # everything (S3 test skipped unless GOLI_TEST_S3 is set)
-GOLI_TEST_S3='s3://goli-test?endpoint=127.0.0.1:9000&insecure=1&create=1' go test ./...   # + MinIO/S3
+go test -race ./...                                  # everything (S3 test skipped unless FRESHDB_TEST_S3 is set)
+FRESHDB_TEST_S3='s3://freshdb-test?endpoint=127.0.0.1:9000&insecure=1&create=1' go test ./...   # + MinIO/S3
 spec/run_tlc.sh                                      # TLC (needs Java + tla2tools.jar)
 ```
 
@@ -268,8 +268,8 @@ These are known and honest:
   the same txn (Go API or `/v1/tx` with an `ack` op).
 - **Shred window:** if a DEK-create PUT is delayed and lands after the shred,
   the orphan DEK exists until the next open or `verify` sweeps it. The sim found
-  this case, and the GoliShred spec checks it with liveness. No plaintext is
-  ever readable through goli in that window.
+  this case, and the FreshShred spec checks it with liveness. No plaintext is
+  ever readable through freshDB in that window.
 - **KEK in dev mode** is stored in the bucket (`keys/_kek`). The Go API takes
   `WithKEK` (e.g. from a KMS), but the CLI has no flag for it yet. Bucket
   backups that include the KEK can recover undestroyed DEKs, but never shredded ones.
@@ -292,7 +292,7 @@ lens/         pure folds: kv (MVCC), topic, doc+index, vector; property tests
 store/        Store interface: fs, s3, mem, faulty (fault injection)
 sim/          deterministic simulator
 server/       HTTP API
-cmd/goli/     the single binary
+cmd/freshdb/     the single binary
 spec/         TLA+ specs, TLC runner, RESULTS.md
 examples/     agent demo
 ```

@@ -1,4 +1,4 @@
-// Package server exposes a goli DB over a small JSON/HTTP API.
+// Package server exposes a freshdb DB over a small JSON/HTTP API.
 //
 // Every endpoint takes ?branch= (default main). Writes accept ?subject= to
 // encrypt the value under that subject's key (crypto-shreddable).
@@ -27,13 +27,13 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/raman20/goli"
-	"github.com/raman20/goli/format"
+	"github.com/raman20/freshdb"
+	"github.com/raman20/freshdb/format"
 )
 
-type Server struct{ DB *goli.DB }
+type Server struct{ DB *freshdb.DB }
 
-func Handler(db *goli.DB) http.Handler {
+func Handler(db *freshdb.DB) http.Handler {
 	s := &Server{db}
 	m := http.NewServeMux()
 	m.HandleFunc("GET /v1/kv", s.scan)
@@ -71,15 +71,15 @@ func reply(w http.ResponseWriter, v any) {
 func fail(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 	switch {
-	case errors.Is(err, goli.ErrNotFound), errors.Is(err, goli.ErrNoBranch):
+	case errors.Is(err, freshdb.ErrNotFound), errors.Is(err, freshdb.ErrNoBranch):
 		code = http.StatusNotFound
-	case errors.Is(err, goli.ErrConflict), errors.Is(err, goli.ErrBranchExists), errors.Is(err, goli.ErrNotFastForward):
+	case errors.Is(err, freshdb.ErrConflict), errors.Is(err, freshdb.ErrBranchExists), errors.Is(err, freshdb.ErrNotFastForward):
 		code = http.StatusConflict
-	case errors.Is(err, goli.ErrShredded):
+	case errors.Is(err, freshdb.ErrShredded):
 		code = http.StatusGone
-	case errors.Is(err, goli.ErrBadLSN), errors.Is(err, errBad):
+	case errors.Is(err, freshdb.ErrBadLSN), errors.Is(err, errBad):
 		code = http.StatusBadRequest
-	case errors.Is(err, goli.ErrFenced):
+	case errors.Is(err, freshdb.ErrFenced):
 		code = http.StatusServiceUnavailable
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -89,12 +89,12 @@ func fail(w http.ResponseWriter, err error) {
 
 var errBad = errors.New("bad request")
 
-func br(r *http.Request) *goli.Branch {
+func br(r *http.Request) *freshdb.Branch {
 	b := r.URL.Query().Get("branch")
 	if b == "" {
 		b = "main"
 	}
-	return r.Context().Value(dbKey{}).(*goli.DB).Branch(b)
+	return r.Context().Value(dbKey{}).(*freshdb.DB).Branch(b)
 }
 
 type dbKey struct{}
@@ -115,15 +115,15 @@ func u64(r *http.Request, name string) (uint64, bool, error) {
 	return n, true, nil
 }
 
-func opts(r *http.Request) []goli.WriteOpt {
+func opts(r *http.Request) []freshdb.WriteOpt {
 	if s := r.URL.Query().Get("subject"); s != "" {
-		return []goli.WriteOpt{goli.Subject(s)}
+		return []freshdb.WriteOpt{freshdb.Subject(s)}
 	}
 	return nil
 }
 
 // view runs fn at ?at= (time travel) or at the head.
-func view(r *http.Request, fn func(*goli.Tx) error) error {
+func view(r *http.Request, fn func(*freshdb.Tx) error) error {
 	at, ok, err := u64(r, "at")
 	if err != nil {
 		return err
@@ -135,7 +135,7 @@ func view(r *http.Request, fn func(*goli.Tx) error) error {
 	return b.View(r.Context(), fn)
 }
 
-func update(r *http.Request, fn func(*goli.Tx) error) (uint64, error) {
+func update(r *http.Request, fn func(*freshdb.Tx) error) (uint64, error) {
 	return br(r).UpdateLSN(r.Context(), fn)
 }
 
@@ -146,7 +146,7 @@ func body(r *http.Request) ([]byte, error) { return io.ReadAll(io.LimitReader(r.
 func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 	r = s.with(r)
 	var v []byte
-	err := view(r, func(tx *goli.Tx) (err error) { v, err = tx.Get(r.PathValue("key")); return })
+	err := view(r, func(tx *freshdb.Tx) (err error) { v, err = tx.Get(r.PathValue("key")); return })
 	if err != nil {
 		fail(w, err)
 		return
@@ -162,7 +162,7 @@ func (s *Server) put(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	lsn, err := update(r, func(tx *goli.Tx) error { return tx.Put(r.PathValue("key"), b, opts(r)...) })
+	lsn, err := update(r, func(tx *freshdb.Tx) error { return tx.Put(r.PathValue("key"), b, opts(r)...) })
 	if err != nil {
 		fail(w, err)
 		return
@@ -172,7 +172,7 @@ func (s *Server) put(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) del(w http.ResponseWriter, r *http.Request) {
 	r = s.with(r)
-	lsn, err := update(r, func(tx *goli.Tx) error { return tx.Delete(r.PathValue("key")) })
+	lsn, err := update(r, func(tx *freshdb.Tx) error { return tx.Delete(r.PathValue("key")) })
 	if err != nil {
 		fail(w, err)
 		return
@@ -188,7 +188,7 @@ type kvOut struct {
 func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 	r = s.with(r)
 	var out []kvOut
-	err := view(r, func(tx *goli.Tx) error {
+	err := view(r, func(tx *freshdb.Tx) error {
 		kvs, err := tx.Scan(r.URL.Query().Get("prefix"))
 		for _, p := range kvs {
 			out = append(out, kvOut{p.Key, string(p.Value)})
@@ -229,11 +229,11 @@ func (s *Server) tx(w http.ResponseWriter, r *http.Request) {
 		fail(w, fmt.Errorf("%w: %v", errBad, err))
 		return
 	}
-	lsn, err := update(r, func(tx *goli.Tx) error {
+	lsn, err := update(r, func(tx *freshdb.Tx) error {
 		for _, o := range ops {
-			var wo []goli.WriteOpt
+			var wo []freshdb.WriteOpt
 			if o.Subject != "" {
-				wo = append(wo, goli.Subject(o.Subject))
+				wo = append(wo, freshdb.Subject(o.Subject))
 			}
 			var err error
 			switch o.Op {
@@ -277,7 +277,7 @@ type msgOut struct {
 	Redacted bool   `json:"redacted,omitempty"`
 }
 
-func msgs(ms []goli.Message) []msgOut {
+func msgs(ms []freshdb.Message) []msgOut {
 	out := []msgOut{}
 	for _, m := range ms {
 		out = append(out, msgOut{m.Offset, m.LSN, string(m.Value), m.Redacted})
@@ -292,7 +292,7 @@ func (s *Server) pub(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	lsn, err := update(r, func(tx *goli.Tx) error { return tx.Topic(r.PathValue("t")).Publish(b, opts(r)...) })
+	lsn, err := update(r, func(tx *freshdb.Tx) error { return tx.Topic(r.PathValue("t")).Publish(b, opts(r)...) })
 	if err != nil {
 		fail(w, err)
 		return
@@ -308,8 +308,8 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	max, _, _ := u64(r, "max")
-	var ms []goli.Message
-	err = view(r, func(tx *goli.Tx) (err error) { ms, err = tx.Topic(r.PathValue("t")).Read(from, int(max)); return })
+	var ms []freshdb.Message
+	err = view(r, func(tx *freshdb.Tx) (err error) { ms, err = tx.Topic(r.PathValue("t")).Read(from, int(max)); return })
 	if err != nil {
 		fail(w, err)
 		return
@@ -319,15 +319,15 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 
 // next fetches up to max messages for a consumer group and advances its
 // cursor in the same transaction (at-most-once delivery to the HTTP client;
-// embed goli and use Fetch/Ack inside your own Update for exactly-once).
+// embed freshdb and use Fetch/Ack inside your own Update for exactly-once).
 func (s *Server) next(w http.ResponseWriter, r *http.Request) {
 	r = s.with(r)
 	max, ok, _ := u64(r, "max")
 	if !ok {
 		max = 10
 	}
-	var ms []goli.Message
-	_, err := update(r, func(tx *goli.Tx) (err error) {
+	var ms []freshdb.Message
+	_, err := update(r, func(tx *freshdb.Tx) (err error) {
 		g := tx.Topic(r.PathValue("t")).Group(r.PathValue("g"))
 		if ms, err = g.Fetch(int(max)); err != nil || len(ms) == 0 {
 			return err
@@ -350,7 +350,7 @@ func (s *Server) docPut(w http.ResponseWriter, r *http.Request) {
 		fail(w, fmt.Errorf("%w: body must be JSON", errBad))
 		return
 	}
-	lsn, err := update(r, func(tx *goli.Tx) error {
+	lsn, err := update(r, func(tx *freshdb.Tx) error {
 		return tx.Doc(r.PathValue("c")).Put(r.PathValue("id"), json.RawMessage(b), opts(r)...)
 	})
 	if err != nil {
@@ -363,7 +363,7 @@ func (s *Server) docPut(w http.ResponseWriter, r *http.Request) {
 func (s *Server) docGet(w http.ResponseWriter, r *http.Request) {
 	r = s.with(r)
 	var d json.RawMessage
-	err := view(r, func(tx *goli.Tx) (err error) { d, err = tx.Doc(r.PathValue("c")).Get(r.PathValue("id")); return })
+	err := view(r, func(tx *freshdb.Tx) (err error) { d, err = tx.Doc(r.PathValue("c")).Get(r.PathValue("id")); return })
 	if err != nil {
 		fail(w, err)
 		return
@@ -380,7 +380,7 @@ func (s *Server) docFind(w http.ResponseWriter, r *http.Request) {
 		val = raw // bare strings are allowed
 	}
 	var ids []string
-	err := view(r, func(tx *goli.Tx) (err error) {
+	err := view(r, func(tx *freshdb.Tx) (err error) {
 		ids, err = tx.Doc(r.PathValue("c")).Find(r.URL.Query().Get("field"), val)
 		return
 	})
@@ -401,7 +401,7 @@ func (s *Server) vecPut(w http.ResponseWriter, r *http.Request) {
 		fail(w, fmt.Errorf("%w: body must be a JSON array of numbers", errBad))
 		return
 	}
-	lsn, err := update(r, func(tx *goli.Tx) error { return tx.Vector(r.PathValue("c")).Put(r.PathValue("id"), v, opts(r)...) })
+	lsn, err := update(r, func(tx *freshdb.Tx) error { return tx.Vector(r.PathValue("c")).Put(r.PathValue("id"), v, opts(r)...) })
 	if err != nil {
 		fail(w, err)
 		return
@@ -411,7 +411,7 @@ func (s *Server) vecPut(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) vecDel(w http.ResponseWriter, r *http.Request) {
 	r = s.with(r)
-	lsn, err := update(r, func(tx *goli.Tx) error { return tx.Vector(r.PathValue("c")).Delete(r.PathValue("id")) })
+	lsn, err := update(r, func(tx *freshdb.Tx) error { return tx.Vector(r.PathValue("c")).Delete(r.PathValue("id")) })
 	if err != nil {
 		fail(w, err)
 		return
@@ -437,7 +437,7 @@ func (s *Server) vecSearch(w http.ResponseWriter, r *http.Request) {
 		Score float32 `json:"score"`
 	}
 	out := []hit{}
-	err := view(r, func(tx *goli.Tx) error {
+	err := view(r, func(tx *freshdb.Tx) error {
 		hs, err := tx.Vector(r.PathValue("c")).Search(q.Vector, q.K)
 		for _, h := range hs {
 			out = append(out, hit{h.ID, h.Score})
@@ -575,7 +575,7 @@ func (s *Server) shred(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	reply(w, map[string]any{"certificate": c, "valid_signature": goli.VerifyCertificate(c)})
+	reply(w, map[string]any{"certificate": c, "valid_signature": freshdb.VerifyCertificate(c)})
 }
 
 func (s *Server) verify(w http.ResponseWriter, r *http.Request) {

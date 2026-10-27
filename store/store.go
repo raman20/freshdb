@@ -1,5 +1,5 @@
-// Package store is goli's only coordination primitive: a blob store with
-// create-only writes. Every object goli writes is immutable and created with
+// Package store is freshdb's only coordination primitive: a blob store with
+// create-only writes. Every object freshdb writes is immutable and created with
 // PutIfAbsent (S3 "If-None-Match: *"), which is what gives single-writer
 // fencing without Raft, ZooKeeper or leases.
 package store

@@ -1,6 +1,6 @@
----------------------------- MODULE GoliLog ----------------------------
+---------------------------- MODULE FreshLog ----------------------------
 (***************************************************************************)
-(* goli log protocol on an object store with create-only PUT.             *)
+(* freshDB log protocol on an object store with create-only PUT.             *)
 (*                                                                         *)
 (* Models (matching log.go / db.go / writer.go / manifest.go):             *)
 (*  - manifests: dense ids, create-only; Open = read latest id m, then     *)

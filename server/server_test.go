@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/raman20/goli"
+	"github.com/raman20/freshdb"
 )
 
 func TestHTTPAPI(t *testing.T) {
-	db, err := goli.Open(context.Background(), "mem://", goli.WithLogf(func(string, ...any) {}))
+	db, err := freshdb.Open(context.Background(), "mem://", freshdb.WithLogf(func(string, ...any) {}))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-// Package lens contains goli's views over the log.
+// Package lens contains freshdb's views over the log.
 //
 // Central invariant (enforced by tests, see purity_test.go and the property
 // tests): every lens is a pure, deterministic left fold over the redacted log:
@@ -18,7 +18,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/raman20/goli/format"
+	"github.com/raman20/freshdb/format"
 )
 
 // Entry is one committed transaction as seen by lenses.

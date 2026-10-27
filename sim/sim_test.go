@@ -6,12 +6,12 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb/store"
 )
 
 var (
 	seedFlag  = flag.Int64("seed", -1, "run a single seed (reproduce a failure)")
-	seedsFlag = flag.Int("seeds", 0, "number of seeds (default 500, or GOLI_SIM_SEEDS)")
+	seedsFlag = flag.Int("seeds", 0, "number of seeds (default 500, or FRESHDB_SIM_SEEDS)")
 )
 
 func probs(seed int64) store.FaultProbs {
@@ -22,7 +22,7 @@ func probs(seed int64) store.FaultProbs {
 
 func TestSimulation(t *testing.T) {
 	n := 500
-	if s := os.Getenv("GOLI_SIM_SEEDS"); s != "" {
+	if s := os.Getenv("FRESHDB_SIM_SEEDS"); s != "" {
 		n, _ = strconv.Atoi(s)
 	}
 	if *seedsFlag > 0 {

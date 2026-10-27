@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb/store"
 )
 
 func benchStores(b *testing.B) map[string]func() store.Store {

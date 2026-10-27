@@ -7,7 +7,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/raman20/goli/format"
+	"github.com/raman20/freshdb/format"
 	"pgregory.net/rapid"
 )
 

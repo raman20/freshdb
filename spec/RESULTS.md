@@ -6,31 +6,31 @@ state space (0 states left on queue). Bounds are in each `.cfg`.
 
 | Spec | What it models | States generated | Distinct | Depth | Result |
 |---|---|---:|---:|---:|---|
-| GoliLog | object-store log: create-only manifests + epochs, recovery scan, fence segment, group commit, lost/delayed/duplicated PUTs, give-up (unknown outcome), crash, power-loss torn tail + repair, 2 racing writers | 10,415,103 | 2,475,220 | 32 | no error |
-| GoliTxn | OCC serializable txns; consume-message + write-KV + ack-cursor in one txn; 3 concurrent consumers + blind writer; durable-prefix crash | 21,685,744 | 2,421,454 | 20 | no error |
-| GoliBranch | append-only logs with parents; create branch, rewind (fork + ref swap + reflog), time travel | 3,430,206 | 1,845,287 | 16 | no error |
-| GoliShred | DEK per subject, marker → delete → audit entry + certificate; crash between steps; DEK create landing late; sweep; hash chain | 25,570 | 6,481 | 16 | no error (incl. liveness) |
+| FreshLog | object-store log: create-only manifests + epochs, recovery scan, fence segment, group commit, lost/delayed/duplicated PUTs, give-up (unknown outcome), crash, power-loss torn tail + repair, 2 racing writers | 10,415,103 | 2,475,220 | 32 | no error |
+| FreshTxn | OCC serializable txns; consume-message + write-KV + ack-cursor in one txn; 3 concurrent consumers + blind writer; durable-prefix crash | 21,685,744 | 2,421,454 | 20 | no error |
+| FreshBranch | append-only logs with parents; create branch, rewind (fork + ref swap + reflog), time travel | 3,430,206 | 1,845,287 | 16 | no error |
+| FreshShred | DEK per subject, marker → delete → audit entry + certificate; crash between steps; DEK create landing late; sweep; hash chain | 25,570 | 6,481 | 16 | no error (incl. liveness) |
 
 ## Properties checked
 
-- **GoliLog** (invariants): `Durability` (acked ⊆ recovered log), `NoHoles`,
+- **FreshLog** (invariants): `Durability` (acked ⊆ recovered log), `NoHoles`,
   `EpochMonotone` (no split brain: an older writer can't append after a newer
   fence), `NoDoubleApply`, `NoCorruption` (recovery never meets damage below the
   tail), `TornOnlyUnacked`, `SingleLeader`, `ManifestMonotone`.
   Temporal: `AckedStable`, `Immutable` (segments never change except torn-tail repair).
-- **GoliTxn**: `ExactlyOnce` (each message processed ≤ once), `AtomicCursor`
+- **FreshTxn**: `ExactlyOnce` (each message processed ≤ once), `AtomicCursor`
   (processed set = {0..cursor-1}, i.e. consume+KV+ack are atomic), `Serializable`
   (every committed read equals the serial-order state before it), `DurablePrefix`.
-- **GoliBranch**: `RewindExact`, `RewindKeepsOld` (pre-rewind head still readable),
+- **FreshBranch**: `RewindExact`, `RewindKeepsOld` (pre-rewind head still readable),
   `DenseLSN`; temporal `AppendOnly`, `TimeTravelStable` (no step ever changes the
   contents of any (log, lsn) read).
-- **GoliShred**: `ShreddedNeverRevealed`, `NoWritesAfterShred`, `ChainVerifiable`,
+- **FreshShred**: `ShreddedNeverRevealed`, `NoWritesAfterShred`, `ChainVerifiable`,
   `CertsVerify`; temporal `AppendOnly`, `KeyEventuallyGone` (under weak fairness
   of sweep/land: `<>[](shredded ⇒ no DEK)`).
 
 ## Bugs found by the models (and fixed)
 
-1. **Real design + code bug — GoliLog, `EpochMonotone` violated.** A slow opener
+1. **Real design + code bug — FreshLog, `EpochMonotone` violated.** A slow opener
    (epoch 1) that created its manifest before a newer opener (epoch 2), but
    scanned the log *after* epoch 2 wrote its fence, appended its own fence with
    the older epoch. The next recovery would then refuse the log as corrupt
@@ -40,7 +40,7 @@ state space (0 states left on queue). Bounds are in each `.cfg`.
    `Superseded`). Regression test `TestConcurrentOpenersNeverBrickLog` **fails
    without the fix and passes with it**. The deterministic simulator had not
    caught this because it never interleaves two concurrent `Open`s.
-2. **Spec bug — GoliBranch, `AppendOnly` violated** at `Rewind("main",0)`: the
+2. **Spec bug — FreshBranch, `AppendOnly` violated** at `Rewind("main",0)`: the
    property quantified over unallocated log slots, so initialising a fresh log
    looked like mutating one. Fixed by quantifying over `1..nlogs`. The code
    was not affected (no existing log's parent ever changes).
@@ -54,10 +54,10 @@ state space (0 states left on queue). Bounds are in each `.cfg`.
 
 | Mutation | Result |
 |---|---|
-| GoliLog without the `Superseded` check | `EpochMonotone` violated (bug #1 above) |
-| GoliTxn with OCC validation removed | `ExactlyOnce` violated (911 states) |
-| GoliShred with `Sweep` disabled | `KeyEventuallyGone` violated |
-| GoliShred with reads ignoring the shred marker | `ShreddedNeverRevealed` violated |
+| FreshLog without the `Superseded` check | `EpochMonotone` violated (bug #1 above) |
+| FreshTxn with OCC validation removed | `ExactlyOnce` violated (911 states) |
+| FreshShred with `Sweep` disabled | `KeyEventuallyGone` violated |
+| FreshShred with reads ignoring the shred marker | `ShreddedNeverRevealed` violated |
 
 ## Limits (honest)
 

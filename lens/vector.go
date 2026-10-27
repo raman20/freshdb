@@ -5,7 +5,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/raman20/goli/format"
+	"github.com/raman20/freshdb/format"
 )
 
 // Vector is a brute-force cosine-similarity lens over "vec:<coll>" spaces.

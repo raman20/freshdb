@@ -1,4 +1,4 @@
-module github.com/raman20/goli
+module github.com/raman20/freshdb
 
 go 1.27.3
 

@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import (
 	"errors"
@@ -10,11 +10,11 @@ import (
 )
 
 // TestS3EndToEnd runs the engine against a real S3-compatible endpoint
-// (e.g. local MinIO): GOLI_TEST_S3=s3://bucket?endpoint=127.0.0.1:9000&insecure=1&create=1
+// (e.g. local MinIO): FRESHDB_TEST_S3=s3://bucket?endpoint=127.0.0.1:9000&insecure=1&create=1
 func TestS3EndToEnd(t *testing.T) {
-	raw := os.Getenv("GOLI_TEST_S3")
+	raw := os.Getenv("FRESHDB_TEST_S3")
 	if raw == "" {
-		t.Skip("GOLI_TEST_S3 not set")
+		t.Skip("FRESHDB_TEST_S3 not set")
 	}
 	u, _ := url.Parse(raw)
 	u.Path += fmt.Sprintf("/e2e-%d", time.Now().UnixNano())

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/raman20/goli/format"
+	"github.com/raman20/freshdb/format"
 )
 
 // DocIndex is a secondary-index lens on one JSON field of one document

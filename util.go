@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import "sort"
 

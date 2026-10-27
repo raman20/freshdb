@@ -1,4 +1,4 @@
---------------------------- MODULE GoliBranch ---------------------------
+--------------------------- MODULE FreshBranch ---------------------------
 (***************************************************************************)
 (* Branches, time travel and rewind (branch.go).                          *)
 (* A log is append-only and may have a parent (log, lsn). A branch is a   *)

@@ -79,9 +79,9 @@ func TestFSConformance(t *testing.T) {
 }
 
 func TestS3Conformance(t *testing.T) {
-	u := os.Getenv("GOLI_TEST_S3")
+	u := os.Getenv("FRESHDB_TEST_S3")
 	if u == "" {
-		t.Skip("set GOLI_TEST_S3=s3://bucket/prefix?endpoint=127.0.0.1:9000&insecure=1 to run against MinIO/S3")
+		t.Skip("set FRESHDB_TEST_S3=s3://bucket/prefix?endpoint=127.0.0.1:9000&insecure=1 to run against MinIO/S3")
 	}
 	pu, _ := url.Parse(u)
 	pu.Path += fmt.Sprintf("/conf-%d", time.Now().UnixNano())

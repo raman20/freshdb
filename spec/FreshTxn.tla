@@ -1,4 +1,4 @@
----------------------------- MODULE GoliTxn ----------------------------
+---------------------------- MODULE FreshTxn ----------------------------
 (***************************************************************************)
 (* Serializable OCC transactions across lenses (writer.go conflict()),    *)
 (* the "consume a message + write KV + ack cursor in one txn" pattern.    *)

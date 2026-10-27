@@ -1,14 +1,14 @@
-// Command goli is the single-binary CLI and server for goli.
+// Command freshdb is the single-binary CLI and server for freshdb.
 //
-// One config value: the database URL (--db or GOLI_URL), e.g.
+// One config value: the database URL (--db or FRESHDB_URL), e.g.
 //
 //	./data                       local directory
 //	s3://bucket/prefix?endpoint=host:9000&insecure=1   any S3-compatible store
 //	mem://                       in-memory (tests)
 //
-// Without --addr/GOLI_ADDR the CLI opens the database itself (embedded).
+// Without --addr/FRESHDB_ADDR the CLI opens the database itself (embedded).
 // NOTE: opening takes the write lease and fences any other writer, including
-// a running `goli serve` on the same URL — talk to a server with --addr.
+// a running `freshdb serve` on the same URL — talk to a server with --addr.
 package main
 
 import (
@@ -27,31 +27,31 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/raman20/goli"
-	"github.com/raman20/goli/server"
+	"github.com/raman20/freshdb"
+	"github.com/raman20/freshdb/server"
 )
 
-const usage = `goli — one log, many lenses (KV, topics, docs, vectors), with branches,
-time travel and crypto-shredding. Config: --db URL (or GOLI_URL), default ./goli-data.
+const usage = `freshdb — one log, many lenses (KV, topics, docs, vectors), with branches,
+time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./freshdb-data.
 
-  goli serve [--listen :7070]              run the HTTP API
-  goli put KEY VALUE [--subject S]         write a key
-  goli get KEY [--at LSN]                  read a key (time travel with --at)
-  goli del KEY
-  goli scan [PREFIX] [--at LSN]
-  goli pub TOPIC MESSAGE [--subject S]     publish
-  goli sub TOPIC [--group G] [--from N] [--max N] [--follow]
-  goli doc put COLL ID JSON | doc get COLL ID | doc find COLL FIELD VALUE | doc index COLL FIELD
-  goli vec put COLL ID 0.1,0.2,... | vec del COLL ID | vec search COLL 0.1,0.2,... [-k N]
-  goli tx '[{"op":"put","key":"k","value":"v"},{"op":"pub","topic":"t","value":"m"}]'
-  goli branch [list] | branch create NAME [--from B] [--at LSN] | branch promote SRC DST
-  goli rewind BRANCH LSN                   move a branch back (old head kept in reflog)
-  goli log [--from LSN]                    show the raw log
-  goli shred SUBJECT                       crypto-shred a subject everywhere; prints certificate
-  goli verify                              check CRCs, hash chains, fencing, shred state
+  freshdb serve [--listen :7070]              run the HTTP API
+  freshdb put KEY VALUE [--subject S]         write a key
+  freshdb get KEY [--at LSN]                  read a key (time travel with --at)
+  freshdb del KEY
+  freshdb scan [PREFIX] [--at LSN]
+  freshdb pub TOPIC MESSAGE [--subject S]     publish
+  freshdb sub TOPIC [--group G] [--from N] [--max N] [--follow]
+  freshdb doc put COLL ID JSON | doc get COLL ID | doc find COLL FIELD VALUE | doc index COLL FIELD
+  freshdb vec put COLL ID 0.1,0.2,... | vec del COLL ID | vec search COLL 0.1,0.2,... [-k N]
+  freshdb tx '[{"op":"put","key":"k","value":"v"},{"op":"pub","topic":"t","value":"m"}]'
+  freshdb branch [list] | branch create NAME [--from B] [--at LSN] | branch promote SRC DST
+  freshdb rewind BRANCH LSN                   move a branch back (old head kept in reflog)
+  freshdb log [--from LSN]                    show the raw log
+  freshdb shred SUBJECT                       crypto-shred a subject everywhere; prints certificate
+  freshdb verify                              check CRCs, hash chains, fencing, shred state
 
 Every command takes --branch B (default main). Use --addr http://host:7070
-(or GOLI_ADDR) to talk to a running server instead of opening the DB.
+(or FRESHDB_ADDR) to talk to a running server instead of opening the DB.
 `
 
 type cli struct {
@@ -104,11 +104,11 @@ func main() {
 	}
 	dbURL := flags["db"]
 	if dbURL == "" {
-		dbURL = env("GOLI_URL", "./goli-data")
+		dbURL = env("FRESHDB_URL", "./freshdb-data")
 	}
 	addr := flags["addr"]
 	if addr == "" {
-		addr = os.Getenv("GOLI_ADDR")
+		addr = os.Getenv("FRESHDB_ADDR")
 	}
 	if args[0] == "serve" {
 		serve(dbURL, flags)
@@ -127,9 +127,9 @@ func main() {
 		}
 		c.close = func() {}
 	} else {
-		db, err := goli.Open(context.Background(), dbURL, goli.WithLogf(func(string, ...any) {}))
+		db, err := freshdb.Open(context.Background(), dbURL, freshdb.WithLogf(func(string, ...any) {}))
 		if err != nil {
-			log.Fatalf("goli: open %s: %v", dbURL, err)
+			log.Fatalf("freshdb: open %s: %v", dbURL, err)
 		}
 		h := server.Handler(db)
 		c.do = func(r *http.Request) (*http.Response, error) {
@@ -147,11 +147,11 @@ func main() {
 func serve(dbURL string, flags map[string]string) {
 	listen := flags["listen"]
 	if listen == "" {
-		listen = env("GOLI_LISTEN", "127.0.0.1:7070")
+		listen = env("FRESHDB_LISTEN", "127.0.0.1:7070")
 	}
-	db, err := goli.Open(context.Background(), dbURL)
+	db, err := freshdb.Open(context.Background(), dbURL)
 	if err != nil {
-		log.Fatalf("goli: open %s: %v", dbURL, err)
+		log.Fatalf("freshdb: open %s: %v", dbURL, err)
 	}
 	srv := &http.Server{Addr: listen, Handler: server.Handler(db), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
@@ -162,7 +162,7 @@ func serve(dbURL string, flags map[string]string) {
 		defer cancel()
 		srv.Shutdown(ctx)
 	}()
-	log.Printf("goli: serving %s on http://%s (epoch %d)", dbURL, listen, db.Epoch())
+	log.Printf("freshdb: serving %s on http://%s (epoch %d)", dbURL, listen, db.Epoch())
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func serve(dbURL string, flags map[string]string) {
 
 func (c *cli) arg(i int, name string) string {
 	if i >= len(c.args) {
-		log.Fatalf("goli %s: missing %s\n\n%s", c.args[0], name, usage)
+		log.Fatalf("freshdb %s: missing %s\n\n%s", c.args[0], name, usage)
 	}
 	return c.args[i]
 }
@@ -205,7 +205,7 @@ func (c *cli) call(method, path string, body []byte, raw bool) (int, []byte) {
 	req, _ := http.NewRequest(method, path, rd)
 	resp, err := c.do(req)
 	if err != nil {
-		log.Fatalf("goli: %v", err)
+		log.Fatalf("freshdb: %v", err)
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
@@ -312,7 +312,7 @@ func (c *cli) run() int {
 		case "promote":
 			st, _ = c.call("POST", "/v1/branches/"+esc(c.arg(2, "SRC"))+"/promote", []byte(fmt.Sprintf(`{"to":%q}`, c.arg(3, "DST"))), false)
 		default:
-			log.Fatalf("goli branch: unknown subcommand %q", sub)
+			log.Fatalf("freshdb branch: unknown subcommand %q", sub)
 		}
 	case "rewind":
 		st, _ = c.call("POST", "/v1/branches/"+esc(c.arg(1, "BRANCH"))+"/rewind", []byte(fmt.Sprintf(`{"lsn":%s}`, c.arg(2, "LSN"))), false)
@@ -328,7 +328,7 @@ func (c *cli) run() int {
 			return 2
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "goli: unknown command %q\n\n%s", c.args[0], usage)
+		fmt.Fprintf(os.Stderr, "freshdb: unknown command %q\n\n%s", c.args[0], usage)
 		return 2
 	}
 	if st >= 300 {

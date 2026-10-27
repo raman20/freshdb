@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/raman20/goli/format"
+	"github.com/raman20/freshdb/format"
 )
 
 // Version is one MVCC version of a key.

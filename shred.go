@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/raman20/goli/format"
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb/format"
+	"github.com/raman20/freshdb/store"
 )
 
 // Certificate is a signed record that a subject was crypto-shredded.
@@ -155,7 +155,7 @@ func (db *DB) Verify(ctx context.Context) (*VerifyReport, error) {
 		r.Manifests++
 	}
 	if last == nil {
-		return nil, errors.New("goli: no manifest")
+		return nil, errors.New("freshdb: no manifest")
 	}
 	fresh := &DB{st: db.st, opts: db.opts, epoch: db.epoch, keys: db.keys, env: db.env, man: last, logs: map[string]*logState{}}
 	for _, id := range sortedMapKeys(last.Logs) {

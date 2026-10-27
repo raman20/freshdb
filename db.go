@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/raman20/goli/lens"
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb/lens"
+	"github.com/raman20/freshdb/store"
 )
 
 // Options configure a DB. Every field has a working default.
@@ -147,7 +147,7 @@ func (db *DB) acquire(ctx context.Context) error {
 		db.man, db.epoch = next, next.Epoch
 		return nil
 	}
-	return errors.New("goli: could not acquire write lease (manifest contention)")
+	return errors.New("freshdb: could not acquire write lease (manifest contention)")
 }
 
 // commitManifest applies change to a copy of the manifest and creates the

@@ -1,10 +1,10 @@
-package goli
+package freshdb
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/raman20/goli/lens"
+	"github.com/raman20/freshdb/lens"
 )
 
 func (db *DB) headOf(id string) uint64 {

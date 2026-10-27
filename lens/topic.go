@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/raman20/goli/format"
+	"github.com/raman20/freshdb/format"
 )
 
 // Msg is one message in a topic. Offset = index in the topic (dense, 0-based).

@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import (
 	"bufio"
@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb/store"
 )
 
 const crashG = 4
@@ -61,7 +61,7 @@ func crashChild(dir string) {
 }
 
 func TestMain(m *testing.M) {
-	if d := os.Getenv("GOLI_CRASH_CHILD"); d != "" {
+	if d := os.Getenv("FRESHDB_CRASH_CHILD"); d != "" {
 		crashChild(d)
 		return
 	}
@@ -74,14 +74,14 @@ func TestCrashKill9PrefixConsistent(t *testing.T) {
 	}
 	dir := t.TempDir()
 	iters := 25
-	if s := os.Getenv("GOLI_CRASH_ITERS"); s != "" {
+	if s := os.Getenv("FRESHDB_CRASH_ITERS"); s != "" {
 		iters, _ = strconv.Atoi(s)
 	}
 	acked := make([]int, crashG)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for it := 0; it < iters; it++ {
 		cmd := exec.Command(os.Args[0], "-test.run=^$")
-		cmd.Env = append(os.Environ(), "GOLI_CRASH_CHILD="+dir)
+		cmd.Env = append(os.Environ(), "FRESHDB_CRASH_CHILD="+dir)
 		out, _ := cmd.StdoutPipe()
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)

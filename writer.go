@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/raman20/goli/format"
-	"github.com/raman20/goli/lens"
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb/format"
+	"github.com/raman20/freshdb/lens"
+	"github.com/raman20/freshdb/store"
 )
 
 type rkey struct{ space, key string }
@@ -255,7 +255,7 @@ func (w *writer) process(batch []*commitReq) {
 		} else {
 			w.failed = fmt.Errorf("%w (segment %d): %v", ErrUnknownOutcome, seq, err)
 		}
-		w.db.logf("goli: writer for %s halted: %v", w.l.meta.ID, w.failed)
+		w.db.logf("freshdb: writer for %s halted: %v", w.l.meta.ID, w.failed)
 		fail(accepted, w.failed)
 		return
 	}
@@ -282,7 +282,7 @@ func (w *writer) process(batch []*commitReq) {
 	if w.db.opts.SnapshotEvery > 0 && w.sinceSnap >= w.db.opts.SnapshotEvery {
 		w.sinceSnap = 0
 		if err := w.db.writeSnapshot(ctx, w.l.meta.ID, w.v); err != nil {
-			w.db.logf("goli: snapshot failed (non-fatal): %v", err)
+			w.db.logf("freshdb: snapshot failed (non-fatal): %v", err)
 		}
 	}
 	for i, r := range accepted {
@@ -333,7 +333,7 @@ func (db *DB) loadSnapshot(ctx context.Context, l *logState) *snapshot {
 	}
 	b, err := db.st.Get(ctx, lm.SnapKey)
 	if err != nil || len(b) < 20 || binary.LittleEndian.Uint32(b[len(b)-4:]) != format.CRC(b[:len(b)-4]) {
-		db.logf("goli: ignoring unreadable snapshot %s: %v", lm.SnapKey, err)
+		db.logf("freshdb: ignoring unreadable snapshot %s: %v", lm.SnapKey, err)
 		return nil
 	}
 	lsn := binary.LittleEndian.Uint64(b)
@@ -345,7 +345,7 @@ func (db *DB) loadSnapshot(ctx context.Context, l *logState) *snapshot {
 	kv, err1 := lens.LoadKV(body[:n])
 	tp, err2 := lens.LoadTopic(body[n:])
 	if err1 != nil || err2 != nil {
-		db.logf("goli: ignoring corrupt snapshot %s", lm.SnapKey)
+		db.logf("freshdb: ignoring corrupt snapshot %s", lm.SnapKey)
 		return nil
 	}
 	return &snapshot{lsn: lsn, kv: kv, topic: tp, drop: db.keys.shreddedList()}

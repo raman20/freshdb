@@ -1,9 +1,9 @@
-package goli
+package freshdb
 
 import (
 	"sync"
 
-	"github.com/raman20/goli/lens"
+	"github.com/raman20/freshdb/lens"
 )
 
 // view holds the lenses of one log, folded up to `head`.

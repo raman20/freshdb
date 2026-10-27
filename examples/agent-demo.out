@@ -24,7 +24,7 @@
 {"lsn":11}
 {"lsn":12}
 -- main now says: ESPRESSO x4
-error (404): goli: not found
+error (404): freshdb: not found
 -- time travel: at LSN 10 alice's pref was: oat milk, no sugar
 -- rewind main to LSN 10 (old head is kept in the reflog, nothing is deleted)
 {"heads":{"main":10},"ok":true}
@@ -34,26 +34,26 @@ error (404): goli: not found
 {"heads":{"main":10,"plan-b":10},"ok":true}
 {"lsn":11}
 -- main sees result/t2? 
-error (404): goli: not found
+error (404): freshdb: not found
 -- plan-b sees: booked bob seat 12A
 {"heads":{"main":11,"plan-b":11},"ok":true}
 -- after promote, main sees: booked bob seat 12A
 
 == 5. Forget: alice invokes her right to erasure — crypto-shred subject 'alice'
-{"valid_signature":true,"shred_lsn":12,"dek_deleted":true,"chain_head":"0c0f74716ce63485...","signature":"aa5c5c10eefc3d82..."}
+{"valid_signature":true,"shred_lsn":12,"dek_deleted":true,"chain_head":"8c2b5cf3c64dcacb...","signature":"2ebac16f502fa837..."}
 -- KV:
-error (404): goli: not found
+error (404): freshdb: not found
 -- time travel:
-error (404): goli: not found
+error (404): freshdb: not found
 -- old branch:
-error (404): goli: not found
+error (404): freshdb: not found
 -- docs about alice:
 []
 -- vector recall [1,0,0]:
 {"id":"m2","score":0.11043153}
 -- bob is untouched: {"user":"bob","text":"bob prefers window seats"}
 -- new writes for alice are refused:
-error (410): goli: subject has been crypto-shredded
+error (410): freshdb: subject has been crypto-shredded
 
 == 6. Verify the whole history (CRCs, hash chains, fencing, shred proofs)
 {"ok":true,"logs":3,"segments":17,"entries":14,"encrypted_values":7,"unreadable_shredded_values":5,"problems":null}

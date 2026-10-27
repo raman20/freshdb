@@ -1,4 +1,4 @@
-// Package format defines goli's on-storage log format: immutable segments
+// Package format defines freshdb's on-storage log format: immutable segments
 // containing CRC32C-checksummed frames. One frame = one committed transaction
 // (an atomic batch of ops) at one LSN. Frames carry the previous hash-chain
 // head so the log is tamper-evident; the chain is computed over the stored
@@ -60,7 +60,7 @@ type Frame struct {
 }
 
 const (
-	SegMagic      = "GOLISEG1"
+	SegMagic      = "FRDBSEG1"
 	SegVersion    = 1
 	SegHeaderSize = 8 + 2 + 2 + 8 + 8 + 4
 	FrameHdrSize  = 8

@@ -1,4 +1,4 @@
-package goli
+package freshdb
 
 import (
 	"context"
@@ -14,8 +14,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/raman20/goli/lens"
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb/lens"
+	"github.com/raman20/freshdb/store"
 )
 
 // keyring holds per-subject data-encryption keys (DEKs), wrapped by a
@@ -34,7 +34,7 @@ type keyring struct {
 }
 
 func SubjectHash(subject string) string {
-	h := sha256.Sum256([]byte("goli-subject:" + subject))
+	h := sha256.Sum256([]byte("freshdb-subject:" + subject))
 	return hex.EncodeToString(h[:16])
 }
 
@@ -115,7 +115,7 @@ func openKeyring(ctx context.Context, st store.Store, rnd io.Reader, kek []byte)
 		}
 		a, err := k.unwrap(h, b)
 		if err != nil {
-			return nil, fmt.Errorf("goli: cannot unwrap DEK %s: %w", h, err)
+			return nil, fmt.Errorf("freshdb: cannot unwrap DEK %s: %w", h, err)
 		}
 		k.deks[h] = a
 	}

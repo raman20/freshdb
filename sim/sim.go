@@ -1,4 +1,4 @@
-// Package sim is a deterministic simulation harness for goli.
+// Package sim is a deterministic simulation harness for freshdb.
 //
 // One seed fully determines a run: the workload, the fake clock, every
 // random byte the engine consumes (keys, nonces), and every injected fault
@@ -33,9 +33,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/raman20/goli"
-	"github.com/raman20/goli/format"
-	"github.com/raman20/goli/store"
+	"github.com/raman20/freshdb"
+	"github.com/raman20/freshdb/format"
+	"github.com/raman20/freshdb/store"
 )
 
 type Config struct {
@@ -69,7 +69,7 @@ type sim struct {
 	seed    int64
 	mem     *store.Mem
 	st      *store.Faulty
-	db      *goli.DB
+	db      *freshdb.DB
 	clock   atomic.Int64
 	rnd     *lockedRand
 	txs     map[int][]mop  // all issued txns
@@ -104,17 +104,17 @@ func (s *sim) fail(f string, a ...any) error {
 
 func (s *sim) log(f string, a ...any) { s.trace = append(s.trace, fmt.Sprintf(f, a...)) }
 
-func (s *sim) open() (*goli.DB, error) {
+func (s *sim) open() (*freshdb.DB, error) {
 	var last error
 	for i := 0; i < 200; i++ {
-		db, err := goli.OpenStore(s.ctx, s.st,
-			goli.WithClock(func() int64 { return s.clock.Add(1) }),
-			goli.WithRand(s.rnd), goli.WithSnapshotEvery(1+int(s.seed%7)),
-			goli.WithLogf(func(string, ...any) {}))
+		db, err := freshdb.OpenStore(s.ctx, s.st,
+			freshdb.WithClock(func() int64 { return s.clock.Add(1) }),
+			freshdb.WithRand(s.rnd), freshdb.WithSnapshotEvery(1+int(s.seed%7)),
+			freshdb.WithLogf(func(string, ...any) {}))
 		if err == nil {
 			return db, nil
 		}
-		if errors.Is(err, goli.ErrCorrupt) {
+		if errors.Is(err, freshdb.ErrCorrupt) {
 			return nil, err
 		}
 		last = err
@@ -198,12 +198,12 @@ func (s *sim) txn() error {
 		ops = append(ops, m)
 	}
 	s.txs[id] = ops
-	lsn, err := s.db.Branch("main").UpdateLSN(s.ctx, func(tx *goli.Tx) error {
+	lsn, err := s.db.Branch("main").UpdateLSN(s.ctx, func(tx *freshdb.Tx) error {
 		tx.Put("__tx", []byte(strconv.Itoa(id)))
 		for _, m := range ops {
-			var o []goli.WriteOpt
+			var o []freshdb.WriteOpt
 			if m.subject != "" {
-				o = append(o, goli.Subject(m.subject))
+				o = append(o, freshdb.Subject(m.subject))
 			}
 			var err error
 			switch m.kind {
@@ -225,18 +225,18 @@ func (s *sim) txn() error {
 	case err == nil:
 		s.acked[id] = lsn
 		return nil
-	case errors.Is(err, goli.ErrShredded):
+	case errors.Is(err, freshdb.ErrShredded):
 		for _, m := range ops {
 			if m.subject != "" && (s.shred[m.subject] || s.shredQ[m.subject]) {
 				return nil
 			}
 		}
 		return s.fail("tx%d: ErrShredded but no shredded subject", id)
-	case errors.Is(err, goli.ErrConflict):
+	case errors.Is(err, freshdb.ErrConflict):
 		return s.fail("tx%d: conflict with a single client", id)
 	default:
 		s.amb[id] = true
-		if errors.Is(err, goli.ErrUnknownOutcome) || errors.Is(err, goli.ErrFenced) {
+		if errors.Is(err, freshdb.ErrUnknownOutcome) || errors.Is(err, freshdb.ErrFenced) {
 			return s.crash(true) // writer is poisoned; recover
 		}
 		return nil
@@ -273,7 +273,7 @@ func (s *sim) takeover() error {
 	id := s.nextID
 	s.nextID++
 	s.txs[id] = nil
-	err = old.Branch("main").Update(s.ctx, func(tx *goli.Tx) error {
+	err = old.Branch("main").Update(s.ctx, func(tx *freshdb.Tx) error {
 		return tx.Put("__tx", []byte(strconv.Itoa(id)))
 	})
 	if err == nil {
@@ -429,7 +429,7 @@ func (s *sim) check() error {
 	}
 	got := map[string]string{}
 	var gotTopic []string
-	err = s.db.View(s.ctx, func(tx *goli.Tx) error {
+	err = s.db.View(s.ctx, func(tx *freshdb.Tx) error {
 		kvs, err := tx.Scan("")
 		if err != nil {
 			return err
