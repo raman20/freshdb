@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"syscall"
 )
 
 // RangeReader is implemented by stores that can read part of an object.
@@ -56,14 +55,7 @@ type fdEnt struct {
 // fdPerShard bounds open handles per shard: a quarter of RLIMIT_NOFILE,
 // clamped to [256, 16384] in total, so random value reads over many
 // segments do not thrash open/close while leaving most fds to the caller.
-var fdPerShard = func() int {
-	total := 256
-	var r syscall.Rlimit
-	if syscall.Getrlimit(syscall.RLIMIT_NOFILE, &r) == nil {
-		total = int(min(max(r.Cur/4, 256), 16384))
-	}
-	return total / 16
-}()
+var fdPerShard = fdBudget() / 16
 
 func (c *fdCache) shard(p string) *fdShard {
 	h := uint32(2166136261) // FNV-1a
