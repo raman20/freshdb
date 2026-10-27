@@ -19,8 +19,8 @@ const crashG = 4
 
 // crashChild is run in a subprocess: 4 goroutines commit forever, printing
 // "ACK g i" only after Update returned nil (i.e. after fsync+rename).
-func crashChild(dir string) {
-	st, err := store.NewFS(dir)
+func crashChild(loc string) {
+	st, err := store.Open(loc)
 	if err != nil {
 		panic(err)
 	}
@@ -68,11 +68,17 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestCrashKill9PrefixConsistent(t *testing.T) {
+func TestCrashKill9PrefixConsistent(t *testing.T) { crashKill9(t, t.TempDir()) }
+
+// The journal store keeps every segment in one file; same invariants.
+func TestCrashKill9Journal(t *testing.T) { crashKill9(t, "journal://"+t.TempDir()) }
+
+// crashKill9 repeatedly SIGKILLs a committing child process on the store at
+// loc (a store URL or bare path) and checks the recovered state.
+func crashKill9(t *testing.T, dir string) {
 	if testing.Short() {
 		t.Skip("short")
 	}
-	dir := t.TempDir()
 	iters := 25
 	if s := os.Getenv("FRESHDB_CRASH_ITERS"); s != "" {
 		iters, _ = strconv.Atoi(s)
@@ -109,7 +115,10 @@ func TestCrashKill9PrefixConsistent(t *testing.T) {
 		<-done
 
 		// recover in-process and check the invariants
-		st, _ := store.NewFS(dir)
+		st, err := store.Open(dir)
+		if err != nil {
+			t.Fatalf("iter %d: store: %v", it, err)
+		}
 		db, err := OpenStore(ctx, st, quiet())
 		if err != nil {
 			t.Fatalf("iter %d: reopen: %v", it, err)

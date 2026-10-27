@@ -33,6 +33,13 @@ func backends(t *testing.T) map[string]func() store.Store {
 			}
 			return s
 		},
+		"journal": func() store.Store {
+			s, err := store.NewJournal(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			return s
+		},
 	}
 }
 

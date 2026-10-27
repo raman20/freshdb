@@ -29,6 +29,7 @@ type Store interface {
 }
 
 // Open opens a store from a URL: mem://name, file:///path (or a bare path),
+// journal:///path (one append-only file; see Journal),
 // s3://bucket/prefix?endpoint=host:port&insecure=1 (credentials from
 // AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY or MINIO_ROOT_USER/PASSWORD).
 func Open(raw string) (Store, error) {
@@ -44,6 +45,8 @@ func Open(raw string) (Store, error) {
 		return SharedMem(u.Host + u.Path), nil
 	case "file":
 		return NewFS(u.Path)
+	case "journal":
+		return NewJournal(u.Path)
 	case "s3":
 		return NewS3FromURL(u)
 	}

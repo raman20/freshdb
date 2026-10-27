@@ -33,7 +33,7 @@ type KV interface {
 	Durability() string
 }
 
-var kvSystems = []string{"freshdb", "badger", "pebble", "bbolt", "sqlite"}
+var kvSystems = []string{"freshdb", "freshdb-journal", "badger", "pebble", "bbolt", "sqlite"}
 
 func openKV(system, dir string, fsync bool) (KV, error) {
 	os.RemoveAll(dir)
@@ -42,7 +42,9 @@ func openKV(system, dir string, fsync bool) (KV, error) {
 	}
 	switch system {
 	case "freshdb":
-		return openFresh(dir, fsync)
+		return openFresh(dir, fsync, false)
+	case "freshdb-journal":
+		return openFresh(dir, fsync, true)
 	case "badger":
 		return openBadger(dir, fsync)
 	case "pebble":
@@ -58,12 +60,24 @@ func openKV(system, dir string, fsync bool) (KV, error) {
 // ---- freshDB ----
 
 type freshKV struct {
-	db    *freshdb.DB
-	fsync bool
+	db      *freshdb.DB
+	fsync   bool
+	journal bool
 }
 
-func openFreshDB(dir string, fsync bool) (*freshdb.DB, error) {
-	st, err := store.NewFS(dir)
+// openFreshDB opens freshDB on the default directory store (one file per
+// segment) or, with journal, on store.Journal (one append-only file).
+func openFreshDB(dir string, fsync, journal bool) (*freshdb.DB, error) {
+	var st interface {
+		store.Store
+		SetUnsafeNoSync(bool)
+	}
+	var err error
+	if journal {
+		st, err = store.NewJournal(dir)
+	} else {
+		st, err = store.NewFS(dir)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -71,12 +85,12 @@ func openFreshDB(dir string, fsync bool) (*freshdb.DB, error) {
 	return freshdb.OpenStore(context.Background(), st, freshdb.WithLogf(func(string, ...any) {}))
 }
 
-func openFresh(dir string, fsync bool) (KV, error) {
-	db, err := openFreshDB(dir, fsync)
+func openFresh(dir string, fsync, journal bool) (KV, error) {
+	db, err := openFreshDB(dir, fsync, journal)
 	if err != nil {
 		return nil, err
 	}
-	return &freshKV{db, fsync}, nil
+	return &freshKV{db, fsync, journal}, nil
 }
 
 var bg = context.Background()
@@ -110,6 +124,9 @@ func (f *freshKV) Load(n int, key func(int) string, val func(int) []byte) error 
 	return nil
 }
 func (f *freshKV) Durability() string {
+	if f.fsync && f.journal {
+		return "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync"
+	}
 	if f.fsync {
 		return "group commit; ack after segment file fsync + rename + directory fsync"
 	}

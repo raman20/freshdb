@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -162,7 +163,7 @@ type msgRun struct {
 
 func cmdMsg(args []string) {
 	fs := flag.NewFlagSet("msg", flag.ExitOnError)
-	system := fs.String("system", "freshdb", "freshdb|nats")
+	system := fs.String("system", "freshdb", "freshdb|freshdb-journal|nats")
 	fsync := fs.Bool("fsync", true, "durable writes")
 	ratesF := fs.String("rates", "1000,5000,10000,20000", "fixed producer rates (msgs/s, aggregate)")
 	groupsF := fs.String("groups", "1,4", "consumer group counts (each group sees every message); run at -group-rate")
@@ -182,8 +183,8 @@ func cmdMsg(args []string) {
 	os.MkdirAll(dir, 0o755)
 	var b broker
 	switch *system {
-	case "freshdb":
-		db, err := openFreshDB(dir, *fsync)
+	case "freshdb", "freshdb-journal":
+		db, err := openFreshDB(dir, *fsync, *system == "freshdb-journal")
 		if err != nil {
 			fatal(err)
 		}
@@ -202,7 +203,7 @@ func cmdMsg(args []string) {
 		"consume_batch": *batch, "duration": dur.String(), "drain_limit": drain.String(),
 		"e2e": "consumer-side time after the durable ack minus the producer's intended send time (open-loop schedule)",
 	}}
-	if *system == "freshdb" {
+	if strings.HasPrefix(*system, "freshdb") {
 		res.Notes = append(res.Notes, "freshDB consumers poll: an empty fetch sleeps 200us before retrying (no push notification yet).")
 	}
 	n := 0
@@ -271,7 +272,7 @@ func msgOnce(b broker, topic, system string, fsync bool, rate float64, producers
 						return
 					}
 				}
-				if len(msgs) == 0 && system == "freshdb" {
+				if len(msgs) == 0 && strings.HasPrefix(system, "freshdb") {
 					time.Sleep(200 * time.Microsecond)
 				}
 			}

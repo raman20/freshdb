@@ -115,7 +115,7 @@ func occOnce(sys, dir string, fsync bool, clients, hot int, dur time.Duration, s
 	}
 	switch sys {
 	case "freshdb":
-		db, err := openFreshDB(dir, fsync)
+		db, err := openFreshDB(dir, fsync, false)
 		if err != nil {
 			fatal(err)
 		}
@@ -242,7 +242,7 @@ func occOnce(sys, dir string, fsync bool, clients, hot int, dur time.Duration, s
 var lensPrefill = 1_000_000
 
 func lensOnce(dir string, fsync bool, parts, batch int, dur time.Duration) lensRun {
-	db, err := openFreshDB(dir, fsync)
+	db, err := openFreshDB(dir, fsync, false)
 	if err != nil {
 		fatal(err)
 	}
