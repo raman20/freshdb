@@ -1,0 +1,443 @@
+{
+  "suite": "txn",
+  "env": {
+    "time": "2026-10-27T23:10:01+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "60068f3-dirty",
+    "command": "bin/freshdb-bench txn -fsync=true -clients 8,64 -hot 1,16,256,65536 -partitions 1,8 -batch 1,10 -duration 5s -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27-after-journal",
+    "loadavg_at_start": "4.89 3.75 2.57"
+  },
+  "params": {
+    "duration": "5s",
+    "fsync": true,
+    "multi_lens_txn": "Fetch N from in-topic group, Put result/\u003coffset\u003e per msg, Publish each to out-topic, Ack last: one transaction",
+    "occ_txn": "read 2 hot keys, write both (a-1, b+1); retried on conflict up to 16 times like freshdb.Update",
+    "peak_rss": "617316 kB",
+    "prefill": 1000000,
+    "seed": 42
+  },
+  "runs": [
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "clients": 8,
+      "hot_keys": 1,
+      "commits": 19144,
+      "commits_per_sec": 3828.8,
+      "attempts": 103647,
+      "abort_rate": 0.8153,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 19144,
+        "mean_us": 2089.21,
+        "p50_us": 1971.2,
+        "p99_us": 3950.59,
+        "p999_us": 33013.76,
+        "max_us": 45678.59
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 19144, expected 19144 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "clients": 8,
+      "hot_keys": 16,
+      "commits": 40125,
+      "commits_per_sec": 8025,
+      "attempts": 94881,
+      "abort_rate": 0.5771,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 40125,
+        "mean_us": 996.63,
+        "p50_us": 771.58,
+        "p99_us": 2476.03,
+        "p999_us": 4952.06,
+        "max_us": 41189.38
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "clients": 8,
+      "hot_keys": 256,
+      "commits": 71001,
+      "commits_per_sec": 14200.2,
+      "attempts": 78626,
+      "abort_rate": 0.097,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 71001,
+        "mean_us": 563.08,
+        "p50_us": 497.66,
+        "p99_us": 1624.06,
+        "p999_us": 4313.09,
+        "max_us": 23396.35
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "clients": 8,
+      "hot_keys": 65536,
+      "commits": 71475,
+      "commits_per_sec": 14295,
+      "attempts": 71497,
+      "abort_rate": 0.0003,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 71475,
+        "mean_us": 559.35,
+        "p50_us": 498.94,
+        "p99_us": 1684.48,
+        "p999_us": 6262.78,
+        "max_us": 47480.83
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "clients": 64,
+      "hot_keys": 1,
+      "commits": 15640,
+      "commits_per_sec": 3115.5,
+      "attempts": 958484,
+      "abort_rate": 0.9837,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 15640,
+        "mean_us": 20490.07,
+        "p50_us": 19103.74,
+        "p99_us": 60784.64,
+        "p999_us": 68747.26,
+        "max_us": 70123.52
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 15640, expected 15640 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "clients": 64,
+      "hot_keys": 16,
+      "commits": 86088,
+      "commits_per_sec": 17183.2,
+      "attempts": 694501,
+      "abort_rate": 0.876,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 86088,
+        "mean_us": 3717.49,
+        "p50_us": 3530.75,
+        "p99_us": 7917.57,
+        "p999_us": 29016.06,
+        "max_us": 33046.53
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "clients": 64,
+      "hot_keys": 256,
+      "commits": 258622,
+      "commits_per_sec": 51724.4,
+      "attempts": 494022,
+      "abort_rate": 0.4765,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 258622,
+        "mean_us": 1236.87,
+        "p50_us": 974.85,
+        "p99_us": 3622.91,
+        "p999_us": 9060.35,
+        "max_us": 26460.16
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "clients": 64,
+      "hot_keys": 65536,
+      "commits": 348819,
+      "commits_per_sec": 69763.8,
+      "attempts": 350238,
+      "abort_rate": 0.0041,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 348819,
+        "mean_us": 917.08,
+        "p50_us": 822.27,
+        "p99_us": 2914.3,
+        "p999_us": 6963.2,
+        "max_us": 21544.96
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "clients": 8,
+      "hot_keys": 1,
+      "commits": 100161,
+      "commits_per_sec": 20032.2,
+      "attempts": 741146,
+      "abort_rate": 0.8649,
+      "gave_up_after_16_retries": 21950,
+      "latency_incl_retries": {
+        "count": 122111,
+        "mean_us": 327.21,
+        "p50_us": 138.11,
+        "p99_us": 1073.15,
+        "p999_us": 2779.14,
+        "max_us": 42139.65
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 100161, expected 100161 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "clients": 8,
+      "hot_keys": 16,
+      "commits": 122027,
+      "commits_per_sec": 24405.4,
+      "attempts": 253297,
+      "abort_rate": 0.5182,
+      "gave_up_after_16_retries": 24,
+      "latency_incl_retries": {
+        "count": 122051,
+        "mean_us": 327.34,
+        "p50_us": 237.44,
+        "p99_us": 1317.89,
+        "p999_us": 2902.02,
+        "max_us": 75038.72
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "clients": 8,
+      "hot_keys": 256,
+      "commits": 132527,
+      "commits_per_sec": 26505.4,
+      "attempts": 140289,
+      "abort_rate": 0.0553,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 132527,
+        "mean_us": 301.48,
+        "p50_us": 273.92,
+        "p99_us": 750.59,
+        "p999_us": 2416.64,
+        "max_us": 20234.24
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "clients": 8,
+      "hot_keys": 65536,
+      "commits": 132116,
+      "commits_per_sec": 26423.2,
+      "attempts": 132142,
+      "abort_rate": 0.0002,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 132116,
+        "mean_us": 302.42,
+        "p50_us": 283.9,
+        "p99_us": 700.93,
+        "p999_us": 2016.26,
+        "max_us": 5373.95
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "clients": 64,
+      "hot_keys": 1,
+      "commits": 93704,
+      "commits_per_sec": 18740.8,
+      "attempts": 1932827,
+      "abort_rate": 0.9515,
+      "gave_up_after_16_retries": 80687,
+      "latency_incl_retries": {
+        "count": 174391,
+        "mean_us": 1834.48,
+        "p50_us": 1958.91,
+        "p99_us": 4337.66,
+        "p999_us": 5087.23,
+        "max_us": 6451.2
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 93704, expected 93704 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "clients": 64,
+      "hot_keys": 16,
+      "commits": 127308,
+      "commits_per_sec": 25461.6,
+      "attempts": 1246770,
+      "abort_rate": 0.8979,
+      "gave_up_after_16_retries": 28582,
+      "latency_incl_retries": {
+        "count": 155890,
+        "mean_us": 2052.29,
+        "p50_us": 1765.38,
+        "p99_us": 5079.04,
+        "p999_us": 8937.47,
+        "max_us": 10977.28
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "clients": 64,
+      "hot_keys": 256,
+      "commits": 152855,
+      "commits_per_sec": 30571,
+      "attempts": 239249,
+      "abort_rate": 0.3611,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 152855,
+        "mean_us": 2093,
+        "p50_us": 1678.34,
+        "p99_us": 6012.93,
+        "p999_us": 9166.85,
+        "max_us": 16908.29
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "system": "badger",
+      "fsync": true,
+      "clients": 64,
+      "hot_keys": 65536,
+      "commits": 141861,
+      "commits_per_sec": 28372.2,
+      "attempts": 142159,
+      "abort_rate": 0.0021,
+      "gave_up_after_16_retries": 0,
+      "latency_incl_retries": {
+        "count": 141861,
+        "mean_us": 2255.13,
+        "p50_us": 2189.31,
+        "p99_us": 4620.29,
+        "p999_us": 6668.29,
+        "max_us": 11026.43
+      },
+      "invariant_ok": true,
+      "invariant": "sum of hot keys = 0, expected 0 (err=\u003cnil\u003e)"
+    },
+    {
+      "fsync": true,
+      "partitions": 1,
+      "batch": 1,
+      "txns": 18869,
+      "txns_per_sec": 3773.8,
+      "msgs_per_sec": 3773.8,
+      "txn_latency": {
+        "count": 18869,
+        "mean_us": 264.84,
+        "p50_us": 244.61,
+        "p99_us": 678.4,
+        "p999_us": 1828.86,
+        "max_us": 25477.12
+      },
+      "exactly_once_check": true,
+      "input_drained": false,
+      "check": "consumed 18869, out messages 18869, result keys 18869, acked by workers 18869",
+      "errors": 0
+    },
+    {
+      "fsync": true,
+      "partitions": 1,
+      "batch": 10,
+      "txns": 15250,
+      "txns_per_sec": 3050,
+      "msgs_per_sec": 30500,
+      "txn_latency": {
+        "count": 15250,
+        "mean_us": 327.66,
+        "p50_us": 298.75,
+        "p99_us": 1048.58,
+        "p999_us": 1992.7,
+        "max_us": 7102.46
+      },
+      "exactly_once_check": true,
+      "input_drained": false,
+      "check": "consumed 152500, out messages 152500, result keys 152500, acked by workers 152500",
+      "errors": 0
+    },
+    {
+      "fsync": true,
+      "partitions": 8,
+      "batch": 1,
+      "txns": 69320,
+      "txns_per_sec": 13864,
+      "msgs_per_sec": 13864,
+      "txn_latency": {
+        "count": 69320,
+        "mean_us": 576.77,
+        "p50_us": 538.62,
+        "p99_us": 1671.17,
+        "p999_us": 3420.16,
+        "max_us": 12689.41
+      },
+      "exactly_once_check": true,
+      "input_drained": false,
+      "check": "consumed 69320, out messages 69320, result keys 69320, acked by workers 69320",
+      "errors": 0
+    },
+    {
+      "fsync": true,
+      "partitions": 8,
+      "batch": 10,
+      "txns": 45266,
+      "txns_per_sec": 9053.2,
+      "msgs_per_sec": 90532,
+      "txn_latency": {
+        "count": 45266,
+        "mean_us": 883.32,
+        "p50_us": 790.53,
+        "p99_us": 2750.46,
+        "p999_us": 7016.45,
+        "max_us": 12541.95
+      },
+      "exactly_once_check": true,
+      "input_drained": false,
+      "check": "consumed 452660, out messages 452660, result keys 452660, acked by workers 452660",
+      "errors": 0
+    }
+  ]
+}

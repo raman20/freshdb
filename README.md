@@ -442,6 +442,16 @@ successful ops/s:
 ¹ Plus RMWs that gave up after 16 OCC conflict retries: 9,660 for freshDB
 and 1,045 for Badger.
 
+> The table above is v0.1.0. Unreleased `main` has since:
+> - cut peak RSS to 0.99 GiB;
+> - removed the OCC give-ups;
+> - made 100k-vector search 1,051 QPS;
+> - added an opt-in `journal://` store that does 42k ops/s on A with
+>   1 client and has a 3.1 ms streaming p99 at 1k msgs/s.
+>
+> Reads on the default store got slower (C at 64 clients: 1.2M ops/s).
+> See "Changes since v0.1.0" in [docs/benchmarks.md](docs/benchmarks.md).
+
 **Where freshDB loses:**
 - Single-client durable writes (each commit does its own fsyncs).
 - Hot-key contention (OCC aborts instead of queueing).

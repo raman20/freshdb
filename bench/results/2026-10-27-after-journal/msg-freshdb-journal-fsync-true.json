@@ -1,0 +1,219 @@
+{
+  "suite": "msg",
+  "env": {
+    "time": "2026-10-27T23:09:00+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "60068f3-dirty",
+    "command": "bin/freshdb-bench msg -system freshdb-journal -fsync=true -rates 1000,5000,10000,20000 -producers 8 -groups 1,4 -duration 10s -dir /tmp/freshdb-bench -out results/2026-10-27-after-journal",
+    "loadavg_at_start": "4.47 3.39 2.38"
+  },
+  "params": {
+    "consume_batch": 100,
+    "disk_after_run": "1.8G",
+    "drain_limit": "30s",
+    "duration": "10s",
+    "e2e": "consumer-side time after the durable ack minus the producer's intended send time (open-loop schedule)",
+    "fsync": true,
+    "max_producers": 64,
+    "payload_bytes": 1024,
+    "peak_rss": "3449900 kB",
+    "producers": 8,
+    "system": "freshdb-journal"
+  },
+  "runs": [
+    {
+      "system": "freshdb-journal",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit)",
+      "kind": "fixed-rate",
+      "target_rate": 1000,
+      "producers": 8,
+      "groups": 1,
+      "published": 10000,
+      "publish_per_sec": 1000.1,
+      "delivered_per_group_min": 10000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 10000,
+        "mean_us": 178.19,
+        "p50_us": 51.74,
+        "p99_us": 2265.09,
+        "p999_us": 13606.91,
+        "max_us": 38436.86
+      },
+      "end_to_end_latency": {
+        "count": 10000,
+        "mean_us": 403.22,
+        "p50_us": 224,
+        "p99_us": 3074.05,
+        "p999_us": 22986.75,
+        "max_us": 38535.17
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb-journal",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit)",
+      "kind": "fixed-rate",
+      "target_rate": 5000,
+      "producers": 8,
+      "groups": 1,
+      "published": 50000,
+      "publish_per_sec": 5000.1,
+      "delivered_per_group_min": 50000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 50000,
+        "mean_us": 538.52,
+        "p50_us": 46.85,
+        "p99_us": 14966.78,
+        "p999_us": 34439.17,
+        "max_us": 38928.38
+      },
+      "end_to_end_latency": {
+        "count": 50000,
+        "mean_us": 707.08,
+        "p50_us": 177.02,
+        "p99_us": 15179.78,
+        "p999_us": 34537.47,
+        "max_us": 39190.53
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb-journal",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit)",
+      "kind": "fixed-rate",
+      "target_rate": 10000,
+      "producers": 8,
+      "groups": 1,
+      "published": 100000,
+      "publish_per_sec": 10000.1,
+      "delivered_per_group_min": 100000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 100000,
+        "mean_us": 385.4,
+        "p50_us": 44.06,
+        "p99_us": 11116.54,
+        "p999_us": 16228.35,
+        "max_us": 18776.06
+      },
+      "end_to_end_latency": {
+        "count": 100000,
+        "mean_us": 526.95,
+        "p50_us": 163.71,
+        "p99_us": 11362.3,
+        "p999_us": 16572.42,
+        "max_us": 19333.12
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb-journal",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit)",
+      "kind": "fixed-rate",
+      "target_rate": 20000,
+      "producers": 8,
+      "groups": 1,
+      "published": 200000,
+      "publish_per_sec": 20000,
+      "delivered_per_group_min": 200000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 200000,
+        "mean_us": 1085.49,
+        "p50_us": 69.57,
+        "p99_us": 22249.47,
+        "p999_us": 39190.53,
+        "max_us": 45318.14
+      },
+      "end_to_end_latency": {
+        "count": 200000,
+        "mean_us": 1193.36,
+        "p50_us": 155.14,
+        "p99_us": 22544.38,
+        "p999_us": 39518.21,
+        "max_us": 45744.13
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb-journal",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit)",
+      "kind": "fixed-rate",
+      "target_rate": 5000,
+      "producers": 8,
+      "groups": 4,
+      "published": 50000,
+      "publish_per_sec": 5000.1,
+      "delivered_per_group_min": 50000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 50000,
+        "mean_us": 391.17,
+        "p50_us": 50.91,
+        "p99_us": 11001.86,
+        "p999_us": 31850.5,
+        "max_us": 38633.47
+      },
+      "end_to_end_latency": {
+        "count": 200000,
+        "mean_us": 534.67,
+        "p50_us": 183.3,
+        "p99_us": 11395.07,
+        "p999_us": 32178.18,
+        "max_us": 38895.62
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb-journal",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit)",
+      "kind": "max-throughput",
+      "producers": 64,
+      "groups": 1,
+      "published": 1229341,
+      "publish_per_sec": 122801.5,
+      "delivered_per_group_min": 1229341,
+      "consume_per_sec_per_group": 122811.3,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 1229341,
+        "mean_us": 520.81,
+        "p50_us": 331.01,
+        "p99_us": 4007.94,
+        "p999_us": 14131.2,
+        "max_us": 75104.26
+      },
+      "end_to_end_latency": {
+        "count": 0,
+        "mean_us": 0,
+        "p50_us": 0,
+        "p99_us": 0,
+        "p999_us": 0,
+        "max_us": 0
+      },
+      "errors": 0
+    }
+  ],
+  "notes": [
+    "freshDB consumers poll: an empty fetch sleeps 200us before retrying (no push notification yet)."
+  ]
+}

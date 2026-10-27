@@ -18,7 +18,7 @@ in its "Changes since v0.1.0" section.
   Values are read with ranged reads (`pread` with an fd cache on local
   disk, `Range` GETs on S3) through a sharded LRU cache (`ValueCacheBytes`,
   default 64 MiB) and checked against the CRC (`ErrCorrupt` on mismatch).
-  Peak RSS for the 1M × 1 KiB YCSB run fell from 7.1 GiB to 1.06 GiB. Cache
+  Peak RSS for the 1M × 1 KiB YCSB run fell from 7.1 GiB to about 1 GiB (1.06 and 0.99 GiB in two runs). Cache
   misses make point reads slower than in v0.1.0 (see the benchmarks).
 - KV snapshots use a new `KV2` format that records the inline limit; `KV1`
   snapshots, or ones written with a different limit, are ignored and the
@@ -32,13 +32,29 @@ in its "Changes since v0.1.0" section.
   back off with jitter; and after 3 lost conflicts the transaction body
   runs on the branch's writer at the applied head, so it commits on that
   attempt. The log format and the committed operations are unchanged.
-  Such a body must not block or call `Update` on the same DB.
+  Such a body must not block or call `Update` on the same DB. Several
+  escalated transactions can share one group commit; one that conflicts
+  with an earlier write in the batch runs in the next batch.
 - The writer trims its conflict-history window in amortized steps instead
   of copying it on every commit.
 
 ### Added
 - `WithInlineMax`, `WithValueCacheBytes` options.
 - `store.RangeReader` / `store.GetRange` (ranged reads for FS, S3, Mem).
+- **Opt-in journal store** (`journal:///path`, `store.NewJournal`, Unix
+  only). Segments are records in one preallocated append-only file
+  (`journal.fj`), so a durable commit is one `write` plus one `fdatasync`
+  instead of file create + fsync + rename + directory fsync. Records carry
+  a salted CRC-32C, which stops a torn tail or stale bytes from being read
+  as data. Instances on one file coordinate with `flock`. Delete appends a
+  tombstone and then punches a hole. It has its own conformance,
+  reopen/torn-tail and kill -9 crash tests. The default local store is
+  still one file per segment (`FS`); there is no migration between the two.
+- `freshdb-bench`: `freshdb-journal` system for `ycsb` and `msg`.
+
+### Fixed
+- The FS store's fd cache is sized from `RLIMIT_NOFILE` (clamped) through
+  build-tagged helpers, so Windows builds again.
 
 ## [0.1.0] - 2026-10-27 — first public prototype (pre-release)
 
