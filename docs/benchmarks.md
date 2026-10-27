@@ -1,0 +1,499 @@
+# Benchmarks
+
+These numbers come from the suite in [`bench/`](../bench) (`freshdb-bench`).
+The raw JSON for every run, including commands, seeds, durations and
+environment, is in
+[`bench/results/2026-10-27/`](../bench/results/2026-10-27/). All of it is
+rendered in [`results.md`](../bench/results/2026-10-27/results.md). The tables
+below are generated from that JSON by
+[`bench/scripts/summary.py`](../bench/scripts/summary.py); none are typed by
+hand.
+
+**Read the caveats before quoting any number.**
+- This is a single run on a shared, noisy 8-vCPU VM.
+- Every engine runs embedded in one Go process.
+- S3 numbers come from a local MinIO, not AWS.
+
+freshDB is v0.1.0, an experimental prerelease. These numbers show where the
+design is fast and where it is slow. They are not a claim of production
+readiness.
+
+## Summary
+
+| | result (fsync on unless noted) |
+|---|---|
+| KV reads (YCSB C, 1M keys, 8 clients) | freshDB **2.82M ops/s**; bbolt 752k, Pebble 197k, Badger 261k, SQLite 37k |
+| KV read-mostly (YCSB B, 64 clients) | freshDB **697k ops/s**; bbolt 242k, Pebble 194k |
+| KV write-heavy (YCSB A, 1 client) | freshDB **3.7k ops/s, the slowest**: Pebble 32k, bbolt 22k, Badger 19k, SQLite 9.3k |
+| KV write-heavy (YCSB A, 64 clients) | freshDB 81k; Pebble 119k is faster |
+| Hot-key read-modify-write (YCSB F, 64 clients) | freshDB 67k ops/s, **with 9,660 RMWs that gave up after 16 OCC retries**; Pebble 81k with none |
+| Memory (1M × 1 KiB keys) | freshDB peak RSS **7.1 GiB**, vs Pebble 0.7, bbolt 1.7, Badger 3.5, SQLite 0.3 |
+| Streaming, durable publish (64 producers) | freshDB 42.4k msgs/s; NATS JetStream (SyncAlways) 8.5k |
+| Streaming e2e latency at 1k msgs/s | p99: freshDB **23.4 ms**; NATS 1.9 ms |
+| Multi-lens exactly-once txn (fetch+put+publish+ack) | 61.9k msgs/s (8 partitions, 10 msgs/txn); exactly-once check passes in every cell |
+| OCC, 1 hot key, 64 clients | freshDB 2.1k commits/s; Badger 14.1k |
+| Vectors, 100k × 128-d, exact search | freshDB **19 QPS**; a flat Go loop gets 145 QPS. There is no ANN index. |
+| S3 request cost (MinIO-counted, AWS list price) | 1 PUT per commit at 1 client (≈ **$5.00 per 1M commits**, estimate); 0.031 PUT per commit at 64 clients (≈ $0.16) |
+| Cold open from S3 with 5,001 segments | 3.2 s, 5,006 GETs (one per segment) |
+
+### Where freshDB loses
+
+- **Single-client durable writes.** At one client, every commit waits for its
+  own segment write, file fsync, rename and directory fsync. That is several
+  syscalls and two fsyncs per commit, so YCSB A at 1 client is about 8×
+  slower than Pebble. Group commit closes the gap only with many concurrent
+  writers.
+- **Hot-key contention.** OCC aborts a conflicting transaction instead of
+  queueing it. In YCSB F at 64 clients, 9,660 read-modify-writes gave up
+  after 16 retries. With 1 hot key, Badger's OCC commits about 7× more.
+- **Memory.** Lenses keep the MVCC state in RAM, so 1M × 1 KiB values used
+  7.1 GiB RSS with fsync on. Pebble used 0.7 GiB.
+- **Disk.** The append-only log uses 3.3 GB after the fsync-on run, against
+  1.3–1.7 GB for the LSM and B-tree engines.
+- **Low-rate streaming latency.** Consumers poll and sleep 200 µs on an empty
+  fetch; there is no push yet. Each durable publish also pays the commit path
+  above. So e2e p99 at 1k msgs/s is 23 ms, against NATS's 1.9 ms.
+- **Vectors.** Search is exact brute force over the lens. It is about 7.5×
+  slower than a plain float32 loop, and QPS falls linearly with N. There is
+  no ANN index.
+- **Cold open on S3.** Open reads every segment, so open time and GETs grow
+  linearly with segment count. Snapshots are now off by default and do not
+  speed up open yet.
+
+## Environment
+
+- **Machine:** 8 vCPU Intel Xeon (KVM guest), 15 GiB RAM (16,386,368 kB),
+  data on `/dev/vdb` ext4 (128 GB virtual disk).
+- **Software:** Debian 13, kernel 6.12.94+, Go 1.27.3, linux/amd64.
+- **Shared and noisy.** Other workloads ran on the same VM, and load average
+  ranged from about 0.6 to 5 during the run (recorded per file). The
+  harness's own floor, measured by `calib` before and after:
+
+| probe | p50 | p99 | p99.9 | max |
+|---|---|---|---|---|
+| no-op through the open-loop harness, 200k/s, 8 clients | 0.003 ms | 0.31 ms | 32.9 ms | 56.8 ms |
+| no-op through the open-loop harness, 200k/s, 64 clients | 0.015 ms | 0.062 ms | 2.5 ms | 12.7 ms |
+| 4 KiB append + fsync on the data disk | 0.10 ms | 0.34 ms | 1.11 ms | 46.4 ms |
+
+Even a no-op shows tens of ms at p99.9 on this box. So **open-loop p99 and
+p99.9 values in the tens of ms are mostly environment, for every engine**.
+p50 and closed-loop throughput are the robust numbers.
+
+- **Commits measured.** The run started from commit `8db8396`. "-dirty"
+  means only the results directory differed. Later reruns used the adapter
+  fixes in `e60b0ef`/`cafb5ea`; see the caveats below.
+
+## How to reproduce
+
+```sh
+cd bench
+scripts/run-all.sh                      # ~1 h; writes results/$(date +%F)/ and results.md
+# S3 suite (optional): point at any S3-compatible endpoint
+FRESHDB_BENCH_S3='s3://bucket?endpoint=127.0.0.1:9000&insecure=1&create=1' \
+  AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... scripts/run-all.sh
+scripts/smoke.sh                        # tiny sizes, ~1 min; what CI runs
+python3 scripts/summary.py results/<date> closed true 1,8,64   # tables below
+```
+
+Single cells can be rerun with the subcommands. For example:
+
+```sh
+bin/freshdb-bench ycsb -system pebble -fsync=true -workloads A -clients 1,64
+```
+
+Run `bin/freshdb-bench <suite> -h` for the flags.
+
+## KV: YCSB A/B/C/D/F
+
+1,000,000 records, 1 KiB values, zipfian θ=0.99, seed 42. Each cell runs a
+2 s warm-up, then 5 s closed loop, then 5 s open loop at 0.5× the closed
+max (capped at 200k/s). The workloads run in the order A, B, C, F, D on the
+same data.
+
+### Throughput, fsync on (closed loop, successful ops/s; bold = fastest)
+
+Failed ops (an OCC retry limit reached) are excluded from ops/s and shown in
+parentheses.
+
+| workload | clients | freshdb | badger | pebble | bbolt | sqlite |
+|---|---|---|---|---|---|---|
+| A | 1 | 3.7k | 19k | **32k** | 22k | 9.3k |
+| A | 8 | 17k | 23k | **93k** | 23k | 13k |
+| A | 64 | 81k | 25k | **119k** | 24k | 13k |
+| B | 1 | 38k | 32k | 68k | **139k** | 22k |
+| B | 8 | 126k | 117k | 148k | **169k** | 31k |
+| B | 64 | **697k** | 159k | 194k | 242k | 34k |
+| C | 1 | **860k** | 59k | 100k | 531k | 34k |
+| C | 8 | **2.82M** | 261k | 197k | 752k | 37k |
+| C | 64 | **2.92M** | 247k | 281k | 765k | 27k |
+| F | 1 | 4.2k | 12k | **31k** | 25k | 10k |
+| F | 8 | 15k | 24k | **68k** | 23k | 9.5k |
+| F | 64 | 67k (+9660 failed) | 28k (+1045 failed) | **81k** | 22k | 8.9k |
+| D | 1 | 37k | 44k | 63k | **91k** | 25k |
+| D | 8 | 165k | 146k | **194k** | 143k | 31k |
+| D | 64 | **768k** | 221k | 344k | 161k | 28k |
+
+
+### Open-loop latency, fsync on (ms: p50 / p99 / p99.9, coordinated-omission corrected)
+
+Each engine runs at half of its *own* closed-loop max, so the rates differ
+between columns; the `open target/s` column in
+[`results.md`](../bench/results/2026-10-27/results.md) gives each rate. Tails
+in the tens of ms are at the harness floor for this box (see Environment).
+
+| workload | clients | freshdb | badger | pebble | bbolt | sqlite |
+|---|---|---|---|---|---|---|
+| A | 1 | 0.54 / 37 / 46 | 0.07 / 4.8 / 8.2 | 0.03 / 39 / 52 | 0.08 / 21 / 30 | 0.15 / 532 / 548 |
+| A | 8 | 0.54 / 34 / 49 | 0.14 / 107 / 119 | 0.05 / 21 / 36 | 0.08 / 15 / 29 | 0.09 / 35 / 49 |
+| A | 64 | 6.3 / 63 / 78 | 0.22 / 61 / 79 | 14 / 92 / 137 | 0.08 / 24 / 37 | 0.08 / 7.0 / 23 |
+| B | 1 | 0.29 / 22 / 32 | 0.02 / 1.4 / 2.1 | 0.03 / 6.9 / 23 | 0.02 / 3.1 / 10.0 | 0.06 / 50 / 68 |
+| B | 8 | 0.01 / 41 / 50 | 0.03 / 15 / 26 | 0.02 / 0.79 / 2.4 | 0.007 / 5.2 / 15 | 0.05 / 21 / 38 |
+| B | 64 | 13 / 105 / 147 | 1.4 / 36 / 51 | 3.0 / 38 / 62 | 0.02 / 11 / 24 | 0.05 / 0.83 / 3.5 |
+| C | 1 | 0.002 / 1.3 / 11 | 0.02 / 0.08 / 0.51 | 0.02 / 9.3 / 20 | 0.003 / 0.21 / 8.3 | 0.04 / 0.19 / 1.8 |
+| C | 8 | 0.005 / 0.04 / 1.8 | 0.02 / 5.9 / 21 | 0.02 / 18 / 45 | 0.005 / 0.13 / 2.0 | 0.06 / 38 / 46 |
+| C | 64 | 0.02 / 0.14 / 31 | 17 / 132 / 205 | 3.6 / 34 / 54 | 0.02 / 0.15 / 1.5 | 0.05 / 1.7 / 8.5 |
+| F | 1 | 0.46 / 6.9 / 11 | 0.08 / 3.0 / 10 | 0.05 / 8.6 / 16 | 0.08 / 3.2 / 5.6 | 0.17 / 18 / 42 |
+| F | 8 | 0.52 / 18 / 31 | 0.09 / 26 / 40 | 0.05 / 51 / 66 | 0.08 / 16 / 25 | 0.12 / 6.1 / 9.2 |
+| F | 64 | 24 / 167 / 227 (1682 err) | 2.5 / 34 / 56 (47 err) | 12 / 68 / 87 | 0.08 / 21 / 46 | 0.11 / 5.3 / 9.6 |
+| D | 1 | 0.28 / 90 / 102 | 181 / 738 / 753 | 0.03 / 40 / 56 | 0.09 / 28 / 37 | 0.05 / 3.7 / 11 |
+| D | 8 | 0.07 / 68 / 94 | 10 / 994 / 1023 | 0.01 / 26 / 38 | 0.007 / 25 / 33 | 0.05 / 11 / 35 |
+| D | 64 | 13 / 109 / 195 | 0.40 / 4.9 / 8.3 | 9.2 / 69 / 92 | 0.02 / 15 / 34 | 0.07 / 21 / 61 |
+
+### Throughput, fsync off (each engine's no-sync mode)
+
+| workload | clients | freshdb | badger | pebble | bbolt | sqlite |
+|---|---|---|---|---|---|---|
+| A | 1 | 14k | 43k | 74k | **93k** | 23k |
+| A | 8 | 44k | **103k** | 97k | 76k | 21k |
+| A | 64 | **139k** | 127k | 99k | 88k | 21k |
+| B | 1 | 88k | 43k | 70k | **304k** | 30k |
+| B | 8 | 303k | 187k | 140k | **344k** | 37k |
+| B | 64 | **1.17M** | 78k | 186k | 301k | 33k |
+| C | 1 | **787k** | 57k | 87k | 510k | 27k |
+| C | 8 | **3.41M** | 262k | 159k | 748k | 30k |
+| C | 64 | **2.67M** | 308k | 235k | 669k | 28k |
+| F | 1 | 13k | 31k | 51k | **80k** | 15k |
+| F | 8 | 39k (+3 failed) | **73k** | 69k | 68k | 14k |
+| F | 64 | **105k (+14712 failed)** | 82k (+1859 failed) | 71k | 82k | 15k |
+| D | 1 | 98k | 126k | 68k | **344k** | 36k |
+| D | 8 | 332k | 340k | 196k | **362k** | 36k |
+| D | 64 | **1.08M** | 264k | 323k | 425k | 32k |
+
+### Open-loop latency, fsync off (ms: p50 / p99 / p99.9)
+
+| workload | clients | freshdb | badger | pebble | bbolt | sqlite |
+|---|---|---|---|---|---|---|
+| A | 1 | 0.12 / 6.3 / 18 | 0.02 / 33 / 49 | 0.01 / 21 / 41 | 0.02 / 24 / 37 | 0.06 / 19 / 28 |
+| A | 8 | 0.25 / 78 / 105 | 0.05 / 161 / 173 | 0.01 / 23 / 38 | 0.03 / 0.56 / 2.4 | 0.06 / 2.3 / 3.8 |
+| A | 64 | 4.3 / 79 / 92 | 1.5 / 384 / 420 | 16 / 111 / 151 | 0.04 / 0.66 / 2.8 | 0.07 / 2.2 / 6.7 |
+| B | 1 | 0.05 / 35 / 44 | 0.03 / 0.56 / 6.2 | 0.02 / 0.40 / 4.8 | 0.005 / 0.70 / 12 | 0.04 / 0.33 / 2.1 |
+| B | 8 | 0.08 / 86 / 105 | 0.03 / 3.6 / 12 | 0.02 / 0.76 / 3.3 | 0.006 / 0.64 / 3.1 | 0.05 / 0.85 / 6.1 |
+| B | 64 | 9.9 / 121 / 180 | 0.76 / 98 / 135 | 5.0 / 42 / 60 | 0.02 / 0.51 / 3.2 | 0.06 / 14 / 45 |
+| C | 1 | 0.002 / 3.6 / 7.6 | 0.02 / 0.48 / 8.7 | 0.02 / 0.34 / 2.9 | 0.003 / 11 / 25 | 0.05 / 0.23 / 4.8 |
+| C | 8 | 0.004 / 0.03 / 1.8 | 0.02 / 0.44 / 4.1 | 0.02 / 20 / 36 | 0.006 / 20 / 36 | 0.06 / 5.9 / 22 |
+| C | 64 | 0.02 / 0.07 / 1.6 | 13 / 100 / 155 | 6.5 / 47 / 70 | 0.02 / 1.2 / 15 | 0.05 / 0.78 / 4.6 |
+| F | 1 | 0.13 / 45 / 62 | 0.03 / 13 / 22 | 0.03 / 3.3 / 5.5 | 0.02 / 0.50 / 7.9 | 0.09 / 28 / 38 |
+| F | 8 | 0.32 / 135 / 151 | 0.05 / 27 / 50 | 0.03 / 3.0 / 5.2 | 0.03 / 0.51 / 2.8 | 0.09 / 2.1 / 3.5 |
+| F | 64 | 1081 / 1518 / 1607 (5301 err) | 4.8 / 69 / 98 (864 err) | 9.2 / 63 / 86 | 0.04 / 4.1 / 8.4 | 0.09 / 10.0 / 43 |
+| D | 1 | 0.08 / 44 / 61 | 0.010 / 0.08 / 0.33 | 0.01 / 0.47 / 5.3 | 0.004 / 7.4 / 12 | 0.04 / 1.2 / 2.4 |
+| D | 8 | 0.20 / 155 / 173 | 0.02 / 32 / 59 | 0.01 / 1.1 / 4.1 | 0.006 / 27 / 36 | 0.04 / 5.3 / 20 |
+| D | 64 | 1908 / 2577 / 2636 | 0.05 / 277 / 311 | 1.9 / 47 / 99 | 0.02 / 6.0 / 13 | 0.06 / 1.5 / 10.0 |
+
+### Resources (load phase and peak over the whole YCSB run)
+
+fsync on:
+
+| | freshdb | badger | pebble | bbolt | sqlite |
+|---|---|---|---|---|---|
+| load (keys/s) | 121k | 113k | 317k | 280k | 42k |
+| peak RSS | 7.1 GiB | 3.5 GiB | 0.7 GiB | 1.7 GiB | 0.3 GiB |
+| disk after run | 3.3G | 1.3G | 1.7G | 1.7G | 4.6G |
+
+fsync off:
+
+| | freshdb | badger | pebble | bbolt | sqlite |
+|---|---|---|---|---|---|
+| load (keys/s) | 174k | 144k | 240k | 327k | 50k |
+| peak RSS | 9.7 GiB | 4.6 GiB | 0.7 GiB | 2.3 GiB | 0.3 GiB |
+| disk after run | 5.5G | 1.5G | 1.7G | 2.3G | 4.6G |
+
+freshDB keeps lens state, including MVCC history, in memory. That is the RSS column, and it is the main thing keeping freshDB from larger-than-RAM data today.
+
+BBOLT_BATCH_PLACEHOLDER
+
+## Streaming (vs NATS JetStream)
+
+8 producers at fixed aggregate rates; e2e = intended send time to consumer receive, in ms (p50 / p99 / p99.9). "Max" rows use 64 closed-loop producers; e2e is not measured there.
+
+| system | fsync | target msgs/s | achieved publish/s | publish p50 / p99 / p99.9 | e2e p50 / p99 / p99.9 |
+|---|---|---|---|---|---|
+| freshdb | true | 1000 | 1000 | 0.40 / 21 / 36 | 0.86 / 23 / 39 |
+| freshdb | true | 5000 | 5000 | 0.70 / 22 / 48 | 1.77 / 24 / 49 |
+| freshdb | true | 10000 | 9236 | 257 / 818 / 828 | 258 / 819 / 829 |
+| freshdb | true | 20000 | 8864 | 5457 / 11031 / 11132 | 5457 / 11031 / 11132 |
+| freshdb | true | 5000 (4 groups) | 4994 | 0.76 / 32 / 39 | 1.91 / 33 / 41 |
+| freshdb | true | max (64 producers) | 42378 | 1.16 / 4.86 / 28 | - |
+| nats | true | 1000 | 1000 | 0.24 / 1.27 / 9.27 | 0.34 / 1.90 / 9.63 |
+| nats | true | 5000 | 5000 | 0.41 / 42 / 49 | 1.45 / 44 / 51 |
+| nats | true | 10000 | 7590 | 1769 / 3144 / 3181 | 1770 / 3144 / 3183 |
+| nats | true | 20000 | 7287 | 5943 / 12566 / 12675 | 5943 / 12566 / 12675 |
+| nats | true | 5000 (4 groups) | 5000 | 0.58 / 38 / 52 | 1.93 / 41 / 54 |
+| nats | true | max (64 producers) | 8499 | 7.28 / 15 / 39 | - |
+| freshdb | false | 1000 | 1000 | 0.16 / 0.86 / 1.61 | 0.36 / 1.36 / 2.15 |
+| freshdb | false | 5000 | 5000 | 0.39 / 17 / 37 | 0.69 / 18 / 38 |
+| freshdb | false | 10000 | 10000 | 0.30 / 9.99 / 27 | 0.66 / 11 / 28 |
+| freshdb | false | 20000 | 20000 | 0.45 / 28 / 40 | 0.87 / 28 / 41 |
+| freshdb | false | 5000 (4 groups) | 5000 | 0.41 / 15 / 38 | 0.90 / 16 / 39 |
+| freshdb | false | max (64 producers) | 79103 | 0.61 / 3.20 / 25 | - |
+| nats | false | 1000 | 1000 | 0.09 / 0.31 / 21 | 0.18 / 0.46 / 21 |
+| nats | false | 5000 | 5000 | 0.25 / 0.85 / 3.81 | 0.95 / 2.19 / 4.38 |
+| nats | false | 10000 | 10000 | 0.18 / 0.95 / 3.67 | 0.67 / 2.03 / 4.58 |
+| nats | false | 20000 | 20000 | 0.14 / 16 / 39 | 0.52 / 18 / 40 |
+| nats | false | 5000 (4 groups) | 5000 | 0.28 / 0.77 / 2.76 | 1.09 / 2.29 / 4.10 |
+| nats | false | max (64 producers) | 89084 | 0.66 / 1.69 / 4.32 | - |
+
+With fsync on, neither system sustained 10k msgs/s with 8 synchronous producers on this box: freshDB reached 9.2k/s, NATS 7.6k/s, and e2e latency then grows with the backlog. NATS JetStream runs embedded with `SyncAlways`, and its publish waits for the PubAck. That is not how NATS is usually deployed or tuned, so treat this as a comparison of durable-ack paths, not of the systems overall.
+
+With fsync off, NATS is ahead: it has lower e2e tails at every fixed rate and a higher max publish rate (89k vs 79k msgs/s). In the max-throughput rows, NATS consumers fell behind their producers (a backlog of 30k messages at the end with fsync on, 264k with fsync off). freshDB's consumers kept up (backlog 0).
+
+## Transactions
+
+### OCC transfers between hot keys (read 2, write 2, retry ≤16)
+
+commits/s (abort rate). `invariant` (sum of balances unchanged) held in every cell.
+
+| fsync | clients | hot keys | freshdb | badger |
+|---|---|---|---|---|
+| true | 8 | 1 | 2366 (88%) | 15929 (86%) |
+| true | 8 | 16 | 4347 (65%) | 18506 (51%) |
+| true | 8 | 256 | 7520 (10%) | 23040 (5%) |
+| true | 8 | 65536 | 7941 (0%) | 22882 (0%) |
+| true | 64 | 1 | 2070 (99%) | 14122 (95%) |
+| true | 64 | 16 | 6565 (94%) | 17418 (90%) |
+| true | 64 | 256 | 30097 (51%) | 20971 (36%) |
+| true | 64 | 65536 | 39962 (0%) | 24103 (0%) |
+| false | 8 | 1 | 7270 (87%) | 42615 (84%) |
+| false | 8 | 16 | 12766 (61%) | 82628 (53%) |
+| false | 8 | 256 | 20938 (8%) | 97931 (6%) |
+| false | 8 | 65536 | 17154 (0%) | 75745 (0%) |
+| false | 64 | 1 | 5269 (98%) | 24865 (92%) |
+| false | 64 | 16 | 17074 (93%) | 41178 (83%) |
+| false | 64 | 256 | 63071 (50%) | 84477 (38%) |
+| false | 64 | 65536 | 76046 (0%) | 89483 (0%) |
+
+### Multi-lens transaction (freshDB only)
+
+Each transaction fetches N messages from a consumer group, writes one KV key per message, publishes one message per input to an output topic, and acks. Latency is in ms (p50 / p99 / p99.9).
+
+| fsync | partitions | msgs/txn | txns/s | msgs/s | latency | exactly-once | input drained |
+|---|---|---|---|---|---|---|---|
+| true | 1 | 1 | 2825 | 2825 | 0.31 / 1.38 / 2.39 | True | False |
+| true | 1 | 10 | 2411 | 24110 | 0.33 / 1.59 / 4.60 | True | False |
+| true | 8 | 1 | 8525 | 8525 | 0.77 / 3.51 / 9.10 | True | False |
+| true | 8 | 10 | 6190 | 61902 | 1.10 / 4.20 / 16 | True | False |
+| false | 1 | 1 | 7621 | 7621 | 0.12 / 0.55 / 1.01 | True | False |
+| false | 1 | 10 | 5952 | 59518 | 0.14 / 0.80 / 2.03 | True | False |
+| false | 8 | 1 | 25068 | 25068 | 0.24 / 1.59 / 9.84 | True | False |
+| false | 8 | 10 | 13335 | 133346 | 0.47 / 3.55 / 18 | True | False |
+
+## Vectors (recall@10 vs QPS)
+
+Synthetic Gaussian clusters, 128-d, cosine, 200 queries. Latency is in ms.
+
+| system | N | clients | recall@10 | QPS | p50 / p99 / p99.9 |
+|---|---|---|---|---|---|
+| freshdb | 10000 | 1 | 1 | 343.2 | 2.80 / 4.16 / 4.83 |
+| freshdb | 10000 | 8 | 1 | 2132.8 | 3.19 / 7.56 / 12 |
+| flat-go-loop | 10000 | 1 | 1 | 1333.9 | 0.73 / 1.23 / 2.36 |
+| flat-go-loop | 10000 | 8 | 1 | 9228.6 | 0.78 / 2.26 / 3.68 |
+| freshdb | 100000 | 1 | 1 | 19.3 | 51 / 72 / 73 |
+| freshdb | 100000 | 8 | 1 | 148.3 | 52 / 88 / 112 |
+| flat-go-loop | 100000 | 1 | 1 | 144.6 | 6.84 / 9.78 / 42 |
+| flat-go-loop | 100000 | 8 | 1 | 1075.5 | 7.24 / 11 / 13 |
+
+Recall is 1.0 for both because both search exactly. This compares freshDB's overhead against the cheapest possible exact search. There is no ANN comparison because freshDB has no ANN index yet.
+
+## S3 (local MinIO)
+
+Commit latency is in ms. Cost = counted requests × the AWS us-east-1 list price (see Methodology). It is an estimate that excludes storage, transfer and free tier.
+
+| run | clients | keys/txn | commits/s | latency p50 / p99 / p99.9 | PUT/commit | est. $ / 1M commits |
+|---|---|---|---|---|---|---|
+| batch-size | 1 | 1 | 608 | 1.51 / 3.10 / 20 | 1 | 5 |
+| batch-size | 1 | 10 | 585 | 1.57 / 3.19 / 13 | 1 | 5 |
+| batch-size | 1 | 100 | 356 | 2.62 / 6.64 / 11 | 1 | 5 |
+| batch-size | 1 | 1000 | 91 | 10 / 28 / 34 | 1 | 5 |
+| group-commit | 1 | 1 | 632 | 1.43 / 3.05 / 28 | 1 | 5 |
+| group-commit | 8 | 1 | 2487 | 3.02 / 5.46 / 7.20 | 0.25 | 1.25 |
+| group-commit | 64 | 1 | 14247 | 3.98 / 13 / 37 | 0.031 | 0.16 |
+
+| cold open: segments | median open ms (3 runs) | requests |
+|---|---|---|
+| 101 | 68.9 | 2 PUT, 106 GET, 4 LIST |
+| 1001 | 765.6 | 2 PUT, 1006 GET, 4 LIST |
+| 5001 | 3165.9 | 2 PUT, 5006 GET, 4 LIST |
+
+## Methodology
+
+Everything is in [`bench/`](../bench), a separate Go module, so the baseline
+engines never become freshDB dependencies. One binary, `freshdb-bench`, has a
+subcommand per suite. Every result file records the exact command line, seed,
+warm-up and measurement durations, Go version, CPU, kernel, disk, freshDB
+commit and load average at start. Every run is in the results; nothing is
+filtered.
+
+### Latency measurement
+
+- Latencies go into **HdrHistogram** (1 ns to 120 s, 3 significant digits),
+  one histogram per client, merged at the end.
+- **Closed loop.** Each client sends its next op as soon as the last one
+  returns. This gives **maximum throughput**. Its latency is service time
+  only: it hides queueing (coordinated omission).
+- **Open loop.** This is the latency that matters. Each cell then runs at a
+  fixed rate of **0.5× the measured closed-loop max**, capped at
+  **200k ops/s**. Pacing is per client, like wrk2: client *i* owns slots *i*,
+  *i+N*, *i+2N*… of one global schedule. Latency is measured **from the
+  intended start time**, so a stall is charged to every op queued behind it
+  (coordinated-omission corrected).
+- **Why the 200k cap.** Above ~200k ops/s the harness itself added
+  milliseconds of tail latency on this box (see `calib`).
+- **Open loop at 64 clients.** A client blocked on a durable write delays its
+  own next slots, exactly as with YCSB's `-target`. So mixed read/write
+  workloads at 64 clients show high open-loop latency even for reads.
+- **`calib`** measures the harness's own floor at the start and end of the run:
+  - a no-op through the same open-loop harness at 20k/200k/1M ops/s;
+  - timer lateness;
+  - a 4 KiB append+fsync probe of the disk.
+  No engine can show a commit tail lower than that disk's fsync tail.
+- **Go GC.** All engines run inside the benchmark process (they are all
+  embedded Go libraries). Go GC pauses and assists are therefore part of every
+  engine's latency, and each phase records GC cycles and the max
+  stop-the-world pause.
+
+### Suites
+
+**KV: YCSB A/B/C/D/F** (`freshdb-bench ycsb`)
+- 1,000,000 records, 1 KiB values, keys `user%019d`.
+- Scrambled zipfian with θ=0.99 (FNV-1a of the rank, as YCSB does). D uses
+  "latest", bounded by an acknowledged-insert counter as in YCSB, so it never
+  reads an uncommitted insert.
+- The workloads run in the order A, B, C, F, D on the same loaded data.
+- For each of 1, 8 and 64 clients: 2 s closed-loop warm-up (discarded), 5 s
+  closed loop, then 5 s open loop. Seed 42.
+- Each op uses a fresh value buffer.
+- A = 50/50 read/update; B = 95/5; C = read-only; D = 95% read-latest / 5%
+  insert; F = 50% read / 50% read-modify-write.
+- RMW is a transaction where the engine has one. freshDB and Badger retry an
+  OCC conflict up to 16 times, then count an error. Pebble has no
+  transactions, so RMW uses a striped lock.
+- Durability. With `fsync=true` each engine acknowledges after an fsync:
+  - freshDB: segment fsync + rename + directory fsync, with group commit.
+  - Badger: `SyncWrites`.
+  - Pebble: `Sync`.
+  - bbolt: default fdatasync. Each write is one `db.Update`. bbolt's
+    `db.Batch` with its default 10 ms `MaxBatchDelay` made every
+    low-concurrency write wait 10 ms (~190 ops/s at 1 client), so it is not
+    the headline config. `db.Batch` with a 1 ms delay is reported separately
+    below.
+  - SQLite: modernc, pure Go; WAL with `synchronous=FULL`, one writer
+    connection and 64 read-only connections.
+
+  With `fsync=false` each uses its no-sync mode. freshDB's is
+  `store.FS.SetUnsafeNoSync`, a benchmark/test-only switch.
+- Results also record load time, disk use after the run and peak RSS (VmHWM).
+
+**Streaming** (`freshdb-bench msg`), modeled on the OpenMessaging benchmark
+- 8 producers publish 1 KiB messages at fixed aggregate rates of 1k, 5k, 10k
+  and 20k msgs/s for 10 s each.
+- Every payload carries its intended send time, so **end-to-end latency**
+  (intended send → consumer receive) is coordinated-omission corrected.
+- Consumer groups: 1 and 4 groups at 5k msgs/s; each group reads every message.
+- Max throughput: 64 closed-loop producers.
+- freshDB:
+  - Publish is one durable transaction.
+  - Consume is `Fetch` + `Ack` in one transaction.
+  - Consumers poll, sleeping 200 µs on an empty fetch; there is no push yet.
+- NATS JetStream:
+  - Embedded server, file storage, `SyncAlways` when fsync=true.
+  - Publish waits for the PubAck.
+  - Consumers are pull consumers with `Fetch` and an `AckSync` of the last
+    message per batch (AckAll).
+- Both run in-process, over loopback for NATS.
+
+**Transactions** (`freshdb-bench txn`)
+- OCC contention: transfers between hot keys (read two, write two). Runs
+  with 8 and 64 clients and 1, 16, 256 or 65,536 hot keys, on freshDB and
+  Badger.
+- Reports commits/s, the abort rate (conflicts ÷ attempts), how many ops gave
+  up after 16 retries, and checks that **the sum over all keys is unchanged**.
+- Multi-lens transaction (freshDB only):
+  - Fetch N messages from a consumer group, write one KV key per message,
+    publish one message per input to an output topic, and Ack — all in one
+    transaction.
+  - Runs with 1 and 8 partitions (independent workers), N = 1 and 10, over a
+    200k-message prefill.
+  - Checks **exactly-once**: consumed == output messages == result keys ==
+    acked.
+
+**Vectors** (`freshdb-bench vector`)
+- Synthetic Gaussian clusters: 100 centers, σ=0.15, 128 dimensions, cosine,
+  N = 10k and 100k, 200 queries.
+- This is **not** SIFT or GloVe. Ground truth is exact float64 search.
+- recall@10 and QPS at 1 and 8 clients against a plain flat Go loop over the
+  same vectors.
+- freshDB has **no ANN index**: search is exact, so recall is 1.0 by
+  construction, and the flat loop is the lower bound on brute-force cost.
+
+**S3** (`freshdb-bench s3`)
+- Batch size: 1 client, 1/10/100/1000 keys × 1 KiB per transaction.
+- Group commit: 1/8/64 clients, 1 key per transaction.
+- Requests per commit come from a counting `store.Store` wrapper (PUT, GET,
+  LIST, DELETE).
+- **Estimated request cost** = counted requests × the published AWS price.
+  The price comes from the AWS Price List API for AmazonS3 in us-east-1
+  ([index.json](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/current/us-east-1/index.json),
+  publicationDate 2026-10-15; also on
+  [aws.amazon.com/s3/pricing](https://aws.amazon.com/s3/pricing/)):
+  $0.005 per 1,000 PUT/COPY/POST/LIST and $0.0004 per 1,000 GET. Storage,
+  transfer, free tier and discounts are excluded.
+- Cold open: write exactly N segments (one commit each), then time
+  `OpenStore` three times (median) and count its requests.
+- **This ran against a local single-node MinIO over loopback.** AWS S3 adds a
+  network round trip of milliseconds per request, so treat the latencies here
+  as a floor. **AWS S3 itself has not been measured.**
+
+## Caveats and what went wrong during the run
+
+- **Single run, no repeats, shared VM.** The run had no error bars. Cells
+  within ~20% of each other should be treated as ties.
+- **Host VM freezes.** The VM was frozen by the host twice during the first
+  pass (20:17–20:21 and 20:29–20:34 IST; the kernel logged systemd watchdog
+  aborts at resume). Badger YCSB F (64 clients, fsync on) and SQLite YCSB B
+  (1 client, fsync on) were caught in them. Both engines' full fsync-on YCSB
+  runs were redone; the published files are the reruns. A freeze watcher
+  (1 s ticks) recorded no gap > 3 s during the reruns.
+- **bbolt adapter bug (fixed, rerun).** The first pass wrote through
+  `db.Batch` with bbolt's default 10 ms `MaxBatchDelay`. Every write at 1
+  client then waited 10 ms, giving ~190 ops/s. The published bbolt numbers use
+  one `db.Update` per write. `db.Batch` with a 1 ms delay is in
+  [`bbolt-batch-1ms/`](../bench/results/2026-10-27/bbolt-batch-1ms/):
+  it is faster at 64 writers and slower at 1.
+- **Multi-lens harness bug (fixed, rerun).** In the first pass, batch-10 cells
+  drained the 200k-message input. The loop then counted empty fetches as
+  transactions (reporting "2.8M txns/s"), and the run failed its "never ran
+  dry" guard, which was reported as `exactly-once: false`. Message counts were
+  equal in every cell; exactly-once itself never failed. Workers now stop on
+  an empty input, the input is 1M messages, and drained is reported in its
+  own column.
+- **Everything is in-process.** Go GC pauses and assists land in every
+  engine's latency; each phase records GC cycles and the max STW pause in the
+  JSON. NATS also runs embedded, over loopback.
+- **freshDB's no-sync mode** (`store.FS.SetUnsafeNoSync`) exists only for
+  benchmarks and tests. Do not use it for data you want to keep.
+- **S3 is MinIO on loopback, not AWS.** Real S3 adds milliseconds per request,
+  so the latencies here are a floor. The request counts and the cost
+  arithmetic carry over; the cost itself is an estimate from list prices.
+- **Vectors are synthetic** (Gaussian clusters, not SIFT/GloVe). freshDB has
+  no ANN index.
+- **Not measured:** AWS S3 or R2, other hardware, Windows or macOS, datasets
+  larger than RAM, long-running (hours) behaviour, or compaction under load.
