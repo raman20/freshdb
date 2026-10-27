@@ -11,8 +11,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"golang.org/x/sys/unix"
 )
 
 // FS is a local-directory Store. PutIfAbsent = write temp file, fsync it,
@@ -45,15 +43,6 @@ func (s *FS) path(key string) (string, error) {
 		return "", fmt.Errorf("store: bad key %q", key)
 	}
 	return filepath.Join(s.root, filepath.FromSlash(key)), nil
-}
-
-func syncDir(dir string) error {
-	d, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	return d.Sync()
 }
 
 func (s *FS) mkdirs(dir string) error {
@@ -98,15 +87,10 @@ func (s *FS) PutIfAbsent(_ context.Context, key string, data []byte) error {
 		os.Remove(tmp)
 		return err
 	}
-	err = unix.Renameat2(unix.AT_FDCWD, tmp, unix.AT_FDCWD, p, unix.RENAME_NOREPLACE)
-	if errors.Is(err, unix.EINVAL) || errors.Is(err, unix.ENOSYS) {
-		// filesystem without RENAME_NOREPLACE: link(2) is also atomic create-only
-		err = os.Link(tmp, p)
-		os.Remove(tmp)
-	}
+	err = publishNoReplace(tmp, p)
 	if err != nil {
 		os.Remove(tmp)
-		if errors.Is(err, unix.EEXIST) || errors.Is(err, fs.ErrExist) {
+		if errors.Is(err, fs.ErrExist) {
 			return ErrExists
 		}
 		return err

@@ -75,7 +75,7 @@ freshdb version
 ```
 
 Or download a binary from [Releases](https://github.com/raman20/freshdb/releases)
-(Linux, macOS, Windows; amd64/arm64), or build from source:
+(Linux and macOS on amd64/arm64, Windows on amd64), or build from source:
 `git clone https://github.com/raman20/freshdb && cd freshdb && go build ./cmd/freshdb`.
 
 As a Go library: `go get github.com/raman20/freshdb`.

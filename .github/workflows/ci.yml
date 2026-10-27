@@ -47,6 +47,21 @@ jobs:
           go run ./examples/tour
           FRESHDB=/tmp/freshdb DATA=/tmp/demo ./examples/agent-demo.sh
 
+  cross:
+    name: macOS tests + cross builds
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -count=1 ./...
+      - name: cross-compile (CGO off)
+        run: |
+          for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 freebsd/amd64; do
+            CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -o /dev/null ./cmd/freshdb && echo "$t ok"
+          done
+
   simulation:
     runs-on: ubuntu-latest
     steps:

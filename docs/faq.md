@@ -18,6 +18,12 @@ inspired freshDB's fencing protocol. freshDB is pure Go, and it puts topics,
 documents, vectors and crypto-shredding on the same log. SlateDB is far more
 mature for KV workloads and has compaction. See the comparison table in the README.
 
+**Which platforms are supported?**
+Linux is the primary platform: all tests, the simulator and the crash tests run
+there. In CI the unit tests also run on macOS. Windows binaries build, but are
+untested: Windows can't fsync a directory, so the durability of a new file's
+directory entry after power loss is not verified there.
+
 **Can two processes write to the same database?**
 Only one at a time. A new opener fences the old one, which then gets
 `ErrFenced`. For many writers, use many databases (for example one per tenant
