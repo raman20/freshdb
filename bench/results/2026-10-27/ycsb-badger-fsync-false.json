@@ -1,0 +1,837 @@
+{
+  "suite": "ycsb",
+  "env": {
+    "time": "2026-10-27T20:44:42+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "fc0b1fb",
+    "command": "bin/freshdb-bench ycsb -system badger -fsync=false -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27",
+    "loadavg_at_start": "3.74 3.45 2.94"
+  },
+  "params": {
+    "system": "badger",
+    "fsync": false,
+    "keys": 1000000,
+    "value_bytes": 1024,
+    "workloads": "A,B,C,F,D",
+    "clients": [
+      1,
+      8,
+      64
+    ],
+    "warmup": "2s",
+    "duration": "5s",
+    "open_loop_fraction_of_max": 0.5,
+    "open_loop_cap_ops_per_sec": 200000,
+    "seed": 42,
+    "zipf_theta": 0.99,
+    "load_seconds": 6.92,
+    "load_keys_per_sec": 144447,
+    "disk_after_run": "1.5G",
+    "peak_rss": "4815752 kB"
+  },
+  "runs": [
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 213602,
+        "ops_per_sec": 42720.1,
+        "errors": 0,
+        "latency": {
+          "count": 213602,
+          "mean_us": 23.17,
+          "p50_us": 17.44,
+          "p99_us": 81.98,
+          "p999_us": 170.24,
+          "max_us": 36896.77
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 1.54,
+          "stw_pause_max_ms": 0.67,
+          "heap_inuse_end_mb": 1500,
+          "gc_cpu_fraction_cumulative": 0.0043
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 106800,
+        "ops_per_sec": 21360.2,
+        "target_ops_per_sec": 21360.1,
+        "errors": 0,
+        "latency": {
+          "count": 106800,
+          "mean_us": 859.88,
+          "p50_us": 22.27,
+          "p99_us": 33439.74,
+          "p999_us": 48627.71,
+          "max_us": 49872.9
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.11,
+          "stw_pause_max_ms": 0.11,
+          "heap_inuse_end_mb": 2205,
+          "gc_cpu_fraction_cumulative": 0.0035
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 516262,
+        "ops_per_sec": 103251.3,
+        "errors": 0,
+        "latency": {
+          "count": 516262,
+          "mean_us": 77.11,
+          "p50_us": 60.06,
+          "p99_us": 295.94,
+          "p999_us": 1047.04,
+          "max_us": 58130.43
+        },
+        "go_gc": {
+          "cycles": 5,
+          "stw_pause_total_ms": 3.58,
+          "stw_pause_max_ms": 2.06,
+          "heap_inuse_end_mb": 2305,
+          "gc_cpu_fraction_cumulative": 0.0036
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 258128,
+        "ops_per_sec": 51625.3,
+        "target_ops_per_sec": 51625.7,
+        "errors": 0,
+        "latency": {
+          "count": 258128,
+          "mean_us": 14676.3,
+          "p50_us": 48.19,
+          "p99_us": 161218.56,
+          "p999_us": 172883.97,
+          "max_us": 179044.35
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 3.9,
+          "stw_pause_max_ms": 3.19,
+          "heap_inuse_end_mb": 1372,
+          "gc_cpu_fraction_cumulative": 0.0036
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 635432,
+        "ops_per_sec": 127078.5,
+        "errors": 0,
+        "latency": {
+          "count": 635432,
+          "mean_us": 503,
+          "p50_us": 369.41,
+          "p99_us": 2666.5,
+          "p999_us": 12828.67,
+          "max_us": 27885.57
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 5.82,
+          "stw_pause_max_ms": 5.18,
+          "heap_inuse_end_mb": 2927,
+          "gc_cpu_fraction_cumulative": 0.0039
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 317696,
+        "ops_per_sec": 63536.7,
+        "target_ops_per_sec": 63539.3,
+        "errors": 0,
+        "latency": {
+          "count": 317696,
+          "mean_us": 43558.35,
+          "p50_us": 1516.54,
+          "p99_us": 384303.1,
+          "p999_us": 420478.98,
+          "max_us": 572522.5
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 10.93,
+          "stw_pause_max_ms": 6.44,
+          "heap_inuse_end_mb": 1800,
+          "gc_cpu_fraction_cumulative": 0.0042
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 214687,
+        "ops_per_sec": 42937.3,
+        "errors": 0,
+        "latency": {
+          "count": 214687,
+          "mean_us": 23.1,
+          "p50_us": 21.98,
+          "p99_us": 54.34,
+          "p999_us": 87.42,
+          "max_us": 1001.98
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.18,
+          "stw_pause_max_ms": 0.18,
+          "heap_inuse_end_mb": 1807,
+          "gc_cpu_fraction_cumulative": 0.0037
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 107343,
+        "ops_per_sec": 21468.8,
+        "target_ops_per_sec": 21468.7,
+        "errors": 0,
+        "latency": {
+          "count": 107343,
+          "mean_us": 63.57,
+          "p50_us": 29.92,
+          "p99_us": 564.22,
+          "p999_us": 6189.06,
+          "max_us": 7540.74
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.07,
+          "stw_pause_max_ms": 0.07,
+          "heap_inuse_end_mb": 1706,
+          "gc_cpu_fraction_cumulative": 0.0035
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 935510,
+        "ops_per_sec": 187098.8,
+        "errors": 0,
+        "latency": {
+          "count": 935510,
+          "mean_us": 42.48,
+          "p50_us": 26.27,
+          "p99_us": 275.71,
+          "p999_us": 655.87,
+          "max_us": 81133.57
+        },
+        "go_gc": {
+          "cycles": 11,
+          "stw_pause_total_ms": 2.62,
+          "stw_pause_max_ms": 0.41,
+          "heap_inuse_end_mb": 940,
+          "gc_cpu_fraction_cumulative": 0.0037
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 467747,
+        "ops_per_sec": 93549,
+        "target_ops_per_sec": 93549.4,
+        "errors": 0,
+        "latency": {
+          "count": 467747,
+          "mean_us": 157.55,
+          "p50_us": 33.31,
+          "p99_us": 3551.23,
+          "p999_us": 12083.2,
+          "max_us": 17842.18
+        },
+        "go_gc": {
+          "cycles": 9,
+          "stw_pause_total_ms": 3.26,
+          "stw_pause_max_ms": 1.29,
+          "heap_inuse_end_mb": 612,
+          "gc_cpu_fraction_cumulative": 0.0041
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 389317,
+        "ops_per_sec": 77853.9,
+        "errors": 0,
+        "latency": {
+          "count": 389317,
+          "mean_us": 820.72,
+          "p50_us": 100.99,
+          "p99_us": 7385.09,
+          "p999_us": 17055.74,
+          "max_us": 163971.07
+        },
+        "go_gc": {
+          "cycles": 10,
+          "stw_pause_total_ms": 26.25,
+          "stw_pause_max_ms": 14,
+          "heap_inuse_end_mb": 623,
+          "gc_cpu_fraction_cumulative": 0.0057
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 194634,
+        "ops_per_sec": 38926.9,
+        "target_ops_per_sec": 38927,
+        "errors": 0,
+        "latency": {
+          "count": 194634,
+          "mean_us": 11744.41,
+          "p50_us": 764.42,
+          "p99_us": 98369.54,
+          "p999_us": 134610.94,
+          "max_us": 155844.61
+        },
+        "go_gc": {
+          "cycles": 7,
+          "stw_pause_total_ms": 2.78,
+          "stw_pause_max_ms": 1.05,
+          "heap_inuse_end_mb": 1666,
+          "gc_cpu_fraction_cumulative": 0.006
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 285675,
+        "ops_per_sec": 57134.9,
+        "errors": 0,
+        "latency": {
+          "count": 285675,
+          "mean_us": 17.33,
+          "p50_us": 14.6,
+          "p99_us": 54.98,
+          "p999_us": 124.99,
+          "max_us": 32473.09
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.52,
+          "stw_pause_max_ms": 0.28,
+          "heap_inuse_end_mb": 1386,
+          "gc_cpu_fraction_cumulative": 0.0056
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 142837,
+        "ops_per_sec": 28567.5,
+        "target_ops_per_sec": 28567.5,
+        "errors": 0,
+        "latency": {
+          "count": 142837,
+          "mean_us": 68.9,
+          "p50_us": 19.41,
+          "p99_us": 482.82,
+          "p999_us": 8667.14,
+          "max_us": 9994.24
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.36,
+          "stw_pause_max_ms": 0.25,
+          "heap_inuse_end_mb": 819,
+          "gc_cpu_fraction_cumulative": 0.0053
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1312344,
+        "ops_per_sec": 262465.3,
+        "errors": 0,
+        "latency": {
+          "count": 1312344,
+          "mean_us": 30.23,
+          "p50_us": 15.24,
+          "p99_us": 376.83,
+          "p999_us": 1099.78,
+          "max_us": 51380.22
+        },
+        "go_gc": {
+          "cycles": 24,
+          "stw_pause_total_ms": 51.94,
+          "stw_pause_max_ms": 46.27,
+          "heap_inuse_end_mb": 639,
+          "gc_cpu_fraction_cumulative": 0.0064
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 656163,
+        "ops_per_sec": 131232.5,
+        "target_ops_per_sec": 131232.7,
+        "errors": 0,
+        "latency": {
+          "count": 656163,
+          "mean_us": 39.55,
+          "p50_us": 18.13,
+          "p99_us": 441.6,
+          "p999_us": 4110.34,
+          "max_us": 6938.62
+        },
+        "go_gc": {
+          "cycles": 12,
+          "stw_pause_total_ms": 2.25,
+          "stw_pause_max_ms": 0.21,
+          "heap_inuse_end_mb": 683,
+          "gc_cpu_fraction_cumulative": 0.0067
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1538136,
+        "ops_per_sec": 307559.7,
+        "errors": 0,
+        "latency": {
+          "count": 1538136,
+          "mean_us": 207.73,
+          "p50_us": 14.46,
+          "p99_us": 4939.78,
+          "p999_us": 10256.38,
+          "max_us": 26607.62
+        },
+        "go_gc": {
+          "cycles": 30,
+          "stw_pause_total_ms": 7.19,
+          "stw_pause_max_ms": 0.74,
+          "heap_inuse_end_mb": 536,
+          "gc_cpu_fraction_cumulative": 0.0076
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.01,
+        "ops": 768899,
+        "ops_per_sec": 153393.8,
+        "target_ops_per_sec": 153779.9,
+        "errors": 0,
+        "latency": {
+          "count": 768899,
+          "mean_us": 19803.34,
+          "p50_us": 12746.75,
+          "p99_us": 100270.08,
+          "p999_us": 154927.1,
+          "max_us": 190709.76
+        },
+        "go_gc": {
+          "cycles": 14,
+          "stw_pause_total_ms": 2.69,
+          "stw_pause_max_ms": 0.35,
+          "heap_inuse_end_mb": 662,
+          "gc_cpu_fraction_cumulative": 0.008
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 152961,
+        "ops_per_sec": 30591.9,
+        "errors": 0,
+        "latency": {
+          "count": 152961,
+          "mean_us": 32.47,
+          "p50_us": 28.64,
+          "p99_us": 90.43,
+          "p999_us": 172.93,
+          "max_us": 78643.2
+        },
+        "go_gc": {
+          "cycles": 3,
+          "stw_pause_total_ms": 0.27,
+          "stw_pause_max_ms": 0.13,
+          "heap_inuse_end_mb": 1123,
+          "gc_cpu_fraction_cumulative": 0.0077
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 76479,
+        "ops_per_sec": 15296,
+        "target_ops_per_sec": 15296,
+        "errors": 0,
+        "latency": {
+          "count": 76479,
+          "mean_us": 361.56,
+          "p50_us": 33.63,
+          "p99_us": 13385.73,
+          "p999_us": 22495.23,
+          "max_us": 23822.34
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.41,
+          "stw_pause_max_ms": 0.29,
+          "heap_inuse_end_mb": 1143,
+          "gc_cpu_fraction_cumulative": 0.0075
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 364637,
+        "ops_per_sec": 72926.1,
+        "errors": 0,
+        "latency": {
+          "count": 364637,
+          "mean_us": 109.3,
+          "p50_us": 72.51,
+          "p99_us": 467.71,
+          "p999_us": 5591.04,
+          "max_us": 32260.1
+        },
+        "go_gc": {
+          "cycles": 9,
+          "stw_pause_total_ms": 13.02,
+          "stw_pause_max_ms": 5.37,
+          "heap_inuse_end_mb": 1407,
+          "gc_cpu_fraction_cumulative": 0.0075
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.04,
+        "ops": 182315,
+        "ops_per_sec": 36201.9,
+        "target_ops_per_sec": 36463.1,
+        "errors": 0,
+        "latency": {
+          "count": 182315,
+          "mean_us": 866.51,
+          "p50_us": 52.1,
+          "p99_us": 27230.21,
+          "p999_us": 50495.49,
+          "max_us": 68026.37
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 45.53,
+          "stw_pause_max_ms": 45.25,
+          "heap_inuse_end_mb": 2111,
+          "gc_cpu_fraction_cumulative": 0.0075
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 412048,
+        "ops_per_sec": 82399.2,
+        "errors": 1859,
+        "first_error": "Transaction Conflict. Please retry",
+        "latency": {
+          "count": 412048,
+          "mean_us": 775.94,
+          "p50_us": 460.8,
+          "p99_us": 6541.31,
+          "p999_us": 25657.34,
+          "max_us": 206962.69
+        },
+        "go_gc": {
+          "cycles": 5,
+          "stw_pause_total_ms": 3.87,
+          "stw_pause_max_ms": 2.1,
+          "heap_inuse_end_mb": 2527,
+          "gc_cpu_fraction_cumulative": 0.0075
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.02,
+        "ops": 205998,
+        "ops_per_sec": 41048.5,
+        "target_ops_per_sec": 41199.6,
+        "errors": 864,
+        "first_error": "Transaction Conflict. Please retry",
+        "latency": {
+          "count": 205998,
+          "mean_us": 10520.07,
+          "p50_us": 4825.09,
+          "p99_us": 68943.87,
+          "p999_us": 98172.93,
+          "max_us": 124846.08
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.42,
+          "stw_pause_max_ms": 0.23,
+          "heap_inuse_end_mb": 3171,
+          "gc_cpu_fraction_cumulative": 0.0074
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 632130,
+        "ops_per_sec": 126425.8,
+        "errors": 0,
+        "latency": {
+          "count": 632130,
+          "mean_us": 7.75,
+          "p50_us": 4.53,
+          "p99_us": 32.67,
+          "p999_us": 57.02,
+          "max_us": 647.68
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.47,
+          "stw_pause_max_ms": 0.24,
+          "heap_inuse_end_mb": 2485,
+          "gc_cpu_fraction_cumulative": 0.0072
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 316064,
+        "ops_per_sec": 63212.8,
+        "target_ops_per_sec": 63212.9,
+        "errors": 0,
+        "latency": {
+          "count": 316064,
+          "mean_us": 16.13,
+          "p50_us": 9.68,
+          "p99_us": 83.07,
+          "p999_us": 329.73,
+          "max_us": 913.41
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.23,
+          "stw_pause_max_ms": 0.23,
+          "heap_inuse_end_mb": 2466,
+          "gc_cpu_fraction_cumulative": 0.0071
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1697871,
+        "ops_per_sec": 339572.7,
+        "errors": 0,
+        "latency": {
+          "count": 1697871,
+          "mean_us": 23.31,
+          "p50_us": 9.34,
+          "p99_us": 160,
+          "p999_us": 329.73,
+          "max_us": 11894.78
+        },
+        "go_gc": {
+          "cycles": 8,
+          "stw_pause_total_ms": 1.75,
+          "stw_pause_max_ms": 0.32,
+          "heap_inuse_end_mb": 1243,
+          "gc_cpu_fraction_cumulative": 0.0068
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 848931,
+        "ops_per_sec": 169780.3,
+        "target_ops_per_sec": 169786.4,
+        "errors": 0,
+        "latency": {
+          "count": 848931,
+          "mean_us": 1454.24,
+          "p50_us": 20.19,
+          "p99_us": 31703.04,
+          "p999_us": 59179.01,
+          "max_us": 64782.34
+        },
+        "go_gc": {
+          "cycles": 5,
+          "stw_pause_total_ms": 1.21,
+          "stw_pause_max_ms": 0.36,
+          "heap_inuse_end_mb": 993,
+          "gc_cpu_fraction_cumulative": 0.0067
+        }
+      }
+    },
+    {
+      "system": "badger",
+      "fsync": false,
+      "durability": "SyncWrites=false",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1320530,
+        "ops_per_sec": 264036.5,
+        "errors": 0,
+        "latency": {
+          "count": 1320530,
+          "mean_us": 241.91,
+          "p50_us": 16.06,
+          "p99_us": 2265.09,
+          "p999_us": 9699.33,
+          "max_us": 132644.86
+        },
+        "go_gc": {
+          "cycles": 13,
+          "stw_pause_total_ms": 26.29,
+          "stw_pause_max_ms": 21.9,
+          "heap_inuse_end_mb": 1596,
+          "gc_cpu_fraction_cumulative": 0.007
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 660091,
+        "ops_per_sec": 132018,
+        "target_ops_per_sec": 132018.3,
+        "errors": 0,
+        "latency": {
+          "count": 660091,
+          "mean_us": 19825.58,
+          "p50_us": 51.26,
+          "p99_us": 277086.21,
+          "p999_us": 311164.93,
+          "max_us": 327680
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 35.14,
+          "stw_pause_max_ms": 34.55,
+          "heap_inuse_end_mb": 1470,
+          "gc_cpu_fraction_cumulative": 0.0072
+        }
+      }
+    }
+  ]
+}

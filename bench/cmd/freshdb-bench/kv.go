@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/pebble/v2"
 	badger "github.com/dgraph-io/badger/v4"
@@ -262,10 +263,19 @@ type boltKV struct {
 
 var bucket = []byte("kv")
 
+// boltBatchDelay selects how bbolt writes: 0 = one db.Update per op;
+// >0 = db.Batch with that MaxBatchDelay. bbolt's default delay (10ms) makes
+// every write at low concurrency wait the full delay for companions that
+// never arrive ("Batch is only useful when there are multiple goroutines").
+var boltBatchDelay time.Duration
+
 func openBolt(dir string, fsync bool) (KV, error) {
 	db, err := bolt.Open(filepath.Join(dir, "bolt.db"), 0o600, &bolt.Options{NoSync: !fsync, NoFreelistSync: true})
 	if err != nil {
 		return nil, err
+	}
+	if boltBatchDelay > 0 {
+		db.MaxBatchDelay = boltBatchDelay
 	}
 	err = db.Update(func(tx *bolt.Tx) error { _, err := tx.CreateBucketIfNotExists(bucket); return err })
 	return &boltKV{db, fsync}, err
@@ -285,13 +295,18 @@ func (b *boltKV) Get(k string) (v []byte, err error) {
 	return
 }
 
-// Writes go through db.Batch, bbolt's documented way to coalesce concurrent
-// writers into one transaction/fsync.
+func (b *boltKV) write(fn func(*bolt.Tx) error) error {
+	if boltBatchDelay > 0 {
+		return b.db.Batch(fn)
+	}
+	return b.db.Update(fn)
+}
+
 func (b *boltKV) Put(k string, v []byte) error {
-	return b.db.Batch(func(tx *bolt.Tx) error { return tx.Bucket(bucket).Put([]byte(k), v) })
+	return b.write(func(tx *bolt.Tx) error { return tx.Bucket(bucket).Put([]byte(k), v) })
 }
 func (b *boltKV) RMW(k string, fn func([]byte) []byte) error {
-	return b.db.Batch(func(tx *bolt.Tx) error {
+	return b.write(func(tx *bolt.Tx) error {
 		bk := tx.Bucket(bucket)
 		old := bk.Get([]byte(k))
 		return bk.Put([]byte(k), fn(append([]byte(nil), old...)))
@@ -317,10 +332,14 @@ func (b *boltKV) Load(n int, key func(int) string, val func(int) []byte) error {
 }
 func (b *boltKV) Close() error { return b.db.Close() }
 func (b *boltKV) Durability() string {
-	if b.fsync {
-		return "default (fdatasync per transaction), writes via db.Batch"
+	how := "one db.Update per write"
+	if boltBatchDelay > 0 {
+		how = fmt.Sprintf("writes via db.Batch, MaxBatchDelay=%v", boltBatchDelay)
 	}
-	return "NoSync=true, writes via db.Batch"
+	if b.fsync {
+		return "default (fdatasync per transaction), " + how
+	}
+	return "NoSync=true, " + how
 }
 
 // ---- SQLite (modernc.org/sqlite, pure Go) ----

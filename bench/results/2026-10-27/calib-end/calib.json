@@ -1,0 +1,160 @@
+{
+  "suite": "calib",
+  "env": {
+    "time": "2026-10-27T21:04:24+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "fc0b1fb-dirty",
+    "command": "bin/freshdb-bench calib -out results/2026-10-27/calib-end",
+    "loadavg_at_start": "2.92 3.69 3.59"
+  },
+  "params": {
+    "duration": "3s"
+  },
+  "runs": [
+    {
+      "what": "spin loop: lateness vs schedule (10k/s)",
+      "latency": {
+        "count": 30001,
+        "mean_us": 30.18,
+        "p50_us": 0.19,
+        "p99_us": 2.88,
+        "p999_us": 10272.77,
+        "max_us": 13246.46
+      }
+    },
+    {
+      "what": "open-loop harness, no-op",
+      "clients": 1,
+      "rate": 20000,
+      "latency": {
+        "count": 60000,
+        "mean_us": 0.6,
+        "p50_us": 0.2,
+        "p99_us": 2.64,
+        "p999_us": 11.39,
+        "max_us": 105.34
+      }
+    },
+    {
+      "what": "open-loop harness, no-op",
+      "clients": 8,
+      "rate": 20000,
+      "latency": {
+        "count": 60000,
+        "mean_us": 10.64,
+        "p50_us": 2.9,
+        "p99_us": 42.3,
+        "p999_us": 1755.14,
+        "max_us": 5267.46
+      }
+    },
+    {
+      "what": "open-loop harness, no-op",
+      "clients": 64,
+      "rate": 20000,
+      "latency": {
+        "count": 60000,
+        "mean_us": 32.33,
+        "p50_us": 10.97,
+        "p99_us": 140.03,
+        "p999_us": 4849.66,
+        "max_us": 14802.94
+      }
+    },
+    {
+      "what": "open-loop harness, no-op",
+      "clients": 1,
+      "rate": 200000,
+      "latency": {
+        "count": 600000,
+        "mean_us": 0.59,
+        "p50_us": 0.19,
+        "p99_us": 2.77,
+        "p999_us": 10.26,
+        "max_us": 72.06
+      }
+    },
+    {
+      "what": "open-loop harness, no-op",
+      "clients": 8,
+      "rate": 200000,
+      "latency": {
+        "count": 600000,
+        "mean_us": 33.81,
+        "p50_us": 2.77,
+        "p99_us": 741.38,
+        "p999_us": 5390.34,
+        "max_us": 8536.06
+      }
+    },
+    {
+      "what": "open-loop harness, no-op",
+      "clients": 64,
+      "rate": 200000,
+      "latency": {
+        "count": 600000,
+        "mean_us": 20.81,
+        "p50_us": 16.64,
+        "p99_us": 65.66,
+        "p999_us": 801.28,
+        "max_us": 5775.36
+      }
+    },
+    {
+      "what": "open-loop harness, no-op",
+      "clients": 1,
+      "rate": 1000000,
+      "latency": {
+        "count": 3000000,
+        "mean_us": 0.67,
+        "p50_us": 0.24,
+        "p99_us": 2.73,
+        "p999_us": 14.61,
+        "max_us": 209.66
+      }
+    },
+    {
+      "what": "open-loop harness, no-op",
+      "clients": 8,
+      "rate": 1000000,
+      "latency": {
+        "count": 3000000,
+        "mean_us": 8.56,
+        "p50_us": 2.78,
+        "p99_us": 32.59,
+        "p999_us": 1272.83,
+        "max_us": 3588.1
+      }
+    },
+    {
+      "what": "open-loop harness, no-op",
+      "clients": 64,
+      "rate": 1000000,
+      "latency": {
+        "count": 3000000,
+        "mean_us": 22.74,
+        "p50_us": 15.75,
+        "p99_us": 69.57,
+        "p999_us": 1674.24,
+        "max_us": 3854.34
+      }
+    },
+    {
+      "what": "disk: 4 KiB append + fsync, sequential, in /tmp/freshdb-bench",
+      "latency": {
+        "count": 23969,
+        "mean_us": 124.99,
+        "p50_us": 112.58,
+        "p99_us": 222.08,
+        "p999_us": 960,
+        "max_us": 13656.06
+      }
+    }
+  ]
+}

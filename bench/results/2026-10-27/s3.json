@@ -1,0 +1,209 @@
+{
+  "suite": "s3",
+  "env": {
+    "time": "2026-10-27T21:02:52+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "fc0b1fb",
+    "command": "bin/freshdb-bench s3 -batch 1,10,100,1000 -clients 1,8,64 -segments 100,1000,5000 -duration 10s -out results/2026-10-27",
+    "loadavg_at_start": "4.53 4.19 3.73"
+  },
+  "params": {
+    "duration": "10s",
+    "price_source": "AWS Price List API, AmazonS3 us-east-1, publicationDate 2026-10-15: $0.005 per 1,000 PUT/COPY/POST/LIST, $0.0004 per 1,000 GET",
+    "url_redacted": "s3://freshdb-bench?endpoint=127.0.0.1:9000\u0026insecure=1\u0026create=1",
+    "value_bytes": 1024
+  },
+  "runs": [
+    {
+      "kind": "batch-size",
+      "clients": 1,
+      "keys_per_txn": 1,
+      "commits": 6075,
+      "commits_per_sec": 607.5,
+      "keys_per_sec": 607.5,
+      "commit_latency": {
+        "count": 6075,
+        "mean_us": 1645.67,
+        "p50_us": 1505.28,
+        "p99_us": 3102.72,
+        "p999_us": 19742.72,
+        "max_us": 39157.76
+      },
+      "put_requests_per_commit": 1,
+      "est_usd_per_million_commits": 5,
+      "est_usd_per_million_keys": 5
+    },
+    {
+      "kind": "batch-size",
+      "clients": 1,
+      "keys_per_txn": 10,
+      "commits": 5852,
+      "commits_per_sec": 585.2,
+      "keys_per_sec": 5852,
+      "commit_latency": {
+        "count": 5852,
+        "mean_us": 1708.41,
+        "p50_us": 1570.82,
+        "p99_us": 3194.88,
+        "p999_us": 13058.05,
+        "max_us": 31391.74
+      },
+      "put_requests_per_commit": 1,
+      "est_usd_per_million_commits": 5,
+      "est_usd_per_million_keys": 0.5
+    },
+    {
+      "kind": "batch-size",
+      "clients": 1,
+      "keys_per_txn": 100,
+      "commits": 3563,
+      "commits_per_sec": 356.3,
+      "keys_per_sec": 35630,
+      "commit_latency": {
+        "count": 3563,
+        "mean_us": 2806.63,
+        "p50_us": 2623.49,
+        "p99_us": 6643.71,
+        "p999_us": 10502.14,
+        "max_us": 12009.47
+      },
+      "put_requests_per_commit": 1,
+      "est_usd_per_million_commits": 5,
+      "est_usd_per_million_keys": 0.05
+    },
+    {
+      "kind": "batch-size",
+      "clients": 1,
+      "keys_per_txn": 1000,
+      "commits": 914,
+      "commits_per_sec": 91.3,
+      "keys_per_sec": 91308.7,
+      "commit_latency": {
+        "count": 914,
+        "mean_us": 10950.69,
+        "p50_us": 10092.54,
+        "p99_us": 28409.86,
+        "p999_us": 33619.97,
+        "max_us": 66879.49
+      },
+      "put_requests_per_commit": 1,
+      "est_usd_per_million_commits": 5,
+      "est_usd_per_million_keys": 0.01
+    },
+    {
+      "kind": "group-commit",
+      "clients": 1,
+      "keys_per_txn": 1,
+      "commits": 6322,
+      "commits_per_sec": 632.2,
+      "keys_per_sec": 632.2,
+      "commit_latency": {
+        "count": 6322,
+        "mean_us": 1581.18,
+        "p50_us": 1429.5,
+        "p99_us": 3051.52,
+        "p999_us": 28196.86,
+        "max_us": 40697.86
+      },
+      "put_requests_per_commit": 1,
+      "est_usd_per_million_commits": 5,
+      "est_usd_per_million_keys": 5
+    },
+    {
+      "kind": "group-commit",
+      "clients": 8,
+      "keys_per_txn": 1,
+      "commits": 24874,
+      "commits_per_sec": 2487.4,
+      "keys_per_sec": 2487.4,
+      "commit_latency": {
+        "count": 24874,
+        "mean_us": 3216.27,
+        "p50_us": 3024.9,
+        "p99_us": 5455.87,
+        "p999_us": 7200.77,
+        "max_us": 45514.75
+      },
+      "put_requests_per_commit": 0.25,
+      "est_usd_per_million_commits": 1.25,
+      "est_usd_per_million_keys": 1.25
+    },
+    {
+      "kind": "group-commit",
+      "clients": 64,
+      "keys_per_txn": 1,
+      "commits": 142467,
+      "commits_per_sec": 14246.7,
+      "keys_per_sec": 14246.7,
+      "commit_latency": {
+        "count": 142467,
+        "mean_us": 4491.69,
+        "p50_us": 3983.36,
+        "p99_us": 12550.14,
+        "p999_us": 36896.77,
+        "max_us": 42139.65
+      },
+      "put_requests_per_commit": 0.031,
+      "est_usd_per_million_commits": 0.16,
+      "est_usd_per_million_keys": 0.16
+    },
+    {
+      "kind": "cold-open",
+      "segments": 101,
+      "open_ms_median": 68.9,
+      "open_ms_all": [
+        71.9,
+        66,
+        68.9
+      ],
+      "open_requests": {
+        "Put": 2,
+        "Get": 106,
+        "List": 4,
+        "Delete": 0
+      }
+    },
+    {
+      "kind": "cold-open",
+      "segments": 1001,
+      "open_ms_median": 765.6,
+      "open_ms_all": [
+        765.6,
+        686.6,
+        871
+      ],
+      "open_requests": {
+        "Put": 2,
+        "Get": 1006,
+        "List": 4,
+        "Delete": 0
+      }
+    },
+    {
+      "kind": "cold-open",
+      "segments": 5001,
+      "open_ms_median": 3165.9,
+      "open_ms_all": [
+        3165.9,
+        3347,
+        3114.4
+      ],
+      "open_requests": {
+        "Put": 2,
+        "Get": 5006,
+        "List": 4,
+        "Delete": 0
+      }
+    }
+  ],
+  "notes": [
+    "Latency is to a local MinIO (single node, single drive, loopback) unless the URL says otherwise; real S3 adds network round trips of milliseconds per request.",
+    "Cost = requests x published request price only (no storage, data transfer, free tier or volume discounts). It is an estimate."
+  ]
+}

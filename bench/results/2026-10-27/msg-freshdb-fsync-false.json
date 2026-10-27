@@ -1,0 +1,219 @@
+{
+  "suite": "msg",
+  "env": {
+    "time": "2026-10-27T20:57:17+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "fc0b1fb",
+    "command": "bin/freshdb-bench msg -system freshdb -fsync=false -rates 1000,5000,10000,20000 -producers 8 -groups 1,4 -duration 10s -dir /tmp/freshdb-bench -out results/2026-10-27",
+    "loadavg_at_start": "3.73 3.43 3.36"
+  },
+  "params": {
+    "consume_batch": 100,
+    "disk_after_run": "2.0G",
+    "drain_limit": "30s",
+    "duration": "10s",
+    "e2e": "consumer-side time after the durable ack minus the producer's intended send time (open-loop schedule)",
+    "fsync": false,
+    "max_producers": 64,
+    "payload_bytes": 1024,
+    "peak_rss": "3052532 kB",
+    "producers": 8,
+    "system": "freshdb"
+  },
+  "runs": [
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync (no fsync)",
+      "kind": "fixed-rate",
+      "target_rate": 1000,
+      "producers": 8,
+      "groups": 1,
+      "published": 10000,
+      "publish_per_sec": 1000.1,
+      "delivered_per_group_min": 10000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 10000,
+        "mean_us": 198.53,
+        "p50_us": 158.46,
+        "p99_us": 864.26,
+        "p999_us": 1607.68,
+        "max_us": 2566.14
+      },
+      "end_to_end_latency": {
+        "count": 10000,
+        "mean_us": 417.27,
+        "p50_us": 362.24,
+        "p99_us": 1363.97,
+        "p999_us": 2150.4,
+        "max_us": 3629.06
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync (no fsync)",
+      "kind": "fixed-rate",
+      "target_rate": 5000,
+      "producers": 8,
+      "groups": 1,
+      "published": 50000,
+      "publish_per_sec": 5000,
+      "delivered_per_group_min": 50000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 50000,
+        "mean_us": 836.08,
+        "p50_us": 385.54,
+        "p99_us": 17088.51,
+        "p999_us": 37388.29,
+        "max_us": 71237.63
+      },
+      "end_to_end_latency": {
+        "count": 50000,
+        "mean_us": 1251.88,
+        "p50_us": 688.64,
+        "p99_us": 18186.24,
+        "p999_us": 38207.49,
+        "max_us": 72679.42
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync (no fsync)",
+      "kind": "fixed-rate",
+      "target_rate": 10000,
+      "producers": 8,
+      "groups": 1,
+      "published": 100000,
+      "publish_per_sec": 9999.7,
+      "delivered_per_group_min": 100000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 100000,
+        "mean_us": 746.05,
+        "p50_us": 304.38,
+        "p99_us": 9994.24,
+        "p999_us": 26820.61,
+        "max_us": 29769.73
+      },
+      "end_to_end_latency": {
+        "count": 100000,
+        "mean_us": 1148.16,
+        "p50_us": 660.48,
+        "p99_us": 10838.02,
+        "p999_us": 27541.5,
+        "max_us": 30703.62
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync (no fsync)",
+      "kind": "fixed-rate",
+      "target_rate": 20000,
+      "producers": 8,
+      "groups": 1,
+      "published": 200000,
+      "publish_per_sec": 19999.8,
+      "delivered_per_group_min": 200000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 200000,
+        "mean_us": 2532.82,
+        "p50_us": 449.54,
+        "p99_us": 27623.42,
+        "p999_us": 40206.34,
+        "max_us": 43122.69
+      },
+      "end_to_end_latency": {
+        "count": 200000,
+        "mean_us": 2922.69,
+        "p50_us": 872.45,
+        "p99_us": 28164.1,
+        "p999_us": 40566.78,
+        "max_us": 43548.67
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync (no fsync)",
+      "kind": "fixed-rate",
+      "target_rate": 5000,
+      "producers": 8,
+      "groups": 4,
+      "published": 50000,
+      "publish_per_sec": 5000,
+      "delivered_per_group_min": 50000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 50000,
+        "mean_us": 911.88,
+        "p50_us": 414.46,
+        "p99_us": 14663.68,
+        "p999_us": 37781.5,
+        "max_us": 44892.16
+      },
+      "end_to_end_latency": {
+        "count": 200000,
+        "mean_us": 1489.17,
+        "p50_us": 898.56,
+        "p99_us": 15679.49,
+        "p999_us": 38993.92,
+        "max_us": 45940.74
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync (no fsync)",
+      "kind": "max-throughput",
+      "producers": 64,
+      "groups": 1,
+      "published": 791826,
+      "publish_per_sec": 79103.1,
+      "delivered_per_group_min": 791826,
+      "consume_per_sec_per_group": 79103.5,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 791826,
+        "mean_us": 808.31,
+        "p50_us": 607.23,
+        "p99_us": 3196.93,
+        "p999_us": 25214.98,
+        "max_us": 106823.68
+      },
+      "end_to_end_latency": {
+        "count": 0,
+        "mean_us": 0,
+        "p50_us": 0,
+        "p99_us": 0,
+        "p999_us": 0,
+        "max_us": 0
+      },
+      "errors": 0
+    }
+  ],
+  "notes": [
+    "freshDB consumers poll: an empty fetch sleeps 200us before retrying (no push notification yet)."
+  ]
+}

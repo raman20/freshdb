@@ -1,0 +1,838 @@
+{
+  "suite": "ycsb",
+  "env": {
+    "time": "2026-10-27T20:41:10+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "fc0b1fb",
+    "command": "bin/freshdb-bench ycsb -system freshdb -fsync=false -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27",
+    "loadavg_at_start": "2.44 2.70 2.62"
+  },
+  "params": {
+    "system": "freshdb",
+    "fsync": false,
+    "keys": 1000000,
+    "value_bytes": 1024,
+    "workloads": "A,B,C,F,D",
+    "clients": [
+      1,
+      8,
+      64
+    ],
+    "warmup": "2s",
+    "duration": "5s",
+    "open_loop_fraction_of_max": 0.5,
+    "open_loop_cap_ops_per_sec": 200000,
+    "seed": 42,
+    "zipf_theta": 0.99,
+    "load_seconds": 5.74,
+    "load_keys_per_sec": 174127,
+    "disk_after_run": "5.5G",
+    "peak_rss": "10163260 kB"
+  },
+  "runs": [
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 72403,
+        "ops_per_sec": 14479.9,
+        "errors": 0,
+        "latency": {
+          "count": 72403,
+          "mean_us": 68.88,
+          "p50_us": 11.47,
+          "p99_us": 278.27,
+          "p999_us": 617.98,
+          "max_us": 5554.18
+        },
+        "go_gc": {
+          "cycles": 18,
+          "stw_pause_total_ms": 2.13,
+          "stw_pause_max_ms": 0.44,
+          "heap_inuse_end_mb": 2480,
+          "gc_cpu_fraction_cumulative": 0.0282
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 36199,
+        "ops_per_sec": 7240.1,
+        "target_ops_per_sec": 7240,
+        "errors": 0,
+        "latency": {
+          "count": 36199,
+          "mean_us": 312.43,
+          "p50_us": 119.87,
+          "p99_us": 6307.84,
+          "p999_us": 18153.47,
+          "max_us": 19693.57
+        },
+        "go_gc": {
+          "cycles": 9,
+          "stw_pause_total_ms": 0.83,
+          "stw_pause_max_ms": 0.21,
+          "heap_inuse_end_mb": 2513,
+          "gc_cpu_fraction_cumulative": 0.0262
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 218482,
+        "ops_per_sec": 43693.6,
+        "errors": 0,
+        "latency": {
+          "count": 218482,
+          "mean_us": 182.83,
+          "p50_us": 161.54,
+          "p99_us": 556.03,
+          "p999_us": 14614.53,
+          "max_us": 41484.29
+        },
+        "go_gc": {
+          "cycles": 14,
+          "stw_pause_total_ms": 1.82,
+          "stw_pause_max_ms": 0.51,
+          "heap_inuse_end_mb": 2117,
+          "gc_cpu_fraction_cumulative": 0.0291
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 109234,
+        "ops_per_sec": 21845.8,
+        "target_ops_per_sec": 21846.8,
+        "errors": 0,
+        "latency": {
+          "count": 109234,
+          "mean_us": 9527.21,
+          "p50_us": 252.93,
+          "p99_us": 77987.84,
+          "p999_us": 105185.28,
+          "max_us": 120389.63
+        },
+        "go_gc": {
+          "cycles": 11,
+          "stw_pause_total_ms": 1.85,
+          "stw_pause_max_ms": 0.46,
+          "heap_inuse_end_mb": 2892,
+          "gc_cpu_fraction_cumulative": 0.0308
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 697377,
+        "ops_per_sec": 139459.5,
+        "errors": 0,
+        "latency": {
+          "count": 697377,
+          "mean_us": 457.92,
+          "p50_us": 237.31,
+          "p99_us": 2869.25,
+          "p999_us": 20054.02,
+          "max_us": 32768
+        },
+        "go_gc": {
+          "cycles": 6,
+          "stw_pause_total_ms": 1.22,
+          "stw_pause_max_ms": 0.6,
+          "heap_inuse_end_mb": 3182,
+          "gc_cpu_fraction_cumulative": 0.0297
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 348648,
+        "ops_per_sec": 69680.2,
+        "target_ops_per_sec": 69729.8,
+        "errors": 0,
+        "latency": {
+          "count": 348648,
+          "mean_us": 11293.93,
+          "p50_us": 4304.9,
+          "p99_us": 79101.95,
+          "p999_us": 92274.69,
+          "max_us": 115015.68
+        },
+        "go_gc": {
+          "cycles": 5,
+          "stw_pause_total_ms": 0.56,
+          "stw_pause_max_ms": 0.12,
+          "heap_inuse_end_mb": 4505,
+          "gc_cpu_fraction_cumulative": 0.0294
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 439525,
+        "ops_per_sec": 87904.2,
+        "errors": 0,
+        "latency": {
+          "count": 439525,
+          "mean_us": 11.25,
+          "p50_us": 1.79,
+          "p99_us": 192,
+          "p999_us": 547.84,
+          "max_us": 52920.32
+        },
+        "go_gc": {
+          "cycles": 5,
+          "stw_pause_total_ms": 0.6,
+          "stw_pause_max_ms": 0.17,
+          "heap_inuse_end_mb": 4183,
+          "gc_cpu_fraction_cumulative": 0.0295
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 219760,
+        "ops_per_sec": 43949.8,
+        "target_ops_per_sec": 43952.1,
+        "errors": 0,
+        "latency": {
+          "count": 219760,
+          "mean_us": 1923.8,
+          "p50_us": 54.66,
+          "p99_us": 34799.62,
+          "p999_us": 44302.34,
+          "max_us": 46071.81
+        },
+        "go_gc": {
+          "cycles": 3,
+          "stw_pause_total_ms": 42.62,
+          "stw_pause_max_ms": 42.27,
+          "heap_inuse_end_mb": 3880,
+          "gc_cpu_fraction_cumulative": 0.029
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1516093,
+        "ops_per_sec": 303189.6,
+        "errors": 0,
+        "latency": {
+          "count": 1516093,
+          "mean_us": 26.15,
+          "p50_us": 1.84,
+          "p99_us": 446.21,
+          "p999_us": 1118.21,
+          "max_us": 29556.74
+        },
+        "go_gc": {
+          "cycles": 6,
+          "stw_pause_total_ms": 1.32,
+          "stw_pause_max_ms": 0.3,
+          "heap_inuse_end_mb": 4414,
+          "gc_cpu_fraction_cumulative": 0.029
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.02,
+        "ops": 757974,
+        "ops_per_sec": 150933.3,
+        "target_ops_per_sec": 151594.8,
+        "errors": 0,
+        "latency": {
+          "count": 757974,
+          "mean_us": 8142.71,
+          "p50_us": 75.58,
+          "p99_us": 85721.09,
+          "p999_us": 105316.35,
+          "max_us": 116064.26
+        },
+        "go_gc": {
+          "cycles": 6,
+          "stw_pause_total_ms": 1.12,
+          "stw_pause_max_ms": 0.25,
+          "heap_inuse_end_mb": 3067,
+          "gc_cpu_fraction_cumulative": 0.0292
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 5860827,
+        "ops_per_sec": 1171999.3,
+        "errors": 0,
+        "latency": {
+          "count": 5860827,
+          "mean_us": 54.38,
+          "p50_us": 1.85,
+          "p99_us": 928.77,
+          "p999_us": 2750.46,
+          "max_us": 62488.58
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 0.81,
+          "stw_pause_max_ms": 0.48,
+          "heap_inuse_end_mb": 3915,
+          "gc_cpu_fraction_cumulative": 0.0292
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199877.1,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 19448.5,
+          "p50_us": 9936.9,
+          "p99_us": 121438.21,
+          "p999_us": 180092.93,
+          "max_us": 240386.05
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.38,
+          "stw_pause_max_ms": 0.24,
+          "heap_inuse_end_mb": 6196,
+          "gc_cpu_fraction_cumulative": 0.0306
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 3936938,
+        "ops_per_sec": 787385.9,
+        "errors": 0,
+        "latency": {
+          "count": 3936938,
+          "mean_us": 1.18,
+          "p50_us": 1.06,
+          "p99_us": 4.7,
+          "p999_us": 12.02,
+          "max_us": 23674.88
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.24,
+          "stw_pause_max_ms": 0.24,
+          "heap_inuse_end_mb": 4553,
+          "gc_cpu_fraction_cumulative": 0.0298
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199999.4,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 85.25,
+          "p50_us": 2.07,
+          "p99_us": 3565.57,
+          "p999_us": 7553.02,
+          "max_us": 10665.98
+        },
+        "go_gc": {
+          "cycles": 0,
+          "stw_pause_total_ms": 0,
+          "stw_pause_max_ms": 0,
+          "heap_inuse_end_mb": 4870,
+          "gc_cpu_fraction_cumulative": 0.0298
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 17057476,
+        "ops_per_sec": 3411470.9,
+        "errors": 0,
+        "latency": {
+          "count": 17057476,
+          "mean_us": 2.18,
+          "p50_us": 1.68,
+          "p99_us": 4.58,
+          "p999_us": 74.69,
+          "max_us": 66519.04
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.39,
+          "stw_pause_max_ms": 0.39,
+          "heap_inuse_end_mb": 5837,
+          "gc_cpu_fraction_cumulative": 0.0268
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 200000,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 11.58,
+          "p50_us": 4.29,
+          "p99_us": 30.45,
+          "p999_us": 1769.47,
+          "max_us": 6475.78
+        },
+        "go_gc": {
+          "cycles": 0,
+          "stw_pause_total_ms": 0,
+          "stw_pause_max_ms": 0,
+          "heap_inuse_end_mb": 6155,
+          "gc_cpu_fraction_cumulative": 0.0268
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 13333522,
+        "ops_per_sec": 2666643.3,
+        "errors": 0,
+        "latency": {
+          "count": 13333522,
+          "mean_us": 23.8,
+          "p50_us": 1.75,
+          "p99_us": 612.35,
+          "p999_us": 1537.02,
+          "max_us": 40402.94
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.17,
+          "stw_pause_max_ms": 0.17,
+          "heap_inuse_end_mb": 5004,
+          "gc_cpu_fraction_cumulative": 0.0257
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199998,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 23.64,
+          "p50_us": 16.82,
+          "p99_us": 65.12,
+          "p999_us": 1641.47,
+          "max_us": 7507.97
+        },
+        "go_gc": {
+          "cycles": 0,
+          "stw_pause_total_ms": 0,
+          "stw_pause_max_ms": 0,
+          "heap_inuse_end_mb": 5334,
+          "gc_cpu_fraction_cumulative": 0.0257
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 63539,
+        "ops_per_sec": 12707.5,
+        "errors": 0,
+        "latency": {
+          "count": 63539,
+          "mean_us": 78.48,
+          "p50_us": 14.71,
+          "p99_us": 372.99,
+          "p999_us": 1009.66,
+          "max_us": 3770.37
+        },
+        "go_gc": {
+          "cycles": 6,
+          "stw_pause_total_ms": 1.1,
+          "stw_pause_max_ms": 0.48,
+          "heap_inuse_end_mb": 5310,
+          "gc_cpu_fraction_cumulative": 0.0252
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 31768,
+        "ops_per_sec": 6353.9,
+        "target_ops_per_sec": 6353.8,
+        "errors": 0,
+        "latency": {
+          "count": 31768,
+          "mean_us": 2067.69,
+          "p50_us": 132.61,
+          "p99_us": 45350.91,
+          "p999_us": 62357.5,
+          "max_us": 64454.66
+        },
+        "go_gc": {
+          "cycles": 3,
+          "stw_pause_total_ms": 0.53,
+          "stw_pause_max_ms": 0.26,
+          "heap_inuse_end_mb": 6052,
+          "gc_cpu_fraction_cumulative": 0.0252
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 197262,
+        "ops_per_sec": 39450.3,
+        "errors": 3,
+        "first_error": "freshdb: transaction conflict (serializability); retry",
+        "latency": {
+          "count": 197262,
+          "mean_us": 202.46,
+          "p50_us": 138.75,
+          "p99_us": 709.63,
+          "p999_us": 13115.39,
+          "max_us": 40435.71
+        },
+        "go_gc": {
+          "cycles": 6,
+          "stw_pause_total_ms": 0.97,
+          "stw_pause_max_ms": 0.2,
+          "heap_inuse_end_mb": 5045,
+          "gc_cpu_fraction_cumulative": 0.0261
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.03,
+        "ops": 98625,
+        "ops_per_sec": 19602.8,
+        "target_ops_per_sec": 19725.2,
+        "errors": 0,
+        "latency": {
+          "count": 98625,
+          "mean_us": 16518.99,
+          "p50_us": 324.61,
+          "p99_us": 134610.94,
+          "p999_us": 150994.94,
+          "max_us": 159121.41
+        },
+        "go_gc": {
+          "cycles": 5,
+          "stw_pause_total_ms": 1.04,
+          "stw_pause_max_ms": 0.25,
+          "heap_inuse_end_mb": 4349,
+          "gc_cpu_fraction_cumulative": 0.0267
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 538692,
+        "ops_per_sec": 107705,
+        "errors": 14712,
+        "first_error": "freshdb: transaction conflict (serializability); retry",
+        "latency": {
+          "count": 538692,
+          "mean_us": 593.46,
+          "p50_us": 153.86,
+          "p99_us": 6074.37,
+          "p999_us": 22265.86,
+          "max_us": 174194.69
+        },
+        "go_gc": {
+          "cycles": 3,
+          "stw_pause_total_ms": 0.56,
+          "stw_pause_max_ms": 0.27,
+          "heap_inuse_end_mb": 6673,
+          "gc_cpu_fraction_cumulative": 0.0267
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 6.1,
+        "ops": 269262,
+        "ops_per_sec": 44106.2,
+        "target_ops_per_sec": 53852.5,
+        "errors": 5301,
+        "first_error": "freshdb: transaction conflict (serializability); retry",
+        "latency": {
+          "count": 269262,
+          "mean_us": 809899.02,
+          "p50_us": 1081081.86,
+          "p99_us": 1518338.05,
+          "p999_us": 1607467.01,
+          "max_us": 1635778.56
+        },
+        "go_gc": {
+          "cycles": 3,
+          "stw_pause_total_ms": 0.39,
+          "stw_pause_max_ms": 0.17,
+          "heap_inuse_end_mb": 5230,
+          "gc_cpu_fraction_cumulative": 0.0264
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 491088,
+        "ops_per_sec": 98217.4,
+        "errors": 0,
+        "latency": {
+          "count": 491088,
+          "mean_us": 10.06,
+          "p50_us": 1.75,
+          "p99_us": 169.6,
+          "p999_us": 385.02,
+          "max_us": 41877.5
+        },
+        "go_gc": {
+          "cycles": 3,
+          "stw_pause_total_ms": 0.66,
+          "stw_pause_max_ms": 0.43,
+          "heap_inuse_end_mb": 7812,
+          "gc_cpu_fraction_cumulative": 0.0267
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 245543,
+        "ops_per_sec": 49108.8,
+        "target_ops_per_sec": 49108.7,
+        "errors": 0,
+        "latency": {
+          "count": 245543,
+          "mean_us": 3260.62,
+          "p50_us": 84.35,
+          "p99_us": 44171.26,
+          "p999_us": 60620.8,
+          "max_us": 61669.38
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.34,
+          "stw_pause_max_ms": 0.23,
+          "heap_inuse_end_mb": 7460,
+          "gc_cpu_fraction_cumulative": 0.0266
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1658538,
+        "ops_per_sec": 331680.6,
+        "errors": 0,
+        "latency": {
+          "count": 1658538,
+          "mean_us": 23.94,
+          "p50_us": 1.76,
+          "p99_us": 400.9,
+          "p999_us": 800.77,
+          "max_us": 40632.32
+        },
+        "go_gc": {
+          "cycles": 3,
+          "stw_pause_total_ms": 0.4,
+          "stw_pause_max_ms": 0.14,
+          "heap_inuse_end_mb": 8310,
+          "gc_cpu_fraction_cumulative": 0.0267
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 829201,
+        "ops_per_sec": 165800.9,
+        "target_ops_per_sec": 165840.3,
+        "errors": 0,
+        "latency": {
+          "count": 829201,
+          "mean_us": 19872.54,
+          "p50_us": 198.02,
+          "p99_us": 155320.32,
+          "p999_us": 172621.82,
+          "max_us": 180486.14
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 0.63,
+          "stw_pause_max_ms": 0.18,
+          "heap_inuse_end_mb": 5547,
+          "gc_cpu_fraction_cumulative": 0.0269
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": false,
+      "durability": "SetUnsafeNoSync: no fsync at all (page cache only)",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 5419552,
+        "ops_per_sec": 1083661.3,
+        "errors": 0,
+        "latency": {
+          "count": 5419552,
+          "mean_us": 58.82,
+          "p50_us": 1.9,
+          "p99_us": 1303.55,
+          "p999_us": 2795.52,
+          "max_us": 40140.8
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.64,
+          "stw_pause_max_ms": 0.42,
+          "heap_inuse_end_mb": 6765,
+          "gc_cpu_fraction_cumulative": 0.0269
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 6.35,
+        "ops": 1000000,
+        "ops_per_sec": 157363.3,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 1539513.23,
+          "p50_us": 1908408.32,
+          "p99_us": 2577399.81,
+          "p999_us": 2636120.06,
+          "max_us": 2684354.56
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.3,
+          "stw_pause_max_ms": 0.3,
+          "heap_inuse_end_mb": 5688,
+          "gc_cpu_fraction_cumulative": 0.0264
+        }
+      }
+    }
+  ]
+}

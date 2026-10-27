@@ -1,0 +1,835 @@
+{
+  "suite": "ycsb",
+  "env": {
+    "time": "2026-10-27T20:54:16+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "fc0b1fb",
+    "command": "bin/freshdb-bench ycsb -system sqlite -fsync=false -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27",
+    "loadavg_at_start": "2.31 3.42 3.35"
+  },
+  "params": {
+    "system": "sqlite",
+    "fsync": false,
+    "keys": 1000000,
+    "value_bytes": 1024,
+    "workloads": "A,B,C,F,D",
+    "clients": [
+      1,
+      8,
+      64
+    ],
+    "warmup": "2s",
+    "duration": "5s",
+    "open_loop_fraction_of_max": 0.5,
+    "open_loop_cap_ops_per_sec": 200000,
+    "seed": 42,
+    "zipf_theta": 0.99,
+    "load_seconds": 20.15,
+    "load_keys_per_sec": 49632,
+    "disk_after_run": "4.6G",
+    "peak_rss": "330528 kB"
+  },
+  "runs": [
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 113695,
+        "ops_per_sec": 22738.8,
+        "errors": 0,
+        "latency": {
+          "count": 113695,
+          "mean_us": 43.84,
+          "p50_us": 38.75,
+          "p99_us": 84.03,
+          "p999_us": 1914.88,
+          "max_us": 15114.24
+        },
+        "go_gc": {
+          "cycles": 86,
+          "stw_pause_total_ms": 7.11,
+          "stw_pause_max_ms": 0.37,
+          "heap_inuse_end_mb": 5,
+          "gc_cpu_fraction_cumulative": 0.0032
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 56847,
+        "ops_per_sec": 11369.4,
+        "target_ops_per_sec": 11369.4,
+        "errors": 0,
+        "latency": {
+          "count": 56847,
+          "mean_us": 821.81,
+          "p50_us": 58.21,
+          "p99_us": 19152.9,
+          "p999_us": 28475.39,
+          "max_us": 30588.93
+        },
+        "go_gc": {
+          "cycles": 46,
+          "stw_pause_total_ms": 13.7,
+          "stw_pause_max_ms": 10.68,
+          "heap_inuse_end_mb": 5,
+          "gc_cpu_fraction_cumulative": 0.0032
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 103761,
+        "ops_per_sec": 20750,
+        "errors": 0,
+        "latency": {
+          "count": 103761,
+          "mean_us": 385.12,
+          "p50_us": 122.24,
+          "p99_us": 2914.3,
+          "p999_us": 4993.02,
+          "max_us": 30703.62
+        },
+        "go_gc": {
+          "cycles": 55,
+          "stw_pause_total_ms": 5.72,
+          "stw_pause_max_ms": 0.26,
+          "heap_inuse_end_mb": 9,
+          "gc_cpu_fraction_cumulative": 0.003
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 51875,
+        "ops_per_sec": 10375.1,
+        "target_ops_per_sec": 10375,
+        "errors": 0,
+        "latency": {
+          "count": 51875,
+          "mean_us": 137.45,
+          "p50_us": 63.9,
+          "p99_us": 2322.43,
+          "p999_us": 3837.95,
+          "max_us": 11239.42
+        },
+        "go_gc": {
+          "cycles": 28,
+          "stw_pause_total_ms": 2.97,
+          "stw_pause_max_ms": 0.42,
+          "heap_inuse_end_mb": 7,
+          "gc_cpu_fraction_cumulative": 0.0028
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 103188,
+        "ops_per_sec": 20624.6,
+        "errors": 0,
+        "latency": {
+          "count": 103188,
+          "mean_us": 3100.86,
+          "p50_us": 217.86,
+          "p99_us": 24068.1,
+          "p999_us": 38010.88,
+          "max_us": 64126.98
+        },
+        "go_gc": {
+          "cycles": 14,
+          "stw_pause_total_ms": 1.54,
+          "stw_pause_max_ms": 0.17,
+          "heap_inuse_end_mb": 28,
+          "gc_cpu_fraction_cumulative": 0.0026
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 51561,
+        "ops_per_sec": 10312.4,
+        "target_ops_per_sec": 10312.3,
+        "errors": 0,
+        "latency": {
+          "count": 51561,
+          "mean_us": 127.78,
+          "p50_us": 65.98,
+          "p99_us": 2162.69,
+          "p999_us": 6651.9,
+          "max_us": 17727.49
+        },
+        "go_gc": {
+          "cycles": 8,
+          "stw_pause_total_ms": 0.85,
+          "stw_pause_max_ms": 0.13,
+          "heap_inuse_end_mb": 25,
+          "gc_cpu_fraction_cumulative": 0.0024
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 149899,
+        "ops_per_sec": 29979.7,
+        "errors": 0,
+        "latency": {
+          "count": 149899,
+          "mean_us": 33.21,
+          "p50_us": 29.92,
+          "p99_us": 84.1,
+          "p999_us": 192.64,
+          "max_us": 2979.84
+        },
+        "go_gc": {
+          "cycles": 142,
+          "stw_pause_total_ms": 8.81,
+          "stw_pause_max_ms": 0.35,
+          "heap_inuse_end_mb": 6,
+          "gc_cpu_fraction_cumulative": 0.0026
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 74949,
+        "ops_per_sec": 14989.9,
+        "target_ops_per_sec": 14989.9,
+        "errors": 0,
+        "latency": {
+          "count": 74949,
+          "mean_us": 59.22,
+          "p50_us": 41.09,
+          "p99_us": 329.22,
+          "p999_us": 2115.58,
+          "max_us": 2791.42
+        },
+        "go_gc": {
+          "cycles": 75,
+          "stw_pause_total_ms": 4.44,
+          "stw_pause_max_ms": 0.24,
+          "heap_inuse_end_mb": 5,
+          "gc_cpu_fraction_cumulative": 0.0026
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 183505,
+        "ops_per_sec": 36700.2,
+        "errors": 0,
+        "latency": {
+          "count": 183505,
+          "mean_us": 217.6,
+          "p50_us": 157.57,
+          "p99_us": 1000.45,
+          "p999_us": 2138.11,
+          "max_us": 5566.46
+        },
+        "go_gc": {
+          "cycles": 119,
+          "stw_pause_total_ms": 17.34,
+          "stw_pause_max_ms": 0.45,
+          "heap_inuse_end_mb": 8,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 91750,
+        "ops_per_sec": 18350.1,
+        "target_ops_per_sec": 18350.1,
+        "errors": 0,
+        "latency": {
+          "count": 91750,
+          "mean_us": 98.42,
+          "p50_us": 46.4,
+          "p99_us": 854.53,
+          "p999_us": 6098.94,
+          "max_us": 36667.39
+        },
+        "go_gc": {
+          "cycles": 60,
+          "stw_pause_total_ms": 7.54,
+          "stw_pause_max_ms": 0.71,
+          "heap_inuse_end_mb": 9,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 163328,
+        "ops_per_sec": 32643.8,
+        "errors": 0,
+        "latency": {
+          "count": 163328,
+          "mean_us": 1958.13,
+          "p50_us": 284.93,
+          "p99_us": 48234.5,
+          "p999_us": 123011.07,
+          "max_us": 250609.66
+        },
+        "go_gc": {
+          "cycles": 28,
+          "stw_pause_total_ms": 4.36,
+          "stw_pause_max_ms": 0.43,
+          "heap_inuse_end_mb": 22,
+          "gc_cpu_fraction_cumulative": 0.0028
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 81609,
+        "ops_per_sec": 16312.9,
+        "target_ops_per_sec": 16321.9,
+        "errors": 0,
+        "latency": {
+          "count": 81609,
+          "mean_us": 521.26,
+          "p50_us": 63.52,
+          "p99_us": 14442.5,
+          "p999_us": 45285.38,
+          "max_us": 75038.72
+        },
+        "go_gc": {
+          "cycles": 14,
+          "stw_pause_total_ms": 5.37,
+          "stw_pause_max_ms": 1.61,
+          "heap_inuse_end_mb": 22,
+          "gc_cpu_fraction_cumulative": 0.0027
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 137129,
+        "ops_per_sec": 27425.4,
+        "errors": 0,
+        "latency": {
+          "count": 137129,
+          "mean_us": 36.32,
+          "p50_us": 34.98,
+          "p99_us": 68.8,
+          "p999_us": 161.92,
+          "max_us": 11329.54
+        },
+        "go_gc": {
+          "cycles": 125,
+          "stw_pause_total_ms": 7.85,
+          "stw_pause_max_ms": 0.37,
+          "heap_inuse_end_mb": 6,
+          "gc_cpu_fraction_cumulative": 0.0027
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 68563,
+        "ops_per_sec": 13712.8,
+        "target_ops_per_sec": 13712.7,
+        "errors": 0,
+        "latency": {
+          "count": 68563,
+          "mean_us": 63.02,
+          "p50_us": 45.57,
+          "p99_us": 234.5,
+          "p999_us": 4837.38,
+          "max_us": 7565.31
+        },
+        "go_gc": {
+          "cycles": 65,
+          "stw_pause_total_ms": 4.38,
+          "stw_pause_max_ms": 0.41,
+          "heap_inuse_end_mb": 5,
+          "gc_cpu_fraction_cumulative": 0.0027
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 150624,
+        "ops_per_sec": 30123.5,
+        "errors": 0,
+        "latency": {
+          "count": 150624,
+          "mean_us": 265.16,
+          "p50_us": 150.66,
+          "p99_us": 1456.13,
+          "p999_us": 2232.32,
+          "max_us": 3762.18
+        },
+        "go_gc": {
+          "cycles": 93,
+          "stw_pause_total_ms": 14.57,
+          "stw_pause_max_ms": 0.47,
+          "heap_inuse_end_mb": 10,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 75308,
+        "ops_per_sec": 15061.8,
+        "target_ops_per_sec": 15061.8,
+        "errors": 0,
+        "latency": {
+          "count": 75308,
+          "mean_us": 228.33,
+          "p50_us": 55.71,
+          "p99_us": 5922.82,
+          "p999_us": 21790.72,
+          "max_us": 36274.18
+        },
+        "go_gc": {
+          "cycles": 48,
+          "stw_pause_total_ms": 20.23,
+          "stw_pause_max_ms": 14.61,
+          "heap_inuse_end_mb": 8,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 141321,
+        "ops_per_sec": 28256.4,
+        "errors": 0,
+        "latency": {
+          "count": 141321,
+          "mean_us": 2263.94,
+          "p50_us": 948.22,
+          "p99_us": 12910.59,
+          "p999_us": 18399.23,
+          "max_us": 27951.1
+        },
+        "go_gc": {
+          "cycles": 23,
+          "stw_pause_total_ms": 3.93,
+          "stw_pause_max_ms": 0.51,
+          "heap_inuse_end_mb": 24,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 70641,
+        "ops_per_sec": 14128.3,
+        "target_ops_per_sec": 14128.2,
+        "errors": 0,
+        "latency": {
+          "count": 70641,
+          "mean_us": 83.2,
+          "p50_us": 52.54,
+          "p99_us": 784.38,
+          "p999_us": 4648.96,
+          "max_us": 14876.67
+        },
+        "go_gc": {
+          "cycles": 12,
+          "stw_pause_total_ms": 1.17,
+          "stw_pause_max_ms": 0.12,
+          "heap_inuse_end_mb": 31,
+          "gc_cpu_fraction_cumulative": 0.0028
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 73968,
+        "ops_per_sec": 14793.3,
+        "errors": 0,
+        "latency": {
+          "count": 73968,
+          "mean_us": 67.42,
+          "p50_us": 61.73,
+          "p99_us": 157.06,
+          "p999_us": 2404.35,
+          "max_us": 21364.74
+        },
+        "go_gc": {
+          "cycles": 91,
+          "stw_pause_total_ms": 9.43,
+          "stw_pause_max_ms": 0.65,
+          "heap_inuse_end_mb": 6,
+          "gc_cpu_fraction_cumulative": 0.0028
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 36983,
+        "ops_per_sec": 7396.7,
+        "target_ops_per_sec": 7396.7,
+        "errors": 0,
+        "latency": {
+          "count": 36983,
+          "mean_us": 1046.98,
+          "p50_us": 94.14,
+          "p99_us": 27869.18,
+          "p999_us": 38240.26,
+          "max_us": 39780.35
+        },
+        "go_gc": {
+          "cycles": 47,
+          "stw_pause_total_ms": 17.38,
+          "stw_pause_max_ms": 12.2,
+          "heap_inuse_end_mb": 6,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 71484,
+        "ops_per_sec": 14294.9,
+        "errors": 0,
+        "latency": {
+          "count": 71484,
+          "mean_us": 559.18,
+          "p50_us": 147.33,
+          "p99_us": 4073.47,
+          "p999_us": 6475.78,
+          "max_us": 11231.23
+        },
+        "go_gc": {
+          "cycles": 62,
+          "stw_pause_total_ms": 11.58,
+          "stw_pause_max_ms": 3.84,
+          "heap_inuse_end_mb": 9,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 35737,
+        "ops_per_sec": 7147.5,
+        "target_ops_per_sec": 7147.5,
+        "errors": 0,
+        "latency": {
+          "count": 35737,
+          "mean_us": 141.12,
+          "p50_us": 85.18,
+          "p99_us": 2085.89,
+          "p999_us": 3510.27,
+          "max_us": 6283.26
+        },
+        "go_gc": {
+          "cycles": 32,
+          "stw_pause_total_ms": 4.11,
+          "stw_pause_max_ms": 0.61,
+          "heap_inuse_end_mb": 8,
+          "gc_cpu_fraction_cumulative": 0.0028
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5.01,
+        "ops": 73576,
+        "ops_per_sec": 14693.9,
+        "errors": 0,
+        "latency": {
+          "count": 73576,
+          "mean_us": 4350.4,
+          "p50_us": 174.46,
+          "p99_us": 33505.28,
+          "p999_us": 53116.93,
+          "max_us": 89587.71
+        },
+        "go_gc": {
+          "cycles": 19,
+          "stw_pause_total_ms": 2.17,
+          "stw_pause_max_ms": 0.22,
+          "heap_inuse_end_mb": 25,
+          "gc_cpu_fraction_cumulative": 0.0028
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 36734,
+        "ops_per_sec": 7347,
+        "target_ops_per_sec": 7347,
+        "errors": 0,
+        "latency": {
+          "count": 36734,
+          "mean_us": 467.25,
+          "p50_us": 94.4,
+          "p99_us": 9977.86,
+          "p999_us": 43417.6,
+          "max_us": 62357.5
+        },
+        "go_gc": {
+          "cycles": 9,
+          "stw_pause_total_ms": 1.51,
+          "stw_pause_max_ms": 0.63,
+          "heap_inuse_end_mb": 33,
+          "gc_cpu_fraction_cumulative": 0.0027
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 181387,
+        "ops_per_sec": 36277.2,
+        "errors": 0,
+        "latency": {
+          "count": 181387,
+          "mean_us": 27.43,
+          "p50_us": 23.74,
+          "p99_us": 68.67,
+          "p999_us": 187.14,
+          "max_us": 8146.94
+        },
+        "go_gc": {
+          "cycles": 148,
+          "stw_pause_total_ms": 9.12,
+          "stw_pause_max_ms": 0.4,
+          "heap_inuse_end_mb": 7,
+          "gc_cpu_fraction_cumulative": 0.0028
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 90693,
+        "ops_per_sec": 18138.7,
+        "target_ops_per_sec": 18138.6,
+        "errors": 0,
+        "latency": {
+          "count": 90693,
+          "mean_us": 76.18,
+          "p50_us": 40,
+          "p99_us": 1157.12,
+          "p999_us": 2449.41,
+          "max_us": 3553.28
+        },
+        "go_gc": {
+          "cycles": 77,
+          "stw_pause_total_ms": 4.56,
+          "stw_pause_max_ms": 0.09,
+          "heap_inuse_end_mb": 7,
+          "gc_cpu_fraction_cumulative": 0.0027
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 177805,
+        "ops_per_sec": 35558.8,
+        "errors": 0,
+        "latency": {
+          "count": 177805,
+          "mean_us": 224.56,
+          "p50_us": 160.77,
+          "p99_us": 951.81,
+          "p999_us": 2191.36,
+          "max_us": 16400.38
+        },
+        "go_gc": {
+          "cycles": 104,
+          "stw_pause_total_ms": 16.59,
+          "stw_pause_max_ms": 0.36,
+          "heap_inuse_end_mb": 9,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 88897,
+        "ops_per_sec": 17779.5,
+        "target_ops_per_sec": 17779.4,
+        "errors": 0,
+        "latency": {
+          "count": 88897,
+          "mean_us": 204.51,
+          "p50_us": 44.83,
+          "p99_us": 5332.99,
+          "p999_us": 20414.46,
+          "max_us": 28377.09
+        },
+        "go_gc": {
+          "cycles": 52,
+          "stw_pause_total_ms": 7.85,
+          "stw_pause_max_ms": 0.6,
+          "heap_inuse_end_mb": 10,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      }
+    },
+    {
+      "system": "sqlite",
+      "fsync": false,
+      "durability": "WAL, synchronous=OFF, one writer connection",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 160546,
+        "ops_per_sec": 32087.9,
+        "errors": 0,
+        "latency": {
+          "count": 160546,
+          "mean_us": 1988.83,
+          "p50_us": 243.07,
+          "p99_us": 52592.64,
+          "p999_us": 131203.07,
+          "max_us": 282853.38
+        },
+        "go_gc": {
+          "cycles": 27,
+          "stw_pause_total_ms": 29,
+          "stw_pause_max_ms": 24.7,
+          "heap_inuse_end_mb": 21,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 80219,
+        "ops_per_sec": 16044,
+        "target_ops_per_sec": 16044,
+        "errors": 0,
+        "latency": {
+          "count": 80219,
+          "mean_us": 125.28,
+          "p50_us": 56.93,
+          "p99_us": 1523.71,
+          "p999_us": 9961.47,
+          "max_us": 22609.92
+        },
+        "go_gc": {
+          "cycles": 13,
+          "stw_pause_total_ms": 1.76,
+          "stw_pause_max_ms": 0.21,
+          "heap_inuse_end_mb": 26,
+          "gc_cpu_fraction_cumulative": 0.0029
+        }
+      }
+    }
+  ]
+}

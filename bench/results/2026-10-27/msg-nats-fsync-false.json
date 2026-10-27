@@ -1,0 +1,216 @@
+{
+  "suite": "msg",
+  "env": {
+    "time": "2026-10-27T20:58:27+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "fc0b1fb",
+    "command": "bin/freshdb-bench msg -system nats -fsync=false -rates 1000,5000,10000,20000 -producers 8 -groups 1,4 -duration 10s -dir /tmp/freshdb-bench -out results/2026-10-27",
+    "loadavg_at_start": "4.08 3.64 3.44"
+  },
+  "params": {
+    "consume_batch": 100,
+    "disk_after_run": "1.3G",
+    "drain_limit": "30s",
+    "duration": "10s",
+    "e2e": "consumer-side time after the durable ack minus the producer's intended send time (open-loop schedule)",
+    "fsync": false,
+    "max_producers": 64,
+    "payload_bytes": 1024,
+    "peak_rss": "522316 kB",
+    "producers": 8,
+    "system": "nats"
+  },
+  "runs": [
+    {
+      "system": "nats",
+      "fsync": false,
+      "durability": "file storage, default sync_interval (2m); publish waits for PubAck; consumer AckSync per batch",
+      "kind": "fixed-rate",
+      "target_rate": 1000,
+      "producers": 8,
+      "groups": 1,
+      "published": 10000,
+      "publish_per_sec": 1000.1,
+      "delivered_per_group_min": 10000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 10000,
+        "mean_us": 160.25,
+        "p50_us": 94.46,
+        "p99_us": 312.58,
+        "p999_us": 21118.98,
+        "max_us": 30687.23
+      },
+      "end_to_end_latency": {
+        "count": 10000,
+        "mean_us": 251.09,
+        "p50_us": 178.94,
+        "p99_us": 456.7,
+        "p999_us": 21331.97,
+        "max_us": 31047.68
+      },
+      "errors": 0
+    },
+    {
+      "system": "nats",
+      "fsync": false,
+      "durability": "file storage, default sync_interval (2m); publish waits for PubAck; consumer AckSync per batch",
+      "kind": "fixed-rate",
+      "target_rate": 5000,
+      "producers": 8,
+      "groups": 1,
+      "published": 50000,
+      "publish_per_sec": 5000.1,
+      "delivered_per_group_min": 50000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 50000,
+        "mean_us": 265.14,
+        "p50_us": 250.75,
+        "p99_us": 851.46,
+        "p999_us": 3813.38,
+        "max_us": 7471.1
+      },
+      "end_to_end_latency": {
+        "count": 50000,
+        "mean_us": 1002.14,
+        "p50_us": 948.74,
+        "p99_us": 2193.41,
+        "p999_us": 4382.72,
+        "max_us": 7909.38
+      },
+      "errors": 0
+    },
+    {
+      "system": "nats",
+      "fsync": false,
+      "durability": "file storage, default sync_interval (2m); publish waits for PubAck; consumer AckSync per batch",
+      "kind": "fixed-rate",
+      "target_rate": 10000,
+      "producers": 8,
+      "groups": 1,
+      "published": 100000,
+      "publish_per_sec": 10000,
+      "delivered_per_group_min": 100000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 100000,
+        "mean_us": 205.23,
+        "p50_us": 177.92,
+        "p99_us": 948.22,
+        "p999_us": 3674.11,
+        "max_us": 7565.31
+      },
+      "end_to_end_latency": {
+        "count": 100000,
+        "mean_us": 717.31,
+        "p50_us": 672.77,
+        "p99_us": 2026.5,
+        "p999_us": 4583.42,
+        "max_us": 8151.04
+      },
+      "errors": 0
+    },
+    {
+      "system": "nats",
+      "fsync": false,
+      "durability": "file storage, default sync_interval (2m); publish waits for PubAck; consumer AckSync per batch",
+      "kind": "fixed-rate",
+      "target_rate": 20000,
+      "producers": 8,
+      "groups": 1,
+      "published": 200000,
+      "publish_per_sec": 19999.9,
+      "delivered_per_group_min": 200000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 200000,
+        "mean_us": 626.14,
+        "p50_us": 141.06,
+        "p99_us": 16490.5,
+        "p999_us": 39485.44,
+        "max_us": 79429.63
+      },
+      "end_to_end_latency": {
+        "count": 200000,
+        "mean_us": 1053.08,
+        "p50_us": 518.14,
+        "p99_us": 18366.46,
+        "p999_us": 39813.12,
+        "max_us": 79757.31
+      },
+      "errors": 0
+    },
+    {
+      "system": "nats",
+      "fsync": false,
+      "durability": "file storage, default sync_interval (2m); publish waits for PubAck; consumer AckSync per batch",
+      "kind": "fixed-rate",
+      "target_rate": 5000,
+      "producers": 8,
+      "groups": 4,
+      "published": 50000,
+      "publish_per_sec": 5000.1,
+      "delivered_per_group_min": 50000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 50000,
+        "mean_us": 299.34,
+        "p50_us": 281.34,
+        "p99_us": 766.46,
+        "p999_us": 2758.66,
+        "max_us": 8871.94
+      },
+      "end_to_end_latency": {
+        "count": 200000,
+        "mean_us": 1130.66,
+        "p50_us": 1089.54,
+        "p99_us": 2285.57,
+        "p999_us": 4100.1,
+        "max_us": 10100.74
+      },
+      "errors": 0
+    },
+    {
+      "system": "nats",
+      "fsync": false,
+      "durability": "file storage, default sync_interval (2m); publish waits for PubAck; consumer AckSync per batch",
+      "kind": "max-throughput",
+      "producers": 64,
+      "groups": 1,
+      "published": 890889,
+      "publish_per_sec": 89083.5,
+      "delivered_per_group_min": 890889,
+      "consume_per_sec_per_group": 62700.6,
+      "backlog_at_end": 263883,
+      "publish_latency": {
+        "count": 890889,
+        "mean_us": 717.96,
+        "p50_us": 662.53,
+        "p99_us": 1687.55,
+        "p999_us": 4321.28,
+        "max_us": 8724.48
+      },
+      "end_to_end_latency": {
+        "count": 0,
+        "mean_us": 0,
+        "p50_us": 0,
+        "p99_us": 0,
+        "p999_us": 0,
+        "max_us": 0
+      },
+      "errors": 0
+    }
+  ]
+}

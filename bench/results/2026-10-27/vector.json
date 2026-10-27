@@ -1,0 +1,181 @@
+{
+  "suite": "vector",
+  "env": {
+    "time": "2026-10-27T21:01:17+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "fc0b1fb",
+    "command": "bin/freshdb-bench vector -n 10000,100000 -dim 128 -clusters 100 -sigma 0.15 -queries 200 -clients 1,8 -duration 10s -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27",
+    "loadavg_at_start": "4.71 4.15 3.68"
+  },
+  "params": {
+    "clusters": 100,
+    "dataset": "synthetic gaussian clusters (not SIFT/GloVe); ground truth by exact float64 search",
+    "dim": 128,
+    "duration": "10s",
+    "fsync": false,
+    "metric": "cosine",
+    "peak_rss": "593732 kB",
+    "queries": 200,
+    "seed": 42,
+    "sigma": 0.15
+  },
+  "runs": [
+    {
+      "system": "freshdb",
+      "n": 10000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 1,
+      "qps": 343.2,
+      "latency": {
+        "count": 3433,
+        "mean_us": 2913.08,
+        "p50_us": 2799.62,
+        "p99_us": 4163.58,
+        "p999_us": 4829.18,
+        "max_us": 24084.48
+      },
+      "insert_vectors_per_sec": 260555,
+      "index": "none (exact brute force over the vector lens)"
+    },
+    {
+      "system": "freshdb",
+      "n": 10000,
+      "dim": 128,
+      "clients": 8,
+      "k": 10,
+      "recall_at_10": 1,
+      "qps": 2132.8,
+      "latency": {
+        "count": 21333,
+        "mean_us": 3749.83,
+        "p50_us": 3194.88,
+        "p99_us": 7557.12,
+        "p999_us": 12009.47,
+        "max_us": 32260.1
+      },
+      "insert_vectors_per_sec": 260555,
+      "index": "none (exact brute force over the vector lens)"
+    },
+    {
+      "system": "flat-go-loop",
+      "n": 10000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 1,
+      "qps": 1333.9,
+      "latency": {
+        "count": 13339,
+        "mean_us": 749.29,
+        "p50_us": 734.21,
+        "p99_us": 1232.9,
+        "p999_us": 2363.39,
+        "max_us": 3289.09
+      },
+      "index": "none (normalized float32 slice + heap, no engine)"
+    },
+    {
+      "system": "flat-go-loop",
+      "n": 10000,
+      "dim": 128,
+      "clients": 8,
+      "k": 10,
+      "recall_at_10": 1,
+      "qps": 9228.6,
+      "latency": {
+        "count": 92292,
+        "mean_us": 866.42,
+        "p50_us": 780.29,
+        "p99_us": 2258.94,
+        "p999_us": 3682.3,
+        "max_us": 75235.33
+      },
+      "index": "none (normalized float32 slice + heap, no engine)"
+    },
+    {
+      "system": "freshdb",
+      "n": 100000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 1,
+      "qps": 19.3,
+      "latency": {
+        "count": 193,
+        "mean_us": 51877.52,
+        "p50_us": 50724.86,
+        "p99_us": 71696.38,
+        "p999_us": 72810.5,
+        "max_us": 72810.5
+      },
+      "insert_vectors_per_sec": 175462,
+      "index": "none (exact brute force over the vector lens)"
+    },
+    {
+      "system": "freshdb",
+      "n": 100000,
+      "dim": 128,
+      "clients": 8,
+      "k": 10,
+      "recall_at_10": 1,
+      "qps": 148.3,
+      "latency": {
+        "count": 1490,
+        "mean_us": 53861.96,
+        "p50_us": 52166.66,
+        "p99_us": 87883.78,
+        "p999_us": 112459.78,
+        "max_us": 123076.61
+      },
+      "insert_vectors_per_sec": 175462,
+      "index": "none (exact brute force over the vector lens)"
+    },
+    {
+      "system": "flat-go-loop",
+      "n": 100000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 1,
+      "qps": 144.6,
+      "latency": {
+        "count": 1446,
+        "mean_us": 6915.5,
+        "p50_us": 6836.22,
+        "p99_us": 9781.25,
+        "p999_us": 41910.27,
+        "max_us": 42565.63
+      },
+      "index": "none (normalized float32 slice + heap, no engine)"
+    },
+    {
+      "system": "flat-go-loop",
+      "n": 100000,
+      "dim": 128,
+      "clients": 8,
+      "k": 10,
+      "recall_at_10": 1,
+      "qps": 1075.5,
+      "latency": {
+        "count": 10762,
+        "mean_us": 7435.17,
+        "p50_us": 7241.73,
+        "p99_us": 10985.47,
+        "p999_us": 13443.07,
+        "max_us": 20758.53
+      },
+      "index": "none (normalized float32 slice + heap, no engine)"
+    }
+  ],
+  "notes": [
+    "freshDB has no ANN index yet: search is exact brute force, so recall is 1.0 by construction and QPS falls linearly with N. The flat Go loop is a lower bound on brute-force cost, not an ANN competitor."
+  ]
+}

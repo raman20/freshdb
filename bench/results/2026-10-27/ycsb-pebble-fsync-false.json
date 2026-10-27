@@ -1,0 +1,835 @@
+{
+  "suite": "ycsb",
+  "env": {
+    "time": "2026-10-27T20:47:48+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "fc0b1fb",
+    "command": "bin/freshdb-bench ycsb -system pebble -fsync=false -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27",
+    "loadavg_at_start": "5.30 4.33 3.38"
+  },
+  "params": {
+    "system": "pebble",
+    "fsync": false,
+    "keys": 1000000,
+    "value_bytes": 1024,
+    "workloads": "A,B,C,F,D",
+    "clients": [
+      1,
+      8,
+      64
+    ],
+    "warmup": "2s",
+    "duration": "5s",
+    "open_loop_fraction_of_max": 0.5,
+    "open_loop_cap_ops_per_sec": 200000,
+    "seed": 42,
+    "zipf_theta": 0.99,
+    "load_seconds": 4.16,
+    "load_keys_per_sec": 240170,
+    "disk_after_run": "1.7G",
+    "peak_rss": "783440 kB"
+  },
+  "runs": [
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 369386,
+        "ops_per_sec": 73877,
+        "errors": 0,
+        "latency": {
+          "count": 369386,
+          "mean_us": 13.38,
+          "p50_us": 2.61,
+          "p99_us": 76.48,
+          "p999_us": 190.59,
+          "max_us": 32702.46
+        },
+        "go_gc": {
+          "cycles": 150,
+          "stw_pause_total_ms": 12.29,
+          "stw_pause_max_ms": 0.33,
+          "heap_inuse_end_mb": 7,
+          "gc_cpu_fraction_cumulative": 0.0049
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 184692,
+        "ops_per_sec": 36938.6,
+        "target_ops_per_sec": 36938.5,
+        "errors": 0,
+        "latency": {
+          "count": 184692,
+          "mean_us": 519.14,
+          "p50_us": 12.3,
+          "p99_us": 20692.99,
+          "p999_us": 41451.52,
+          "max_us": 44236.8
+        },
+        "go_gc": {
+          "cycles": 80,
+          "stw_pause_total_ms": 6.69,
+          "stw_pause_max_ms": 0.48,
+          "heap_inuse_end_mb": 9,
+          "gc_cpu_fraction_cumulative": 0.0045
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 484779,
+        "ops_per_sec": 96953.5,
+        "errors": 0,
+        "latency": {
+          "count": 484779,
+          "mean_us": 82.21,
+          "p50_us": 3.93,
+          "p99_us": 814.08,
+          "p999_us": 3815.42,
+          "max_us": 27000.83
+        },
+        "go_gc": {
+          "cycles": 127,
+          "stw_pause_total_ms": 20.57,
+          "stw_pause_max_ms": 0.4,
+          "heap_inuse_end_mb": 12,
+          "gc_cpu_fraction_cumulative": 0.0059
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 242383,
+        "ops_per_sec": 48470.3,
+        "target_ops_per_sec": 48476.8,
+        "errors": 0,
+        "latency": {
+          "count": 242383,
+          "mean_us": 745.78,
+          "p50_us": 10.94,
+          "p99_us": 22986.75,
+          "p999_us": 37584.9,
+          "max_us": 42991.62
+        },
+        "go_gc": {
+          "cycles": 73,
+          "stw_pause_total_ms": 93.64,
+          "stw_pause_max_ms": 39.28,
+          "heap_inuse_end_mb": 9,
+          "gc_cpu_fraction_cumulative": 0.0081
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 494007,
+        "ops_per_sec": 98764.8,
+        "errors": 0,
+        "latency": {
+          "count": 494007,
+          "mean_us": 647.38,
+          "p50_us": 4.06,
+          "p99_us": 5283.84,
+          "p999_us": 8536.06,
+          "max_us": 171048.96
+        },
+        "go_gc": {
+          "cycles": 37,
+          "stw_pause_total_ms": 7.22,
+          "stw_pause_max_ms": 0.48,
+          "heap_inuse_end_mb": 35,
+          "gc_cpu_fraction_cumulative": 0.0074
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.01,
+        "ops": 246912,
+        "ops_per_sec": 49303,
+        "target_ops_per_sec": 49382.4,
+        "errors": 0,
+        "latency": {
+          "count": 246912,
+          "mean_us": 23560.82,
+          "p50_us": 16064.51,
+          "p99_us": 110952.45,
+          "p999_us": 151388.16,
+          "max_us": 192544.77
+        },
+        "go_gc": {
+          "cycles": 20,
+          "stw_pause_total_ms": 5.36,
+          "stw_pause_max_ms": 2.01,
+          "heap_inuse_end_mb": 26,
+          "gc_cpu_fraction_cumulative": 0.0068
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 350534,
+        "ops_per_sec": 70106.7,
+        "errors": 0,
+        "latency": {
+          "count": 350534,
+          "mean_us": 14.11,
+          "p50_us": 10.35,
+          "p99_us": 57.82,
+          "p999_us": 121.47,
+          "max_us": 23805.95
+        },
+        "go_gc": {
+          "cycles": 104,
+          "stw_pause_total_ms": 7.79,
+          "stw_pause_max_ms": 0.42,
+          "heap_inuse_end_mb": 8,
+          "gc_cpu_fraction_cumulative": 0.0064
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 175266,
+        "ops_per_sec": 35053.5,
+        "target_ops_per_sec": 35053.4,
+        "errors": 0,
+        "latency": {
+          "count": 175266,
+          "mean_us": 50,
+          "p50_us": 19.66,
+          "p99_us": 402.94,
+          "p999_us": 4784.13,
+          "max_us": 5562.37
+        },
+        "go_gc": {
+          "cycles": 53,
+          "stw_pause_total_ms": 3.65,
+          "stw_pause_max_ms": 0.35,
+          "heap_inuse_end_mb": 8,
+          "gc_cpu_fraction_cumulative": 0.006
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 700465,
+        "ops_per_sec": 140090.4,
+        "errors": 0,
+        "latency": {
+          "count": 700465,
+          "mean_us": 56.8,
+          "p50_us": 13.58,
+          "p99_us": 473.6,
+          "p999_us": 757.76,
+          "max_us": 6578.18
+        },
+        "go_gc": {
+          "cycles": 147,
+          "stw_pause_total_ms": 22.53,
+          "stw_pause_max_ms": 0.36,
+          "heap_inuse_end_mb": 13,
+          "gc_cpu_fraction_cumulative": 0.0064
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 350226,
+        "ops_per_sec": 70045.1,
+        "target_ops_per_sec": 70045.2,
+        "errors": 0,
+        "latency": {
+          "count": 350226,
+          "mean_us": 48.77,
+          "p50_us": 18.96,
+          "p99_us": 762.88,
+          "p999_us": 3266.56,
+          "max_us": 7942.14
+        },
+        "go_gc": {
+          "cycles": 74,
+          "stw_pause_total_ms": 13.21,
+          "stw_pause_max_ms": 2.66,
+          "heap_inuse_end_mb": 12,
+          "gc_cpu_fraction_cumulative": 0.0063
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 927947,
+        "ops_per_sec": 185561.8,
+        "errors": 0,
+        "latency": {
+          "count": 927947,
+          "mean_us": 344.34,
+          "p50_us": 33.02,
+          "p99_us": 2156.54,
+          "p999_us": 3223.55,
+          "max_us": 6307.84
+        },
+        "go_gc": {
+          "cycles": 60,
+          "stw_pause_total_ms": 9.51,
+          "stw_pause_max_ms": 0.39,
+          "heap_inuse_end_mb": 35,
+          "gc_cpu_fraction_cumulative": 0.0062
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 463904,
+        "ops_per_sec": 92696.5,
+        "target_ops_per_sec": 92780.9,
+        "errors": 0,
+        "latency": {
+          "count": 463904,
+          "mean_us": 8115.36,
+          "p50_us": 5017.6,
+          "p99_us": 42205.18,
+          "p999_us": 60030.98,
+          "max_us": 75300.86
+        },
+        "go_gc": {
+          "cycles": 31,
+          "stw_pause_total_ms": 4.88,
+          "stw_pause_max_ms": 0.98,
+          "heap_inuse_end_mb": 33,
+          "gc_cpu_fraction_cumulative": 0.006
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 434590,
+        "ops_per_sec": 86917.7,
+        "errors": 0,
+        "latency": {
+          "count": 434590,
+          "mean_us": 11.38,
+          "p50_us": 9.63,
+          "p99_us": 44.48,
+          "p999_us": 87.74,
+          "max_us": 661.5
+        },
+        "go_gc": {
+          "cycles": 121,
+          "stw_pause_total_ms": 10.06,
+          "stw_pause_max_ms": 0.42,
+          "heap_inuse_end_mb": 11,
+          "gc_cpu_fraction_cumulative": 0.0059
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 217294,
+        "ops_per_sec": 43458.9,
+        "target_ops_per_sec": 43458.9,
+        "errors": 0,
+        "latency": {
+          "count": 217294,
+          "mean_us": 34,
+          "p50_us": 16.8,
+          "p99_us": 342.78,
+          "p999_us": 2945.02,
+          "max_us": 4485.12
+        },
+        "go_gc": {
+          "cycles": 61,
+          "stw_pause_total_ms": 4.03,
+          "stw_pause_max_ms": 0.36,
+          "heap_inuse_end_mb": 10,
+          "gc_cpu_fraction_cumulative": 0.0057
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 792532,
+        "ops_per_sec": 158503.3,
+        "errors": 0,
+        "latency": {
+          "count": 792532,
+          "mean_us": 50.18,
+          "p50_us": 13.67,
+          "p99_us": 436.22,
+          "p999_us": 694.27,
+          "max_us": 32030.72
+        },
+        "go_gc": {
+          "cycles": 155,
+          "stw_pause_total_ms": 52.63,
+          "stw_pause_max_ms": 15.89,
+          "heap_inuse_end_mb": 11,
+          "gc_cpu_fraction_cumulative": 0.0062
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 396258,
+        "ops_per_sec": 79249.8,
+        "target_ops_per_sec": 79251.7,
+        "errors": 0,
+        "latency": {
+          "count": 396258,
+          "mean_us": 534.36,
+          "p50_us": 17.87,
+          "p99_us": 19611.65,
+          "p999_us": 35520.51,
+          "max_us": 44564.48
+        },
+        "go_gc": {
+          "cycles": 79,
+          "stw_pause_total_ms": 68.81,
+          "stw_pause_max_ms": 35.44,
+          "heap_inuse_end_mb": 9,
+          "gc_cpu_fraction_cumulative": 0.0066
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1172734,
+        "ops_per_sec": 234525.8,
+        "errors": 0,
+        "latency": {
+          "count": 1172734,
+          "mean_us": 272.45,
+          "p50_us": 28.58,
+          "p99_us": 1759.23,
+          "p999_us": 2553.86,
+          "max_us": 6680.58
+        },
+        "go_gc": {
+          "cycles": 70,
+          "stw_pause_total_ms": 11.52,
+          "stw_pause_max_ms": 0.7,
+          "heap_inuse_end_mb": 32,
+          "gc_cpu_fraction_cumulative": 0.0066
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.01,
+        "ops": 586314,
+        "ops_per_sec": 117082.9,
+        "target_ops_per_sec": 117262.9,
+        "errors": 0,
+        "latency": {
+          "count": 586314,
+          "mean_us": 9612.36,
+          "p50_us": 6496.26,
+          "p99_us": 47022.08,
+          "p999_us": 70189.06,
+          "max_us": 87818.24
+        },
+        "go_gc": {
+          "cycles": 36,
+          "stw_pause_total_ms": 7.25,
+          "stw_pause_max_ms": 1.98,
+          "heap_inuse_end_mb": 34,
+          "gc_cpu_fraction_cumulative": 0.0064
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 255491,
+        "ops_per_sec": 51097.7,
+        "errors": 0,
+        "latency": {
+          "count": 255491,
+          "mean_us": 19.4,
+          "p50_us": 13.71,
+          "p99_us": 76.86,
+          "p999_us": 205.18,
+          "max_us": 12607.49
+        },
+        "go_gc": {
+          "cycles": 143,
+          "stw_pause_total_ms": 11.57,
+          "stw_pause_max_ms": 0.33,
+          "heap_inuse_end_mb": 9,
+          "gc_cpu_fraction_cumulative": 0.0064
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 127744,
+        "ops_per_sec": 25549,
+        "target_ops_per_sec": 25548.9,
+        "errors": 0,
+        "latency": {
+          "count": 127744,
+          "mean_us": 108.39,
+          "p50_us": 25.98,
+          "p99_us": 3278.85,
+          "p999_us": 5492.74,
+          "max_us": 6701.06
+        },
+        "go_gc": {
+          "cycles": 74,
+          "stw_pause_total_ms": 5.16,
+          "stw_pause_max_ms": 0.14,
+          "heap_inuse_end_mb": 10,
+          "gc_cpu_fraction_cumulative": 0.0063
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 342794,
+        "ops_per_sec": 68557.4,
+        "errors": 0,
+        "latency": {
+          "count": 342794,
+          "mean_us": 116.34,
+          "p50_us": 33.73,
+          "p99_us": 737.79,
+          "p999_us": 4175.87,
+          "max_us": 23740.42
+        },
+        "go_gc": {
+          "cycles": 134,
+          "stw_pause_total_ms": 24.62,
+          "stw_pause_max_ms": 4.11,
+          "heap_inuse_end_mb": 11,
+          "gc_cpu_fraction_cumulative": 0.0064
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 171393,
+        "ops_per_sec": 34278.7,
+        "target_ops_per_sec": 34278.7,
+        "errors": 0,
+        "latency": {
+          "count": 171393,
+          "mean_us": 114.72,
+          "p50_us": 27.14,
+          "p99_us": 3047.42,
+          "p999_us": 5152.77,
+          "max_us": 8056.83
+        },
+        "go_gc": {
+          "cycles": 71,
+          "stw_pause_total_ms": 12.19,
+          "stw_pause_max_ms": 2.39,
+          "heap_inuse_end_mb": 12,
+          "gc_cpu_fraction_cumulative": 0.0064
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 356060,
+        "ops_per_sec": 71194.8,
+        "errors": 0,
+        "latency": {
+          "count": 356060,
+          "mean_us": 897.84,
+          "p50_us": 392.45,
+          "p99_us": 5013.5,
+          "p999_us": 11911.17,
+          "max_us": 45907.97
+        },
+        "go_gc": {
+          "cycles": 41,
+          "stw_pause_total_ms": 14.37,
+          "stw_pause_max_ms": 7.65,
+          "heap_inuse_end_mb": 29,
+          "gc_cpu_fraction_cumulative": 0.0063
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 177987,
+        "ops_per_sec": 35586.6,
+        "target_ops_per_sec": 35597.4,
+        "errors": 0,
+        "latency": {
+          "count": 177987,
+          "mean_us": 13445.53,
+          "p50_us": 9166.85,
+          "p99_us": 63242.24,
+          "p999_us": 86376.45,
+          "max_us": 103546.88
+        },
+        "go_gc": {
+          "cycles": 21,
+          "stw_pause_total_ms": 2.92,
+          "stw_pause_max_ms": 0.25,
+          "heap_inuse_end_mb": 25,
+          "gc_cpu_fraction_cumulative": 0.0062
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 341986,
+        "ops_per_sec": 68396.9,
+        "errors": 0,
+        "latency": {
+          "count": 341986,
+          "mean_us": 14.44,
+          "p50_us": 3.42,
+          "p99_us": 85.82,
+          "p999_us": 218.24,
+          "max_us": 8253.44
+        },
+        "go_gc": {
+          "cycles": 96,
+          "stw_pause_total_ms": 10.45,
+          "stw_pause_max_ms": 2.58,
+          "heap_inuse_end_mb": 10,
+          "gc_cpu_fraction_cumulative": 0.0061
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 170992,
+        "ops_per_sec": 34198.3,
+        "target_ops_per_sec": 34198.5,
+        "errors": 0,
+        "latency": {
+          "count": 170992,
+          "mean_us": 48.68,
+          "p50_us": 13.7,
+          "p99_us": 468.99,
+          "p999_us": 5259.26,
+          "max_us": 6819.84
+        },
+        "go_gc": {
+          "cycles": 50,
+          "stw_pause_total_ms": 10.09,
+          "stw_pause_max_ms": 6.78,
+          "heap_inuse_end_mb": 8,
+          "gc_cpu_fraction_cumulative": 0.006
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 981294,
+        "ops_per_sec": 196251.8,
+        "errors": 0,
+        "latency": {
+          "count": 981294,
+          "mean_us": 40.42,
+          "p50_us": 3.51,
+          "p99_us": 456.96,
+          "p999_us": 800.77,
+          "max_us": 31637.5
+        },
+        "go_gc": {
+          "cycles": 191,
+          "stw_pause_total_ms": 79.59,
+          "stw_pause_max_ms": 30.67,
+          "heap_inuse_end_mb": 9,
+          "gc_cpu_fraction_cumulative": 0.0065
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 490629,
+        "ops_per_sec": 98125.3,
+        "target_ops_per_sec": 98125.9,
+        "errors": 0,
+        "latency": {
+          "count": 490629,
+          "mean_us": 52.04,
+          "p50_us": 12.94,
+          "p99_us": 1113.09,
+          "p999_us": 4093.95,
+          "max_us": 15810.56
+        },
+        "go_gc": {
+          "cycles": 96,
+          "stw_pause_total_ms": 15.55,
+          "stw_pause_max_ms": 3.57,
+          "heap_inuse_end_mb": 11,
+          "gc_cpu_fraction_cumulative": 0.0065
+        }
+      }
+    },
+    {
+      "system": "pebble",
+      "fsync": false,
+      "durability": "pebble.NoSync",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1615657,
+        "ops_per_sec": 323106.6,
+        "errors": 0,
+        "latency": {
+          "count": 1615657,
+          "mean_us": 197.56,
+          "p50_us": 2.98,
+          "p99_us": 2156.54,
+          "p999_us": 3741.7,
+          "max_us": 26853.38
+        },
+        "go_gc": {
+          "cycles": 97,
+          "stw_pause_total_ms": 14.28,
+          "stw_pause_max_ms": 0.49,
+          "heap_inuse_end_mb": 29,
+          "gc_cpu_fraction_cumulative": 0.0065
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 807766,
+        "ops_per_sec": 161551.8,
+        "target_ops_per_sec": 161553.3,
+        "errors": 0,
+        "latency": {
+          "count": 807766,
+          "mean_us": 6501.26,
+          "p50_us": 1903.62,
+          "p99_us": 46858.24,
+          "p999_us": 98631.68,
+          "max_us": 135135.23
+        },
+        "go_gc": {
+          "cycles": 49,
+          "stw_pause_total_ms": 6.05,
+          "stw_pause_max_ms": 0.24,
+          "heap_inuse_end_mb": 25,
+          "gc_cpu_fraction_cumulative": 0.0065
+        }
+      }
+    }
+  ]
+}

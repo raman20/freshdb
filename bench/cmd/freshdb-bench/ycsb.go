@@ -75,6 +75,7 @@ func cmdYCSB(args []string) {
 	theta := fs.Float64("theta", 0.99, "zipfian constant")
 	dataDir := fs.String("dir", "/tmp/freshdb-bench", "data directory (wiped)")
 	out := fs.String("out", "results", "output directory")
+	fs.DurationVar(&boltBatchDelay, "bolt-batch-delay", 0, "bbolt only: 0 = db.Update per write; >0 = db.Batch with this MaxBatchDelay")
 	fs.Parse(args)
 	clients := parseInts(*clientsF)
 
