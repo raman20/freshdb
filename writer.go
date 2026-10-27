@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,12 +22,17 @@ type commitReq struct {
 	ops      []format.Op
 	reads    map[rkey]bool
 	prefixes []rkey
-	done     chan commitRes
+	attempt  int // conflicts this transaction already lost (fairness)
+	// exec, if set, is the transaction body to run inside the writer at the
+	// applied head (see escalateAfter); ops/reads/at are filled from it.
+	exec func(*Tx) error
+	done chan commitRes
 }
 
 type commitRes struct {
-	lsn uint64
-	err error
+	lsn      uint64
+	err      error
+	panicked any // exec panicked; re-raised in the caller
 }
 
 type recentCommit struct {
@@ -53,6 +59,7 @@ type writer struct {
 	head        uint64
 	lastTS      int64
 	recent      []recentCommit
+	carry       []*commitReq // escalated requests deferred to the next batch
 	recentFloor uint64
 	sinceSnap   int
 }
@@ -99,8 +106,16 @@ func (w *writer) crash() {
 
 func (w *writer) loop() {
 	defer close(w.done)
-	for r := range w.ch {
-		batch := []*commitReq{r}
+	for {
+		batch := w.carry
+		w.carry = nil
+		if len(batch) == 0 {
+			r, ok := <-w.ch
+			if !ok {
+				return
+			}
+			batch = append(batch, r)
+		}
 	drain:
 		for len(batch) < w.db.opts.MaxBatch {
 			select {
@@ -115,6 +130,29 @@ func (w *writer) loop() {
 		}
 		w.process(batch)
 	}
+}
+
+// runExec runs an escalated transaction body at the applied head. It
+// reports whether r now carries ops to validate and commit; otherwise r
+// has been answered (error, panic, or read-only).
+func (w *writer) runExec(r *commitReq) (ok bool) {
+	tx := &Tx{db: w.db, v: w.v, at: w.head, writable: true, reads: map[rkey]bool{}, local: map[rkey]*localVal{}}
+	defer func() {
+		if p := recover(); p != nil {
+			r.done <- commitRes{panicked: p}
+			ok = false
+		}
+	}()
+	if err := r.exec(tx); err != nil {
+		r.done <- commitRes{err: err}
+		return false
+	}
+	if len(tx.ops) == 0 {
+		r.done <- commitRes{lsn: tx.at}
+		return false
+	}
+	r.at, r.ops, r.reads, r.prefixes = tx.at, tx.ops, tx.reads, tx.prefixes
+	return true
 }
 
 func (w *writer) conflict(r *commitReq, pending []recentCommit) bool {
@@ -206,6 +244,30 @@ func (w *writer) process(batch []*commitReq) {
 	var accepted []*commitReq
 	var entries []*lens.Entry
 	var pending []recentCommit
+	// Validate transactions that already lost conflicts first: within a
+	// batch the oldest retry wins a contended key, so a hot key cannot
+	// starve one client while newcomers keep committing. The order only
+	// chooses which of several conflicting transactions commits; each
+	// accepted one is still validated against everything before it.
+	sort.SliceStable(batch, func(i, j int) bool { return batch[i].attempt > batch[j].attempt })
+	// At most one escalated transaction runs per batch: it executes at the
+	// applied head and is validated first, so it cannot conflict. Others
+	// wait for the next batch, which sees its writes.
+	kept, ran := batch[:0], false
+	for _, r := range batch {
+		switch {
+		case r.exec == nil:
+			kept = append(kept, r)
+		case ran:
+			w.carry = append(w.carry, r)
+		default:
+			ran = true
+			if w.runExec(r) {
+				kept = append(kept, r)
+			}
+		}
+	}
+	batch = kept
 	for _, r := range batch {
 		if w.conflict(r, pending) {
 			r.done <- commitRes{err: ErrConflict}
@@ -266,7 +328,9 @@ func (w *writer) process(batch []*commitReq) {
 	w.v.mu.Unlock()
 	w.head, w.lastTS = head, ts
 	w.recent = append(w.recent, pending...)
-	if over := len(w.recent) - recentMax; over > 0 {
+	// Trim to recentMax only once twice that is held, so the copy is
+	// amortized instead of moving recentMax entries on every batch.
+	if over := len(w.recent) - recentMax; over >= recentMax {
 		w.recentFloor = w.recent[over-1].lsn
 		w.recent = append([]recentCommit{}, w.recent[over:]...)
 	}

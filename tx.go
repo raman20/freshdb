@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/raman20/freshdb/format"
 	"github.com/raman20/freshdb/lens"
@@ -436,8 +438,18 @@ func (db *DB) Branch(name string) *Branch { return &Branch{db, name} }
 
 const maxRetries = 16
 
+// escalateAfter is how many conflicts a transaction may lose optimistically.
+// After that its body runs inside the branch's single writer, at the
+// applied head and validated before anything else in its group commit, so
+// it commits on that attempt: a hot key cannot starve a client. The log is
+// unchanged (the same ops are committed); only where fn runs differs.
+var escalateAfter = 3 // var only so tests can force the escalated path
+
 // Update runs fn in a serializable read-write transaction on main.
 // fn may be re-run on ErrConflict, so it must be free of side effects.
+// After escalateAfter lost conflicts fn runs on the branch's writer
+// goroutine (so it always commits); it must therefore not block or call
+// Update on the same DB.
 func (db *DB) Update(ctx context.Context, fn func(*Tx) error) error {
 	return db.Branch("main").Update(ctx, fn)
 }
@@ -455,6 +467,20 @@ func (b *Branch) UpdateLSN(ctx context.Context, fn func(*Tx) error) (uint64, err
 		if err != nil {
 			return 0, err
 		}
+		if i >= escalateAfter {
+			if err := ctx.Err(); err != nil {
+				return 0, err
+			}
+			res := w.submit(&commitReq{attempt: i, exec: fn})
+			if res.panicked != nil {
+				panic(res.panicked)
+			}
+			if !errors.Is(res.err, ErrConflict) {
+				return res.lsn, res.err
+			}
+			last = res.err // cannot happen: validated first at the head
+			continue
+		}
 		tx := &Tx{db: b.db, v: w.v, writable: true, reads: map[rkey]bool{}, local: map[rkey]*localVal{}}
 		w.v.mu.RLock()
 		tx.at = w.v.head
@@ -468,14 +494,36 @@ func (b *Branch) UpdateLSN(ctx context.Context, fn func(*Tx) error) (uint64, err
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		res := w.submit(&commitReq{at: tx.at, ops: tx.ops, reads: tx.reads, prefixes: tx.prefixes})
+		res := w.submit(&commitReq{at: tx.at, ops: tx.ops, reads: tx.reads, prefixes: tx.prefixes, attempt: i})
 		if errors.Is(res.err, ErrConflict) {
 			last = res.err
+			if err := conflictBackoff(ctx, i); err != nil {
+				return 0, err
+			}
 			continue
 		}
 		return res.lsn, res.err
 	}
 	return 0, last
+}
+
+// conflictBackoff waits a jittered, exponentially growing delay after the
+// i-th lost conflict (none after the first: the retry already reads the
+// winner's commit). It spreads clients contending for one hot key across
+// group commits; the cap keeps the worst case of 16 attempts near 40 ms.
+func conflictBackoff(ctx context.Context, i int) error {
+	if i == 0 {
+		return nil
+	}
+	d := time.Duration(rand.Int64N(int64(50*time.Microsecond) << min(i, 6)))
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 func (b *Branch) Update(ctx context.Context, fn func(*Tx) error) error {

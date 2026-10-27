@@ -7,6 +7,39 @@ break APIs and the on-storage format.
 
 ## [Unreleased]
 
+Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
+in its "Changes since v0.1.0" section.
+
+### Changed
+- **Memory: values are read from the log instead of being held in RAM.**
+  The KV lens keeps values larger than `InlineMax` (default 64 B) as a
+  position (offset, length, CRC-32C) in their immutable segment, and the
+  log index keeps one small record per segment instead of every frame.
+  Values are read with ranged reads (`pread` with an fd cache on local
+  disk, `Range` GETs on S3) through a sharded LRU cache (`ValueCacheBytes`,
+  default 64 MiB) and checked against the CRC (`ErrCorrupt` on mismatch).
+  Peak RSS for the 1M × 1 KiB YCSB run fell from 7.1 GiB to 1.06 GiB. Cache
+  misses make point reads slower than in v0.1.0 (see the benchmarks).
+- KV snapshots use a new `KV2` format that records the inline limit; `KV1`
+  snapshots, or ones written with a different limit, are ignored and the
+  log is replayed instead.
+- **Vector search** stores unit vectors in one contiguous `float32` slab
+  per collection and dimension, uses an unrolled dot product and a bounded
+  top-k heap (no per-vector allocation), and splits large scans across
+  cores. Results are unchanged: still exact, ordered by (score, id).
+- **Hot-key transactions cannot starve.** Within a group commit,
+  transactions that already lost conflicts are validated first; retries
+  back off with jitter; and after 3 lost conflicts the transaction body
+  runs on the branch's writer at the applied head, so it commits on that
+  attempt. The log format and the committed operations are unchanged.
+  Such a body must not block or call `Update` on the same DB.
+- The writer trims its conflict-history window in amortized steps instead
+  of copying it on every commit.
+
+### Added
+- `WithInlineMax`, `WithValueCacheBytes` options.
+- `store.RangeReader` / `store.GetRange` (ranged reads for FS, S3, Mem).
+
 ## [0.1.0] - 2026-10-27 — first public prototype (pre-release)
 
 **Not for production use.** See the status section in the README.
