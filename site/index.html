@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>freshDB — One log. Every data model.</title>
+<meta name="description" content="KV, streams, documents, vectors and transactions as lenses over a single object-storage-native log, with branching, rewind and provable deletion. One Go binary, one URL. Pre-1.0 prototype.">
+<meta property="og:title" content="freshDB — One log. Every data model.">
+<meta property="og:description" content="KV, streams, documents, vectors and transactions as lenses over one object-storage-native log. Branch, rewind, provably forget.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top"><img src="assets/favicon.svg" alt="" width="22" height="22"> freshDB</a>
+    <div class="links">
+      <a href="#quickstart">Quickstart</a><a href="#how">How it works</a><a href="#correctness">Correctness</a><a href="#limits">Limitations</a><a href="#roadmap">Roadmap</a>
+      <a class="gh" href="https://github.com/raman20/freshdb">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <p class="eyebrow">Open source · Apache-2.0 · Go · v0.1.0 prototype</p>
+    <h1>One log.<br><span class="grad">Every data model.</span></h1>
+    <p class="lede">KV, streams, documents, vectors and transactions as <strong>lenses over a single object-storage-native log</strong>, with branching, rewind and provable deletion. One Go binary. One URL.</p>
+    <p class="banner"><b>Pre-1.0 prototype — not for production.</b> The core is model-checked and simulation-tested. Compaction, disk-backed lenses, auth/TLS and KMS keys are not done yet.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/raman20/freshdb">★ View on GitHub</a>
+      <a class="btn" href="#quickstart">5-minute quickstart →</a>
+    </div>
+<pre class="term"><span class="p">$</span> freshdb put greeting "hello, world"
+{"lsn":2}
+<span class="p">$</span> freshdb get greeting --at 1                <i># time travel</i>
+hello
+<span class="p">$</span> freshdb branch create exp                  <i># zero-copy branch</i>
+<span class="p">$</span> freshdb rewind main 1                      <i># undo</i>
+<span class="p">$</span> freshdb put user/u17/email alice@example.com --subject alice
+<span class="p">$</span> freshdb shred alice                        <i># forget, provably</i>
+{"certificate":{"dek_deleted":true,"shred_lsn":3,…},"valid_signature":true}
+<span class="p">$</span> freshdb get user/u17/email
+<b class="warn">error (404): freshdb: not found</b></pre>
+  </div>
+</header>
+
+<section class="wrap">
+  <h2>Six systems → one log</h2>
+  <p class="sub">A typical app or agent backend glues these together. Each one has its own failure modes, backups and "delete this user" story.</p>
+  <div class="six"><div>Postgres<br><small>state</small></div><div>Redis<br><small>cache, locks</small></div><div>Kafka / SQS<br><small>events</small></div><div>Vector DB<br><small>memory</small></div><div>Outbox table<br><small>consistency</small></div><div>Scripts<br><small>backups, GDPR</small></div></div>
+  <div class="one">one append-only log on S3  →  lenses: KV · topics · docs · vectors · transactions</div>
+  <div class="cards3" style="margin-top:26px">
+    <div class="card"><h3>One transaction for everything</h3><p>Consume a message, write the result and ack it atomically. Exactly-once processing with no outbox and no 2PC.</p></div>
+    <div class="card"><h3>Branch, rewind, time travel</h3><p>A branch is "parent log + LSN", so no data is copied. Undo a bad agent run, try a plan on a branch, or read any key as of any LSN.</p></div>
+    <div class="card"><h3>Provable deletion</h3><p>Shredding destroys a subject's key, so its data is unreadable on every lens, branch and point in history. You get a signed certificate, and the hash chain still verifies.</p></div>
+    <div class="card"><h3>Simple to run</h3><p>A single static Go binary with no CGO. One URL: <code>./data</code> or <code>s3://bucket/prefix</code>. No ZooKeeper, no Raft, no brokers.</p></div>
+    <div class="card"><h3>Fencing without clocks</h3><p>Create-only writes (<code>If-None-Match: *</code>) plus epochs. A zombie writer can never commit after a new one opens.</p></div>
+    <div class="card"><h3>Correctness you can rerun</h3><p>TLA+ models checked by TLC, a deterministic fault-injecting simulator, property tests and kill -9 crash tests. All of them run in CI.</p></div>
+  </div>
+  <p class="note">freshDB doesn't try to be the fastest at any one job. It tries to be the simplest thing that is good enough for small and medium apps and agents. <a href="https://github.com/raman20/freshdb/blob/main/docs/design-principles.md">Design principles, and what we refuse to build →</a></p>
+</section>
+
+<section class="band" id="quickstart">
+  <div class="wrap qs">
+    <h2>5-minute quickstart</h2>
+    <p class="sub">Copy-paste. Outputs below are from a real run.</p>
+    <div class="split">
+      <div>
+<p>Install (Go 1.27+), or grab a binary from <a href="https://github.com/raman20/freshdb/releases">Releases</a>:</p>
+<pre class="code"><code>go install github.com/raman20/freshdb/cmd/freshdb@latest</code></pre>
+<p>Try it on a local directory (default <code>./freshdb-data</code>):</p>
+<pre class="code"><code>freshdb put greeting "hello"
+freshdb put greeting "hello, world"
+freshdb get greeting --at 1            <span class="c"># hello</span>
+freshdb pub events "signup: u17"
+freshdb sub events --group mailer
+freshdb branch create exp
+freshdb put greeting "experimental" --branch exp
+freshdb rewind main 1
+freshdb put user/u17/email a@x.com --subject alice
+freshdb shred alice
+freshdb verify</code></pre>
+      </div>
+      <div>
+<p>Same commands on S3 or MinIO: just change the URL.</p>
+<pre class="code"><code><span class="k">export</span> FRESHDB_URL=<span class="s">'s3://my-bucket/app1?endpoint=127.0.0.1:9000&amp;insecure=1'</span>
+freshdb put hello world</code></pre>
+<p>Or run a server, which is the same engine over JSON/HTTP:</p>
+<pre class="code"><code>freshdb serve --listen 127.0.0.1:7070 &amp;
+curl -X PUT localhost:7070/v1/kv/k -d v
+curl localhost:7070/v1/kv/k?at=1</code></pre>
+<p>Or embed it in Go:</p>
+<pre class="code"><code>db, _ := freshdb.Open(ctx, <span class="s">"s3://bucket/app1?endpoint=..."</span>)
+db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
+  g := tx.Topic(<span class="s">"tasks"</span>).Group(<span class="s">"worker"</span>)
+  msgs, _ := g.Fetch(1)
+  tx.Put(<span class="s">"result/1"</span>, out, freshdb.Subject(<span class="s">"alice"</span>))
+  <span class="k">return</span> g.Ack(msgs[0])   <span class="c">// atomic with the write</span>
+})</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="demo">
+  <h2>Demo: an agent with undo, memory and forget</h2>
+  <p class="sub">An AI agent remembers things about Alice, processes tasks exactly once, goes rogue and is rewound, tries a plan on a branch, and then Alice asks to be forgotten. Below is the end of <a href="https://github.com/raman20/freshdb/blob/main/examples/agent-demo.out">a real run</a> of <a href="https://github.com/raman20/freshdb/blob/main/examples/agent-demo.sh">examples/agent-demo.sh</a>.</p>
+<pre class="term small"><b class="ok">== 5. Forget: alice invokes her right to erasure — crypto-shred subject &#x27;alice&#x27;</b>
+{&quot;valid_signature&quot;:true,&quot;shred_lsn&quot;:12,&quot;dek_deleted&quot;:true,&quot;chain_head&quot;:&quot;85c914682110ecac...&quot;,&quot;signature&quot;:&quot;4926b11e16738062...&quot;}
+<span class="dim">-- KV:</span>
+<span class="warn">error (404): freshdb: not found</span>
+<span class="dim">-- time travel:</span>
+<span class="warn">error (404): freshdb: not found</span>
+<span class="dim">-- old branch:</span>
+<span class="warn">error (404): freshdb: not found</span>
+<span class="dim">-- docs about alice:</span>
+[]
+<span class="dim">-- vector recall [1,0,0]:</span>
+{&quot;id&quot;:&quot;m2&quot;,&quot;score&quot;:0.11043153}
+<span class="dim">-- task t1 in the topic (offsets stay stable, content is gone):</span>
+{&quot;lsn&quot;:6,&quot;offset&quot;:0,&quot;redacted&quot;:true,&quot;value&quot;:&quot;&quot;}
+<span class="dim">-- bob is untouched: {&quot;user&quot;:&quot;bob&quot;,&quot;text&quot;:&quot;bob prefers window seats&quot;}</span>
+<span class="dim">-- new writes for alice are refused:</span>
+<span class="warn">error (410): freshdb: subject has been crypto-shredded</span>
+
+<b class="ok">== 6. Verify the whole history (CRCs, hash chains, fencing, shred proofs)</b>
+{&quot;ok&quot;:true,&quot;logs&quot;:3,&quot;segments&quot;:17,&quot;entries&quot;:14,&quot;encrypted_values&quot;:8,&quot;unreadable_shredded_values&quot;:6,&quot;problems&quot;:null}
+<span class="dim">-- grep every byte in the bucket for anything about alice:</span>
+no trace of &#x27;alice&#x27;, &#x27;peanuts&#x27;, &#x27;oat milk&#x27; or &#x27;ESPRESSO&#x27; in /tmp/agent-demo-data</pre>
+</section>
+
+<section class="band" id="how">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="sub">Everything is the log. Lenses are pure folds over it, and object storage is the only coordination primitive.</p>
+    <div class="flow">
+      <div class="node src"><b>Go API · HTTP · CLI</b><span>one code path</span><small>embedded or <code>freshdb serve</code></small></div>
+      <div class="arrow">→</div>
+      <div class="node rec"><b>Transactions</b><span>OCC, serializable</span><small>single writer per database</small></div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Group commit</b><span>1 immutable segment per batch</span><small>per-subject AES-GCM values</small></div>
+      <div class="arrow">→</div>
+      <div class="node out"><b>Object storage</b><span>create-only PUT</span><small>S3 · MinIO · R2 · local dir</small></div>
+    </div>
+    <div class="flow2">
+      <div class="node act"><b>Lenses</b><span>KV (MVCC) · topics + groups · docs + indexes · vectors</span><small>state == fold(redact(log, shredded))</small></div>
+      <div class="node"><b>Manifests</b><span>epoch · branches · reflog</span><small>create-only, dense ids = fencing</small></div>
+      <div class="node"><b>Segments</b><span>CRC32C frames · SHA-256 hash chain</span><small>torn tail repaired, never silent loss</small></div>
+    </div>
+    <p class="note">Read more: <a href="https://github.com/raman20/freshdb/blob/main/docs/architecture.md">architecture</a> · <a href="https://github.com/raman20/freshdb/blob/main/docs/formats.md">on-storage formats</a> · <a href="https://github.com/raman20/freshdb/blob/main/docs/lens-authoring.md">lens authoring</a></p>
+  </div>
+</section>
+
+<section class="wrap" id="correctness">
+  <h2>Correctness, shown rather than claimed</h2>
+  <p class="sub">Every bounded model ran its full state space with no errors. CI reruns them, plus 2,000 simulator seeds, fuzzing and MinIO tests, on every push. <a href="https://github.com/raman20/freshdb/blob/main/spec/RESULTS.md">spec/RESULTS.md</a></p>
+  <table class="tbl">
+    <tr><th>TLA+ spec (TLC)</th><th>What it checks</th><th class="n">States</th><th class="n">Distinct</th></tr>
+    <tr><td>FreshLog</td><td>durability, no holes, epoch monotone (no split brain), no double-apply, torn tail only unacked</td><td class="n">10,415,103</td><td class="n">2,475,220</td></tr>
+    <tr><td>FreshTxn</td><td>exactly-once, atomic cursor, serializable, durable prefix</td><td class="n">21,685,744</td><td class="n">2,421,454</td></tr>
+    <tr><td>FreshBranch</td><td>rewind exact, old head kept, append-only, time travel stable</td><td class="n">3,430,206</td><td class="n">1,845,287</td></tr>
+    <tr><td>FreshShred</td><td>shredded never revealed, no writes after shred, chain verifiable, key eventually gone</td><td class="n">25,570</td><td class="n">6,481</td></tr>
+  </table>
+  <div class="cards3" style="margin-top:18px">
+    <div class="card"><h3>Deterministic simulation</h3><p>50,000 seeds, plus 10,000 on the final code. That run covered 137,293 acked transactions, 75,537 crashes, 29,979 writer takeovers and 114,926 injected storage faults, each checked against a reference model.</p></div>
+    <div class="card"><h3>Property tests + crash tests</h3><p><code>lens == fold(log)</code> and <code>DropSubject == fold(redacted)</code> with rapid. 200 kill -9 rounds with 4 concurrent writers, and no acked write was lost.</p></div>
+    <div class="card"><h3>Bugs found, then fixed</h3><p>TLC found a stale-opener race that could brick the log. Fuzzing found non-canonical varints. The other tools found a vector lens state that wasn't canonical, and a late-landing DEK.</p></div>
+  </div>
+  <p class="note">The specs are bounded and matched to the code by hand. That is evidence, not proof.</p>
+</section>
+
+<section class="band" id="limits">
+  <div class="wrap">
+    <h2>Honest limitations</h2>
+    <p class="sub">v0.1.0 is a prototype. Please don't put real personal data in it yet.</p>
+    <div class="split">
+      <ul class="lim">
+        <li>All lens state lives in RAM, with no compaction yet. Snapshots don't speed up open yet.</li>
+        <li>Vector search is exact brute force; there is no ANN index.</li>
+        <li>One writer per database, with no HA and no read replicas yet.</li>
+        <li>Only MinIO is tested. AWS S3 and R2 support the needed conditional writes but are untested.</li>
+      </ul>
+      <ul class="lim">
+        <li>The HTTP server has no auth or TLS (it binds to 127.0.0.1).</li>
+        <li>In dev mode the KEK lives in the bucket. Backups taken before a shred can still decrypt that subject.</li>
+        <li>Keys and values without a subject are plaintext and are not covered by shred.</li>
+        <li>The on-storage format may change before 1.0.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="roadmap">
+  <h2>Roadmap</h2>
+  <p class="sub">No dates. Everything has to respect the design principles. <a href="https://github.com/raman20/freshdb/blob/main/ROADMAP.md">ROADMAP.md</a></p>
+  <div class="road">
+    <div><b>Compaction</b><br>merge segments, GC retired logs</div>
+    <div><b>Persisted lens snapshots</b><br>open in O(tail), not O(history)</div>
+    <div><b>Disk-backed lenses</b><br>datasets larger than RAM</div>
+    <div><b>ANN vector index</b><br>as a lens, still fold-equivalent</div>
+    <div><b>KMS keys + auth/TLS</b><br>KEK out of the bucket</div>
+    <div><b>Read replicas, no Raft</b><br>tail the log from S3</div>
+    <div><b>SQL layer</b><br>outside the core</div>
+    <div><b>Lakehouse export</b><br>Iceberg / Parquet by LSN range</div>
+    <div><b>Multi-writer</b><br>later, only if it stays simple</div>
+  </div>
+  <p class="note">Want to help? See the <a href="https://github.com/raman20/freshdb/blob/main/ROADMAP.md#good-first-issues">good first issues</a> and <a href="https://github.com/raman20/freshdb/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>
+</section>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <span>freshDB · Apache-2.0 · pre-1.0 prototype</span>
+    <span><a href="https://github.com/raman20/freshdb">GitHub</a> · <a href="https://pkg.go.dev/github.com/raman20/freshdb">Go docs</a> · <a href="https://github.com/raman20/freshdb/blob/main/SECURITY.md">Security</a></span>
+  </div>
+</footer>
+</body>
+</html>
