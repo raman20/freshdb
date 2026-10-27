@@ -40,7 +40,7 @@ error (404): freshdb: not found
 -- after promote, main sees: booked bob seat 12A
 
 == 5. Forget: alice invokes her right to erasure — crypto-shred subject 'alice'
-{"valid_signature":true,"shred_lsn":12,"dek_deleted":true,"chain_head":"8c2b5cf3c64dcacb...","signature":"2ebac16f502fa837..."}
+{"valid_signature":true,"shred_lsn":12,"dek_deleted":true,"chain_head":"85c914682110ecac...","signature":"4926b11e16738062..."}
 -- KV:
 error (404): freshdb: not found
 -- time travel:
@@ -51,11 +51,13 @@ error (404): freshdb: not found
 []
 -- vector recall [1,0,0]:
 {"id":"m2","score":0.11043153}
+-- task t1 in the topic (offsets stay stable, content is gone):
+{"lsn":6,"offset":0,"redacted":true,"value":""}
 -- bob is untouched: {"user":"bob","text":"bob prefers window seats"}
 -- new writes for alice are refused:
 error (410): freshdb: subject has been crypto-shredded
 
 == 6. Verify the whole history (CRCs, hash chains, fencing, shred proofs)
-{"ok":true,"logs":3,"segments":17,"entries":14,"encrypted_values":7,"unreadable_shredded_values":5,"problems":null}
--- grep the raw bucket for alice's plaintext:
-no plaintext found in /tmp/agent-demo-data
+{"ok":true,"logs":3,"segments":17,"entries":14,"encrypted_values":8,"unreadable_shredded_values":6,"problems":null}
+-- grep every byte in the bucket for anything about alice:
+no trace of 'alice', 'peanuts', 'oat milk' or 'ESPRESSO' in /tmp/agent-demo-data

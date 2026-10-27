@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -49,6 +50,7 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
   freshdb log [--from LSN]                    show the raw log
   freshdb shred SUBJECT                       crypto-shred a subject everywhere; prints certificate
   freshdb verify                              check CRCs, hash chains, fencing, shred state
+  freshdb version
 
 Every command takes --branch B (default main). Use --addr http://host:7070
 (or FRESHDB_ADDR) to talk to a running server instead of opening the DB.
@@ -110,6 +112,10 @@ func main() {
 	if addr == "" {
 		addr = os.Getenv("FRESHDB_ADDR")
 	}
+	if args[0] == "version" {
+		fmt.Println("freshdb", buildVersion())
+		return
+	}
 	if args[0] == "serve" {
 		serve(dbURL, flags)
 		return
@@ -142,6 +148,19 @@ func main() {
 	code := c.run()
 	c.close()
 	os.Exit(code)
+}
+
+// version is set at release build time: -ldflags "-X main.version=v0.1.0".
+var version = ""
+
+func buildVersion() string {
+	if version != "" {
+		return version
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		return bi.Main.Version
+	}
+	return "dev"
 }
 
 func serve(dbURL string, flags map[string]string) {
@@ -223,7 +242,10 @@ func (c *cli) call(method, path string, body []byte, raw bool) (int, []byte) {
 	} else {
 		var v any
 		if json.Unmarshal(b, &v) == nil {
-			out, _ := json.MarshalIndent(v, "", "  ")
+			out, _ := json.Marshal(v) // short replies on one line, long ones indented
+			if len(out) > 100 {
+				out, _ = json.MarshalIndent(v, "", "  ")
+			}
 			fmt.Println(string(out))
 		} else {
 			os.Stdout.Write(b)

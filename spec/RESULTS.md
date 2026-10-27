@@ -1,12 +1,17 @@
 # TLA+ model-checking results
 
 TLC 2.19 (tla2tools v1.8.0), Java 21, 8 workers, on the dev box (2026-10-27).
-Run with `spec/run_tlc.sh`. Every run below explored the **complete** bounded
+Run with `spec/run_tlc.sh` (CI runs it on every push). Every run below explored the **complete** bounded
 state space (0 states left on queue). Bounds are in each `.cfg`.
+
+Last full rerun: 2026-10-27, after the rename to freshDB. State counts were
+identical to the first run. Wall times on this 8-vCPU box: FreshLog 31 s,
+FreshTxn 24 s, FreshBranch 22 s, FreshShred 1 s. FreshLog reported depth 30;
+the first run reported 32 with identical state counts.
 
 | Spec | What it models | States generated | Distinct | Depth | Result |
 |---|---|---:|---:|---:|---|
-| FreshLog | object-store log: create-only manifests + epochs, recovery scan, fence segment, group commit, lost/delayed/duplicated PUTs, give-up (unknown outcome), crash, power-loss torn tail + repair, 2 racing writers | 10,415,103 | 2,475,220 | 32 | no error |
+| FreshLog | object-store log: create-only manifests + epochs, recovery scan, fence segment, group commit, lost/delayed/duplicated PUTs, give-up (unknown outcome), crash, power-loss torn tail + repair, 2 racing writers | 10,415,103 | 2,475,220 | 30 | no error |
 | FreshTxn | OCC serializable txns; consume-message + write-KV + ack-cursor in one txn; 3 concurrent consumers + blind writer; durable-prefix crash | 21,685,744 | 2,421,454 | 20 | no error |
 | FreshBranch | append-only logs with parents; create branch, rewind (fork + ref swap + reflog), time travel | 3,430,206 | 1,845,287 | 16 | no error |
 | FreshShred | DEK per subject, marker → delete → audit entry + certificate; crash between steps; DEK create landing late; sweep; hash chain | 25,570 | 6,481 | 16 | no error (incl. liveness) |
