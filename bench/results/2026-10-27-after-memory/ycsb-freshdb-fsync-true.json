@@ -1,0 +1,837 @@
+{
+  "suite": "ycsb",
+  "env": {
+    "time": "2026-10-27T22:28:06+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "6999a47",
+    "command": "bin/freshdb-bench ycsb -system freshdb -fsync=true -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-27-after-memory",
+    "loadavg_at_start": "0.97 0.82 0.58"
+  },
+  "params": {
+    "system": "freshdb",
+    "fsync": true,
+    "keys": 1000000,
+    "value_bytes": 1024,
+    "workloads": "A,B,C,F,D",
+    "clients": [
+      1,
+      8,
+      64
+    ],
+    "warmup": "2s",
+    "duration": "5s",
+    "open_loop_fraction_of_max": 0.5,
+    "open_loop_cap_ops_per_sec": 200000,
+    "seed": 42,
+    "zipf_theta": 0.99,
+    "load_seconds": 6.65,
+    "load_keys_per_sec": 150425,
+    "disk_after_run": "2.7G",
+    "peak_rss": "1113492 kB"
+  },
+  "runs": [
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 20156,
+        "ops_per_sec": 4031.1,
+        "errors": 0,
+        "latency": {
+          "count": 20156,
+          "mean_us": 247.77,
+          "p50_us": 80.58,
+          "p99_us": 1484.8,
+          "p999_us": 5820.42,
+          "max_us": 34373.63
+        },
+        "go_gc": {
+          "cycles": 26,
+          "stw_pause_total_ms": 1.65,
+          "stw_pause_max_ms": 0.16,
+          "heap_inuse_end_mb": 409,
+          "gc_cpu_fraction_cumulative": 0.0296
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 10077,
+        "ops_per_sec": 2015.5,
+        "target_ops_per_sec": 2015.6,
+        "errors": 0,
+        "latency": {
+          "count": 10077,
+          "mean_us": 1104.75,
+          "p50_us": 447.74,
+          "p99_us": 16515.07,
+          "p999_us": 43515.9,
+          "max_us": 45285.38
+        },
+        "go_gc": {
+          "cycles": 16,
+          "stw_pause_total_ms": 1.05,
+          "stw_pause_max_ms": 0.16,
+          "heap_inuse_end_mb": 296,
+          "gc_cpu_fraction_cumulative": 0.0273
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 75030,
+        "ops_per_sec": 15004,
+        "errors": 0,
+        "latency": {
+          "count": 75030,
+          "mean_us": 532.71,
+          "p50_us": 361.98,
+          "p99_us": 2971.65,
+          "p999_us": 17776.64,
+          "max_us": 26198.02
+        },
+        "go_gc": {
+          "cycles": 28,
+          "stw_pause_total_ms": 2,
+          "stw_pause_max_ms": 0.17,
+          "heap_inuse_end_mb": 438,
+          "gc_cpu_fraction_cumulative": 0.0304
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.02,
+        "ops": 37510,
+        "ops_per_sec": 7469.2,
+        "target_ops_per_sec": 7502,
+        "errors": 0,
+        "latency": {
+          "count": 37510,
+          "mean_us": 25783.47,
+          "p50_us": 2889.73,
+          "p99_us": 180355.07,
+          "p999_us": 198443.01,
+          "max_us": 205127.68
+        },
+        "go_gc": {
+          "cycles": 17,
+          "stw_pause_total_ms": 3.29,
+          "stw_pause_max_ms": 0.59,
+          "heap_inuse_end_mb": 318,
+          "gc_cpu_fraction_cumulative": 0.0308
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 341345,
+        "ops_per_sec": 68256.3,
+        "errors": 0,
+        "latency": {
+          "count": 341345,
+          "mean_us": 936.9,
+          "p50_us": 614.4,
+          "p99_us": 4976.64,
+          "p999_us": 17858.56,
+          "max_us": 28393.47
+        },
+        "go_gc": {
+          "cycles": 17,
+          "stw_pause_total_ms": 1.62,
+          "stw_pause_max_ms": 0.2,
+          "heap_inuse_end_mb": 531,
+          "gc_cpu_fraction_cumulative": 0.0302
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.1,
+        "ops": 170640,
+        "ops_per_sec": 33433,
+        "target_ops_per_sec": 34128.2,
+        "errors": 0,
+        "latency": {
+          "count": 170640,
+          "mean_us": 44009.57,
+          "p50_us": 18759.68,
+          "p99_us": 182714.37,
+          "p999_us": 214040.58,
+          "max_us": 261488.64
+        },
+        "go_gc": {
+          "cycles": 11,
+          "stw_pause_total_ms": 12.99,
+          "stw_pause_max_ms": 7.99,
+          "heap_inuse_end_mb": 422,
+          "gc_cpu_fraction_cumulative": 0.0301
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 148696,
+        "ops_per_sec": 29738.4,
+        "errors": 0,
+        "latency": {
+          "count": 148696,
+          "mean_us": 33.46,
+          "p50_us": 3.9,
+          "p99_us": 563.2,
+          "p999_us": 1702.91,
+          "max_us": 23019.52
+        },
+        "go_gc": {
+          "cycles": 16,
+          "stw_pause_total_ms": 1.48,
+          "stw_pause_max_ms": 0.31,
+          "heap_inuse_end_mb": 551,
+          "gc_cpu_fraction_cumulative": 0.0293
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 74346,
+        "ops_per_sec": 14861.2,
+        "target_ops_per_sec": 14869.2,
+        "errors": 0,
+        "latency": {
+          "count": 74346,
+          "mean_us": 1365.71,
+          "p50_us": 248.83,
+          "p99_us": 26804.22,
+          "p999_us": 36241.41,
+          "max_us": 38633.47
+        },
+        "go_gc": {
+          "cycles": 8,
+          "stw_pause_total_ms": 0.47,
+          "stw_pause_max_ms": 0.08,
+          "heap_inuse_end_mb": 381,
+          "gc_cpu_fraction_cumulative": 0.0278
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 638048,
+        "ops_per_sec": 127593.5,
+        "errors": 0,
+        "latency": {
+          "count": 638048,
+          "mean_us": 62.46,
+          "p50_us": 3.5,
+          "p99_us": 1092.61,
+          "p999_us": 3518.46,
+          "max_us": 32768
+        },
+        "go_gc": {
+          "cycles": 20,
+          "stw_pause_total_ms": 1.86,
+          "stw_pause_max_ms": 0.16,
+          "heap_inuse_end_mb": 403,
+          "gc_cpu_fraction_cumulative": 0.0287
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 318983,
+        "ops_per_sec": 63780.4,
+        "target_ops_per_sec": 63796.8,
+        "errors": 0,
+        "latency": {
+          "count": 318983,
+          "mean_us": 4665.76,
+          "p50_us": 229.5,
+          "p99_us": 58163.2,
+          "p999_us": 74973.18,
+          "max_us": 82771.97
+        },
+        "go_gc": {
+          "cycles": 17,
+          "stw_pause_total_ms": 2.28,
+          "stw_pause_max_ms": 0.53,
+          "heap_inuse_end_mb": 579,
+          "gc_cpu_fraction_cumulative": 0.0297
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 2128711,
+        "ops_per_sec": 425531.2,
+        "errors": 0,
+        "latency": {
+          "count": 2128711,
+          "mean_us": 150.07,
+          "p50_us": 3.3,
+          "p99_us": 3086.34,
+          "p999_us": 9805.82,
+          "max_us": 31670.27
+        },
+        "go_gc": {
+          "cycles": 14,
+          "stw_pause_total_ms": 2.12,
+          "stw_pause_max_ms": 0.35,
+          "heap_inuse_end_mb": 650,
+          "gc_cpu_fraction_cumulative": 0.0299
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.16,
+        "ops": 1000000,
+        "ops_per_sec": 193635.4,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 97406.57,
+          "p50_us": 58130.43,
+          "p99_us": 381419.52,
+          "p999_us": 452198.4,
+          "max_us": 519569.41
+        },
+        "go_gc": {
+          "cycles": 9,
+          "stw_pause_total_ms": 1.57,
+          "stw_pause_max_ms": 0.34,
+          "heap_inuse_end_mb": 550,
+          "gc_cpu_fraction_cumulative": 0.0299
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1124044,
+        "ops_per_sec": 224807.9,
+        "errors": 0,
+        "latency": {
+          "count": 1124044,
+          "mean_us": 4.35,
+          "p50_us": 2.53,
+          "p99_us": 16.78,
+          "p999_us": 26.61,
+          "max_us": 4069.38
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.16,
+          "stw_pause_max_ms": 0.08,
+          "heap_inuse_end_mb": 638,
+          "gc_cpu_fraction_cumulative": 0.0284
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 562019,
+        "ops_per_sec": 112403.6,
+        "target_ops_per_sec": 112404,
+        "errors": 0,
+        "latency": {
+          "count": 562019,
+          "mean_us": 32.53,
+          "p50_us": 9.63,
+          "p99_us": 612.35,
+          "p999_us": 2627.58,
+          "max_us": 4366.34
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.32,
+          "stw_pause_max_ms": 0.22,
+          "heap_inuse_end_mb": 529,
+          "gc_cpu_fraction_cumulative": 0.0269
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 4230695,
+        "ops_per_sec": 846134.1,
+        "errors": 0,
+        "latency": {
+          "count": 4230695,
+          "mean_us": 9.24,
+          "p50_us": 3.19,
+          "p99_us": 104.06,
+          "p999_us": 299.52,
+          "max_us": 100270.08
+        },
+        "go_gc": {
+          "cycles": 8,
+          "stw_pause_total_ms": 4.84,
+          "stw_pause_max_ms": 3.21,
+          "heap_inuse_end_mb": 653,
+          "gc_cpu_fraction_cumulative": 0.0271
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 200000,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 23.82,
+          "p50_us": 8,
+          "p99_us": 155.52,
+          "p999_us": 2736.13,
+          "max_us": 8421.38
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.33,
+          "stw_pause_max_ms": 0.17,
+          "heap_inuse_end_mb": 706,
+          "gc_cpu_fraction_cumulative": 0.0269
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 4694920,
+        "ops_per_sec": 938967.4,
+        "errors": 0,
+        "latency": {
+          "count": 4694920,
+          "mean_us": 67.79,
+          "p50_us": 3.92,
+          "p99_us": 1748.99,
+          "p999_us": 4579.33,
+          "max_us": 26492.93
+        },
+        "go_gc": {
+          "cycles": 8,
+          "stw_pause_total_ms": 2.38,
+          "stw_pause_max_ms": 0.35,
+          "heap_inuse_end_mb": 676,
+          "gc_cpu_fraction_cumulative": 0.0285
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199999.9,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 71.62,
+          "p50_us": 31.6,
+          "p99_us": 1001.47,
+          "p999_us": 6672.38,
+          "max_us": 18006.02
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.37,
+          "stw_pause_max_ms": 0.19,
+          "heap_inuse_end_mb": 645,
+          "gc_cpu_fraction_cumulative": 0.0283
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 14031,
+        "ops_per_sec": 2806,
+        "errors": 0,
+        "latency": {
+          "count": 14031,
+          "mean_us": 356,
+          "p50_us": 111.3,
+          "p99_us": 2215.94,
+          "p999_us": 9469.95,
+          "max_us": 46235.65
+        },
+        "go_gc": {
+          "cycles": 12,
+          "stw_pause_total_ms": 4.29,
+          "stw_pause_max_ms": 3.37,
+          "heap_inuse_end_mb": 631,
+          "gc_cpu_fraction_cumulative": 0.0278
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.02,
+        "ops": 7015,
+        "ops_per_sec": 1397.3,
+        "target_ops_per_sec": 1403,
+        "errors": 0,
+        "latency": {
+          "count": 7015,
+          "mean_us": 3884.27,
+          "p50_us": 581.63,
+          "p99_us": 53379.07,
+          "p999_us": 76087.3,
+          "max_us": 78839.81
+        },
+        "go_gc": {
+          "cycles": 7,
+          "stw_pause_total_ms": 2.15,
+          "stw_pause_max_ms": 1.61,
+          "heap_inuse_end_mb": 602,
+          "gc_cpu_fraction_cumulative": 0.0274
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5.01,
+        "ops": 59388,
+        "ops_per_sec": 11858.6,
+        "errors": 0,
+        "latency": {
+          "count": 59388,
+          "mean_us": 673.93,
+          "p50_us": 171.52,
+          "p99_us": 4354.05,
+          "p999_us": 20103.17,
+          "max_us": 117702.66
+        },
+        "go_gc": {
+          "cycles": 16,
+          "stw_pause_total_ms": 2.15,
+          "stw_pause_max_ms": 0.53,
+          "heap_inuse_end_mb": 733,
+          "gc_cpu_fraction_cumulative": 0.0281
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.01,
+        "ops": 29646,
+        "ops_per_sec": 5916.3,
+        "target_ops_per_sec": 5929.3,
+        "errors": 0,
+        "latency": {
+          "count": 29646,
+          "mean_us": 1897.82,
+          "p50_us": 540.67,
+          "p99_us": 23068.67,
+          "p999_us": 31490.05,
+          "max_us": 35782.66
+        },
+        "go_gc": {
+          "cycles": 17,
+          "stw_pause_total_ms": 1.72,
+          "stw_pause_max_ms": 0.35,
+          "heap_inuse_end_mb": 527,
+          "gc_cpu_fraction_cumulative": 0.0287
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5.02,
+        "ops": 250851,
+        "ops_per_sec": 50008.1,
+        "errors": 6818,
+        "first_error": "freshdb: transaction conflict (serializability); retry",
+        "latency": {
+          "count": 250851,
+          "mean_us": 1275.7,
+          "p50_us": 535.55,
+          "p99_us": 12861.44,
+          "p999_us": 42237.95,
+          "max_us": 115933.18
+        },
+        "go_gc": {
+          "cycles": 17,
+          "stw_pause_total_ms": 1.99,
+          "stw_pause_max_ms": 0.23,
+          "heap_inuse_end_mb": 614,
+          "gc_cpu_fraction_cumulative": 0.029
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.06,
+        "ops": 125020,
+        "ops_per_sec": 24708.8,
+        "target_ops_per_sec": 25004.1,
+        "errors": 1021,
+        "first_error": "freshdb: transaction conflict (serializability); retry",
+        "latency": {
+          "count": 125020,
+          "mean_us": 50827.89,
+          "p50_us": 23838.72,
+          "p99_us": 302252.03,
+          "p999_us": 356777.98,
+          "max_us": 392691.71
+        },
+        "go_gc": {
+          "cycles": 12,
+          "stw_pause_total_ms": 2.22,
+          "stw_pause_max_ms": 0.51,
+          "heap_inuse_end_mb": 513,
+          "gc_cpu_fraction_cumulative": 0.0298
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 141648,
+        "ops_per_sec": 28328.2,
+        "errors": 0,
+        "latency": {
+          "count": 141648,
+          "mean_us": 35.13,
+          "p50_us": 4.09,
+          "p99_us": 562.18,
+          "p999_us": 1718.27,
+          "max_us": 17154.05
+        },
+        "go_gc": {
+          "cycles": 14,
+          "stw_pause_total_ms": 0.95,
+          "stw_pause_max_ms": 0.1,
+          "heap_inuse_end_mb": 439,
+          "gc_cpu_fraction_cumulative": 0.0297
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.01,
+        "ops": 70820,
+        "ops_per_sec": 14139.8,
+        "target_ops_per_sec": 14164.1,
+        "errors": 0,
+        "latency": {
+          "count": 70820,
+          "mean_us": 1324.2,
+          "p50_us": 253.44,
+          "p99_us": 18481.15,
+          "p999_us": 23871.49,
+          "max_us": 25640.96
+        },
+        "go_gc": {
+          "cycles": 6,
+          "stw_pause_total_ms": 0.38,
+          "stw_pause_max_ms": 0.08,
+          "heap_inuse_end_mb": 430,
+          "gc_cpu_fraction_cumulative": 0.0291
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 614317,
+        "ops_per_sec": 122842.9,
+        "errors": 0,
+        "latency": {
+          "count": 614317,
+          "mean_us": 64.86,
+          "p50_us": 3.87,
+          "p99_us": 1104.9,
+          "p999_us": 3678.21,
+          "max_us": 37388.29
+        },
+        "go_gc": {
+          "cycles": 17,
+          "stw_pause_total_ms": 2.05,
+          "stw_pause_max_ms": 0.25,
+          "heap_inuse_end_mb": 524,
+          "gc_cpu_fraction_cumulative": 0.0296
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 307107,
+        "ops_per_sec": 61386.5,
+        "target_ops_per_sec": 61421.5,
+        "errors": 0,
+        "latency": {
+          "count": 307107,
+          "mean_us": 4199.61,
+          "p50_us": 537.6,
+          "p99_us": 38436.86,
+          "p999_us": 46923.78,
+          "max_us": 56590.34
+        },
+        "go_gc": {
+          "cycles": 12,
+          "stw_pause_total_ms": 3.05,
+          "stw_pause_max_ms": 1.18,
+          "heap_inuse_end_mb": 731,
+          "gc_cpu_fraction_cumulative": 0.0299
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; ack after segment file fsync + rename + directory fsync",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5.01,
+        "ops": 2015067,
+        "ops_per_sec": 402131.1,
+        "errors": 0,
+        "latency": {
+          "count": 2015067,
+          "mean_us": 158.46,
+          "p50_us": 4.68,
+          "p99_us": 2871.3,
+          "p999_us": 10887.17,
+          "max_us": 98041.86
+        },
+        "go_gc": {
+          "cycles": 13,
+          "stw_pause_total_ms": 3.17,
+          "stw_pause_max_ms": 0.38,
+          "heap_inuse_end_mb": 608,
+          "gc_cpu_fraction_cumulative": 0.0307
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.03,
+        "ops": 1000000,
+        "ops_per_sec": 198700.6,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 32516.09,
+          "p50_us": 21037.06,
+          "p99_us": 166068.22,
+          "p999_us": 227278.85,
+          "max_us": 270532.61
+        },
+        "go_gc": {
+          "cycles": 9,
+          "stw_pause_total_ms": 2.02,
+          "stw_pause_max_ms": 0.49,
+          "heap_inuse_end_mb": 777,
+          "gc_cpu_fraction_cumulative": 0.0315
+        }
+      }
+    }
+  ]
+}

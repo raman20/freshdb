@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"syscall"
 )
 
 // RangeReader is implemented by stores that can read part of an object.
@@ -41,8 +42,9 @@ type fdCache struct {
 }
 
 type fdShard struct {
-	mu sync.Mutex
-	m  map[string]*fdEnt
+	mu  sync.Mutex
+	m   map[string]*fdEnt
+	gen uint64 // bumped by drop
 }
 
 type fdEnt struct {
@@ -51,7 +53,17 @@ type fdEnt struct {
 	dead bool
 }
 
-const fdPerShard = 32
+// fdPerShard bounds open handles per shard: a quarter of RLIMIT_NOFILE,
+// clamped to [256, 16384] in total, so random value reads over many
+// segments do not thrash open/close while leaving most fds to the caller.
+var fdPerShard = func() int {
+	total := 256
+	var r syscall.Rlimit
+	if syscall.Getrlimit(syscall.RLIMIT_NOFILE, &r) == nil {
+		total = int(min(max(r.Cur/4, 256), 16384))
+	}
+	return total / 16
+}()
 
 func (c *fdCache) shard(p string) *fdShard {
 	h := uint32(2166136261) // FNV-1a
@@ -66,26 +78,36 @@ func (c *fdCache) readAt(p string, off, n int64) ([]byte, error) {
 	s.mu.Lock()
 	e := s.m[p]
 	if e == nil {
-		f, err := os.Open(p)
+		gen := s.gen
+		s.mu.Unlock()
+		f, err := os.Open(p) // outside the lock: opens are slow
 		if err != nil {
-			s.mu.Unlock()
 			return nil, err
 		}
-		if s.m == nil {
-			s.m = map[string]*fdEnt{}
-		}
-		for k, v := range s.m { // evict an arbitrary handle when full
-			if len(s.m) < fdPerShard {
-				break
+		s.mu.Lock()
+		switch {
+		case s.m[p] != nil: // another reader cached it meanwhile
+			f.Close()
+			e = s.m[p]
+		case s.gen != gen: // a Delete ran meanwhile: use once, don't cache
+			e = &fdEnt{f: f, dead: true}
+		default:
+			if s.m == nil {
+				s.m = map[string]*fdEnt{}
 			}
-			delete(s.m, k)
-			v.dead = true
-			if v.refs == 0 {
-				v.f.Close()
+			for k, v := range s.m { // evict an arbitrary handle when full
+				if len(s.m) < fdPerShard {
+					break
+				}
+				delete(s.m, k)
+				v.dead = true
+				if v.refs == 0 {
+					v.f.Close()
+				}
 			}
+			e = &fdEnt{f: f}
+			s.m[p] = e
 		}
-		e = &fdEnt{f: f}
-		s.m[p] = e
 	}
 	e.refs++
 	s.mu.Unlock()
@@ -106,6 +128,7 @@ func (c *fdCache) readAt(p string, off, n int64) ([]byte, error) {
 func (c *fdCache) drop(p string) {
 	s := c.shard(p)
 	s.mu.Lock()
+	s.gen++
 	if e := s.m[p]; e != nil {
 		delete(s.m, p)
 		e.dead = true

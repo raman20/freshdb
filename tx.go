@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/raman20/freshdb/format"
 	"github.com/raman20/freshdb/lens"
@@ -264,9 +266,38 @@ func (v VecTx) Search(q []float32, k int) ([]lens.Hit, error) {
 	if err != nil {
 		return nil, err
 	}
+	u, ok := lens.Normalize(q)
+	if !ok || k <= 0 {
+		return nil, nil
+	}
 	vw.mu.RLock()
 	defer vw.mu.RUnlock()
-	return vw.vec.Search(v.coll, q, k), nil
+	return searchParallel(vw.vec, v.coll, u, k), nil
+}
+
+// vecChunk is the smallest slot range worth its own goroutine.
+const vecChunk = 8192
+
+// searchParallel splits a brute-force scan across cores. The result equals
+// the sequential one: hits are totally ordered by (score desc, id asc) and
+// each score is computed by the same code whichever goroutine runs it.
+func searchParallel(vl *lens.Vector, coll string, u []float32, k int) []lens.Hit {
+	n := vl.Slots(coll, len(u))
+	p := min(runtime.GOMAXPROCS(0), n/vecChunk)
+	if p <= 1 {
+		return lens.MergeHits([][]lens.Hit{vl.TopK(coll, u, k, 0, n)}, k)
+	}
+	parts := make([][]lens.Hit, p)
+	var wg sync.WaitGroup
+	for i := range parts {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			parts[i] = vl.TopK(coll, u, k, n*i/p, n*(i+1)/p)
+		}(i)
+	}
+	wg.Wait()
+	return lens.MergeHits(parts, k)
 }
 
 // lensView returns the view non-MVCC lenses should be read from: the live
