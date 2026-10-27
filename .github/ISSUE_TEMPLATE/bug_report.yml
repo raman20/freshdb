@@ -1,0 +1,47 @@
+name: Bug report
+description: Something is wrong — wrong result, lost/duplicated data, crash, or a failing check.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Security issues** (data exposure, shred bypass, fencing bypass): please do not file here — see [SECURITY.md](https://github.com/raman20/freshdb/blob/main/SECURITY.md).
+        Correctness bugs are our top priority. A failing simulator seed (`go test ./sim -run TestSimulation -seed=N`) is the best possible report.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Commands, Go code, or a simulator seed. Minimal is best.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: freshDB version / commit
+      placeholder: v0.1.0 or a commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: store
+    attributes:
+      label: Storage backend
+      options: [local directory, AWS S3, MinIO, Cloudflare R2, other S3-compatible, mem://]
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Go version, embedded vs `freshdb serve`.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output of `freshdb verify` and any logs
+      render: text

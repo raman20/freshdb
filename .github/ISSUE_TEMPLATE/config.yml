@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/raman20/freshdb/security/advisories/new
+    about: Report privately. Please do not open a public issue.
+  - name: Questions and ideas
+    url: https://github.com/raman20/freshdb/discussions
+    about: Ask questions and discuss designs.
