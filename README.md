@@ -422,27 +422,48 @@ For those, use the systems above.
 
 ## Benchmarks
 
-> **This box only — not a performance claim.** These are from an 8-vCPU Xeon
-> VM with an ext4 virtual disk, Go 1.27, using `go test -bench . -benchtime 2s`.
-> There was no tuning and there are **no S3 numbers**. Two runs varied by up to
-> ~50%, so both are shown. On S3, expect commit latency to be dominated by the
-> PUT round trip (tens to hundreds of ms per batch; *estimate*).
+> **One run on a shared 8-vCPU VM, embedded Go engines, S3 = local MinIO.
+> This is not a performance claim.** The full tables, method, commands and
+> caveats are in [docs/benchmarks.md](docs/benchmarks.md); the raw JSON is in
+> [bench/results](bench/results/2026-10-27/).
 
-| Benchmark | Run 1 | Run 2 |
-|---|---:|---:|
-| Put, 1 writer, 1 commit per put, local disk (fsync) | 275 µs | 411 µs |
-| Put, 16×GOMAXPROCS writers (group commit), local disk | 9.6 µs/op (~105k/s) | 13.5 µs/op (~74k/s) |
-| Put, parallel, in-memory store | 4.9 µs | 6.5 µs |
-| Put, parallel, per-subject encryption (in-memory) | 6.7 µs | 8.3 µs |
-| Get, 10k keys | 377 ns | 403 ns |
-| Vector search, 10k × 128-d, exact, k=10 | 3.0 ms | 3.0 ms |
-| Cold open, 10k keys / 100 segments, local disk | 8.1 ms | 9.0 ms |
-| … with a snapshot | 9.4 ms | 9.8 ms |
+YCSB, 1M × 1 KiB records, zipfian, fsync on. Throughput is closed-loop
+successful ops/s:
 
-The last row is slower with a snapshot, not faster: recovery still reads and
-verifies every segment, so the snapshot only adds decode work. Fixing this is
-on the roadmap. Run the benchmarks yourself with
-`go test -run '^$' -bench . -benchmem .`.
+| | freshDB | Badger | Pebble | bbolt | SQLite |
+|---|---:|---:|---:|---:|---:|
+| C (read-only), 8 clients | **2.82M** | 261k | 197k | 752k | 37k |
+| B (95% read), 64 clients | **697k** | 159k | 194k | 242k | 34k |
+| A (50% update), 1 client | 3.7k | 19k | **32k** | 22k | 9.3k |
+| A (50% update), 64 clients | 81k | 25k | **119k** | 24k | 13k |
+| F (read-modify-write), 64 clients | 67k ¹ | 28k ¹ | **81k** | 22k | 8.9k |
+| Peak RSS | 7.1 GiB | 3.5 GiB | **0.7 GiB** | 1.7 GiB | 0.3 GiB |
+
+¹ Plus RMWs that gave up after 16 OCC conflict retries: 9,660 for freshDB
+and 1,045 for Badger.
+
+**Where freshDB loses:**
+- Single-client durable writes (each commit does its own fsyncs).
+- Hot-key contention (OCC aborts instead of queueing).
+- Memory (lens state lives in RAM).
+- Low-rate streaming tail latency: e2e p99 at 1k msgs/s is 23 ms, vs 1.9 ms
+  for NATS JetStream.
+- Vector search: exact only, 19 QPS at 100k × 128-d, vs 145 for a plain Go
+  loop.
+
+**Where it is strong:**
+- Reads.
+- Many concurrent writers through group commit.
+- Durable streaming throughput: 42k msgs/s, vs 8.5k for NATS with
+  `SyncAlways`.
+- Exactly-once consume→write→publish transactions: 62k msgs/s, and the check
+  passes in every run.
+
+On S3, a commit costs 1 PUT at 1 writer, ≈ $5 per 1M commits at AWS list
+price (*estimate*). It costs 0.03 PUTs at 64 writers thanks to group commit.
+
+Reproduce with `cd bench && scripts/run-all.sh`. Engine micro-benchmarks are
+still available with `go test -run '^$' -bench . -benchmem .`.
 
 ## Deployment notes
 
