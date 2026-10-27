@@ -28,7 +28,9 @@ go build -o /tmp/freshdb ./cmd/freshdb && FRESHDB=/tmp/freshdb ./examples/agent-
 S3 tests (skipped unless configured):
 
 ```sh
-docker run -d -p 9000:9000 -e MINIO_ROOT_USER=dev -e MINIO_ROOT_PASSWORD=devpassword minio/minio server /data
+# MinIO no longer ships prebuilt images/binaries; CI builds this pinned version from source
+GOBIN=$PWD/.bin go install github.com/minio/minio@v0.0.0-20260212201848-7aac2a2c5b7c
+MINIO_ROOT_USER=dev MINIO_ROOT_PASSWORD=devpassword .bin/minio server /tmp/minio-data --address 127.0.0.1:9000 &
 FRESHDB_TEST_S3='s3://freshdb-test?endpoint=127.0.0.1:9000&insecure=1&create=1' \
   AWS_ACCESS_KEY_ID=dev AWS_SECRET_ACCESS_KEY=devpassword go test -run S3 -v ./ ./store
 ```

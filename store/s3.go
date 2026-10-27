@@ -46,7 +46,10 @@ func NewS3FromURL(u *url.URL) (*S3, error) {
 		ctx := context.Background()
 		if ok, err := c.BucketExists(ctx, u.Host); err == nil && !ok {
 			if err := c.MakeBucket(ctx, u.Host, minio.MakeBucketOptions{Region: q.Get("region")}); err != nil {
-				return nil, err
+				// a concurrent opener may have created it first; that's fine
+				if ok, err2 := c.BucketExists(ctx, u.Host); err2 != nil || !ok {
+					return nil, err
+				}
 			}
 		}
 	}

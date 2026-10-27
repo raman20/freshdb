@@ -98,18 +98,29 @@ jobs:
     env:
       MINIO_ROOT_USER: ci-test-user
       MINIO_ROOT_PASSWORD: ci-test-password-not-secret
+      MINIO_VERSION: v0.0.0-20260212201848-7aac2a2c5b7c
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: start MinIO container
+      # MinIO no longer publishes Docker Hub images or prebuilt binaries, so build
+      # the server from source at a pinned version (the one tested locally) and cache it.
+      - name: cache MinIO server
+        id: minio-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/minio-bin/minio
+          key: minio-${{ env.MINIO_VERSION }}-${{ runner.os }}
+      - name: build MinIO server
+        if: steps.minio-cache.outputs.cache-hit != 'true'
+        run: GOBIN=$HOME/minio-bin go install github.com/minio/minio@${MINIO_VERSION}
+      - name: start MinIO
         run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER -e MINIO_ROOT_PASSWORD \
-            minio/minio:latest server /data
+          mkdir -p /tmp/minio-data
+          nohup ~/minio-bin/minio server /tmp/minio-data --address 127.0.0.1:9000 > /tmp/minio.log 2>&1 &
           for i in $(seq 1 60); do curl -fs http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
-          curl -fs http://127.0.0.1:9000/minio/health/live
+          curl -fs http://127.0.0.1:9000/minio/health/live || { cat /tmp/minio.log; exit 1; }
       - name: S3 conformance + end-to-end (conditional writes, fencing, shred)
         env:
           FRESHDB_TEST_S3: s3://freshdb-ci?endpoint=127.0.0.1:9000&insecure=1&create=1
