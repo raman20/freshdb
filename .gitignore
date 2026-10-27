@@ -1,0 +1,5 @@
+/freshdb
+/freshdb-data/
+/dist/
+*.test
+*.prof
