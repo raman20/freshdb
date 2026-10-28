@@ -558,7 +558,7 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
 - Memory: large KV values stay in the log (7.1 → ~1 GiB on the files layout;
   2.12 GiB with the journal default and the 256 MiB value cache).
 - Hot-key read-modify-write no longer gives up after 16 retries.
-- Vector search is ~55× faster at 100k vectors (still exact).
+- Exact vector search is ~55× faster at 100k vectors.
 - Concurrent escalated transactions share a group commit (writer batching).
 - Storage no longer only grows: `compact` writes a base image per log and
   deletes replaced segments after a grace period (first version).
