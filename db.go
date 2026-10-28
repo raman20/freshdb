@@ -310,6 +310,10 @@ func (db *DB) openWritable(ctx context.Context, id string) (*writer, error) {
 	if err != nil {
 		return nil, err
 	}
+	// HNSW graphs only on live views: time-travel views scan exactly
+	for _, d := range db.man.ANN {
+		v.vec.EnableANN(d.Coll, d.params())
+	}
 	db.views[id] = v
 	w := newWriter(db, l, v)
 	db.writers[id] = w

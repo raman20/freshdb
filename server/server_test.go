@@ -44,6 +44,15 @@ func TestHTTPAPI(t *testing.T) {
 		t.Fatalf("cursor not advanced atomically: %s", got)
 	}
 	do("PUT", "/v1/vectors/mem/m1?subject=alice", "[1,0]", 200)
+	do("PUT", "/v1/vectors/mem/m2", "[0,1]", 200)
+	do("POST", "/v1/vectors/mem/ann", `{"m":8}`, 200)
+	do("POST", "/v1/vectors/mem/ann", "", 200)
+	do("POST", "/v1/vectors/mem/ann", "{", 400)
+	for _, body := range []string{`{"vector":[1,0.1],"k":1}`, `{"vector":[1,0.1],"k":1,"exact":true}`, `{"vector":[1,0.1],"k":1,"ef":200}`} {
+		if got := do("POST", "/v1/vectors/mem/search", body, 200); !strings.Contains(got, `"m1"`) {
+			t.Fatalf("%s: %s", body, got)
+		}
+	}
 	do("PUT", "/v1/docs/notes/n1?subject=alice", `{"user":"alice","text":"likes tea"}`, 200)
 	do("POST", "/v1/indexes", `{"coll":"notes","field":"user"}`, 200)
 	if got := do("GET", "/v1/docs/notes?field=user&value=alice", "", 200); !strings.Contains(got, "n1") {

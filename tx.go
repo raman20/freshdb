@@ -273,8 +273,29 @@ func (v VecTx) Delete(id string) error {
 	return v.tx.write(format.Op{Kind: format.OpDel, Space: vecSpace(v.coll), Key: id}, nil)
 }
 
-// Search returns the k most cosine-similar vectors (brute force).
+// Search returns the k most cosine-similar vectors, best first (ties by
+// id). Collections without EnableANN, or with fewer than ANNExactBelow
+// vectors, are scanned exactly; otherwise the HNSW graph answers
+// (approximate), falling back to the exact scan if it finds fewer than k.
 func (v VecTx) Search(q []float32, k int) ([]lens.Hit, error) {
+	return v.search(q, k, 0, false)
+}
+
+// SearchExact always scans every vector (exact top-k).
+func (v VecTx) SearchExact(q []float32, k int) ([]lens.Hit, error) {
+	return v.search(q, k, 0, true)
+}
+
+// SearchANN is Search with beam width ef (0 = the collection's EfSearch).
+func (v VecTx) SearchANN(q []float32, k, ef int) ([]lens.Hit, error) {
+	return v.search(q, k, ef, false)
+}
+
+// ANNExactBelow is the collection size under which Search scans exactly
+// even if the collection has an HNSW graph.
+const ANNExactBelow = 4096
+
+func (v VecTx) search(q []float32, k, ef int, exact bool) ([]lens.Hit, error) {
 	vw, err := v.tx.lensView()
 	if err != nil {
 		return nil, err
@@ -285,6 +306,11 @@ func (v VecTx) Search(q []float32, k int) ([]lens.Hit, error) {
 	}
 	vw.mu.RLock()
 	defer vw.mu.RUnlock()
+	if !exact {
+		if hs, ok := vw.vec.ANN(v.coll, u, k, ef, ANNExactBelow); ok && len(hs) >= min(k, vw.vec.Slots(v.coll, len(u))) {
+			return lens.MergeHits([][]lens.Hit{hs}, k), nil
+		}
+	}
 	return searchParallel(vw.vec, v.coll, u, k), nil
 }
 

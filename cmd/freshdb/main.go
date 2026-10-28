@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -46,7 +47,8 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
   freshdb pub TOPIC MESSAGE [--subject S]     publish
   freshdb sub TOPIC [--group G] [--from N] [--max N] [--follow]
   freshdb doc put COLL ID JSON | doc get COLL ID | doc find COLL FIELD VALUE | doc index COLL FIELD
-  freshdb vec put COLL ID 0.1,0.2,... | vec del COLL ID | vec search COLL 0.1,0.2,... [-k N]
+  freshdb vec put COLL ID 0.1,0.2,... | vec del COLL ID | vec search COLL 0.1,0.2,... [-k N] [--exact] [--ef N]
+  freshdb vec ann COLL [--m 16] [--ef-construction 100] [--ef-search 64]   (opt-in HNSW index)
   freshdb tx '[{"op":"put","key":"k","value":"v"},{"op":"pub","topic":"t","value":"m"}]'
   freshdb branch [list] | branch create NAME [--from B] [--at LSN] | branch promote SRC DST
   freshdb rewind BRANCH LSN                   move a branch back (old head kept in reflog)
@@ -73,7 +75,7 @@ type cli struct {
 func parse(argv []string) ([]string, map[string]string) {
 	var args []string
 	flags := map[string]string{}
-	bools := map[string]bool{"follow": true, "help": true, "h": true}
+	bools := map[string]bool{"follow": true, "help": true, "h": true, "exact": true}
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
 		if strings.HasPrefix(a, "-") && len(a) > 1 && !isNumberish(a) {
@@ -356,7 +358,11 @@ func (c *cli) run() int {
 			st, _ = c.call("POST", "/v1/indexes", b, false)
 		}
 	case "vec":
-		switch c.arg(1, "put|del|search") {
+		switch c.arg(1, "put|del|search|ann") {
+		case "ann":
+			n := func(f string) int { v, _ := strconv.Atoi(c.flags[f]); return v }
+			b, _ := json.Marshal(map[string]int{"m": n("m"), "ef_construction": n("ef-construction"), "ef_search": n("ef-search")})
+			st, _ = c.call("POST", "/v1/vectors/"+esc(c.arg(2, "COLL"))+"/ann", b, false)
 		case "put":
 			st, _ = c.call("PUT", "/v1/vectors/"+esc(c.arg(2, "COLL"))+"/"+esc(c.arg(3, "ID"))+c.q(), vec(c.arg(4, "VECTOR")), false)
 		case "del":
@@ -366,7 +372,7 @@ func (c *cli) run() int {
 			if k == "" {
 				k = "5"
 			}
-			st, _ = c.call("POST", "/v1/vectors/"+esc(c.arg(2, "COLL"))+"/search"+c.q(), []byte(fmt.Sprintf(`{"vector":%s,"k":%s}`, vec(c.arg(3, "VECTOR")), k)), false)
+			st, _ = c.call("POST", "/v1/vectors/"+esc(c.arg(2, "COLL"))+"/search"+c.q(), []byte(fmt.Sprintf(`{"vector":%s,"k":%s,"exact":%v,"ef":%d}`, vec(c.arg(3, "VECTOR")), k, c.flags["exact"] == "true", atoiOr(c.flags["ef"]))), false)
 		}
 	case "branch":
 		sub := "list"
@@ -453,4 +459,9 @@ func (c *cli) sub() int {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+}
+
+func atoiOr(s string) int {
+	n, _ := strconv.Atoi(s)
+	return n
 }

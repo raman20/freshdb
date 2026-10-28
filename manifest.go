@@ -26,6 +26,7 @@ type Manifest struct {
 	Refs    map[string]string   `json:"refs"` // branch name -> log id
 	Reflog  []RefChange         `json:"reflog,omitempty"`
 	Indexes []IndexDecl         `json:"indexes,omitempty"`
+	ANN     []ANNDecl           `json:"ann,omitempty"`     // vector collections with an HNSW graph
 	Garbage []Garbage           `json:"garbage,omitempty"` // objects to delete once due (compaction)
 }
 
@@ -71,6 +72,12 @@ type RefChange struct {
 	To   string `json:"to"`
 	At   uint64 `json:"at"`
 	Why  string `json:"why"`
+}
+
+// ANNDecl opts a vector collection into an HNSW graph (EnableANN).
+type ANNDecl struct {
+	Coll string `json:"coll"`
+	ANNOptions
 }
 
 type IndexDecl struct {

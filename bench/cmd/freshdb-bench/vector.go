@@ -27,6 +27,9 @@ type vecRun struct {
 	Latency    Lat     `json:"latency"`
 	InsertPerS float64 `json:"insert_vectors_per_sec,omitempty"`
 	Index      string  `json:"index"`
+	BuildSecs  float64 `json:"hnsw_build_secs,omitempty"` // EnableANN on the loaded collection
+	OpenSecs   float64 `json:"open_secs,omitempty"`       // reopen incl. replay (+ graph build with ANN)
+	HeapMiB    float64 `json:"heap_after_open_mib,omitempty"`
 }
 
 func cmdVector(args []string) {
@@ -41,11 +44,19 @@ func cmdVector(args []string) {
 	seed := fs.Uint64("seed", 42, "RNG seed")
 	dataDir := fs.String("dir", "/tmp/freshdb-bench", "data directory (wiped)")
 	out := fs.String("out", "results", "output directory")
+	annF := fs.String("ann", "", "HNSW beam widths to test after the exact runs, e.g. 32,64,128 (empty: exact only)")
+	annM := fs.Int("ann-m", 16, "HNSW M")
+	annEfc := fs.Int("ann-efc", 100, "HNSW efConstruction")
+	flatOn := fs.Bool("flat", true, "also run the flat Go loop")
 	fs.Parse(args)
 	res := &Result{Suite: "vector", Env: envInfo(*dataDir), Params: map[string]any{"dim": *dim, "clusters": *clusters, "sigma": *sigma,
 		"queries": *nq, "duration": dur.String(), "seed": *seed, "metric": "cosine", "fsync": false,
 		"dataset": "synthetic gaussian clusters (not SIFT/GloVe); ground truth by exact float64 search"}}
-	res.Notes = append(res.Notes, "freshDB has no ANN index yet: search is exact brute force, so recall is 1.0 by construction and QPS falls linearly with N. The flat Go loop is a lower bound on brute-force cost, not an ANN competitor.")
+	if *annF != "" {
+		res.Params.(map[string]any)["ann"] = map[string]any{"ef": *annF, "m": *annM, "ef_construction": *annEfc}
+		res.Notes = append(res.Notes, "freshdb-hnsw-efN rows use the opt-in HNSW graph (EnableANN) with beam width N; recall is against the same float64 ground truth. Exact search is the 'freshdb' row.")
+	}
+	res.Notes = append(res.Notes, "Exact rows (freshdb, flat-go-loop): search is exact brute force, so recall is 1.0 by construction and QPS falls linearly with N. The flat Go loop is a lower bound on brute-force cost, not an ANN competitor.")
 	for _, n := range parseInts(*nF) {
 		r := rand.New(rand.NewPCG(*seed, uint64(n)))
 		centers := make([][]float32, *clusters)
@@ -104,7 +115,11 @@ func cmdVector(args []string) {
 			return ids
 		}
 		flat := newFlat(data)
-		for _, sys := range []string{"freshdb", "flat-go-loop"} {
+		systems := []string{"freshdb"}
+		if *flatOn {
+			systems = append(systems, "flat-go-loop")
+		}
+		for _, sys := range systems {
 			search := fresh
 			index := "none (exact brute force over the vector lens)"
 			if sys != "freshdb" {
@@ -127,6 +142,54 @@ func cmdVector(args []string) {
 				}
 				res.Runs = append(res.Runs, vr)
 				logf("vector %s n=%d c=%d: recall@10 %.4f qps %.1f p50 %.0fus p99 %.0fus", sys, n, c, rec, ph.OpsPerSec, ph.Latency.P50Us, ph.Latency.P99Us)
+			}
+		}
+		flat = nil
+		if *annF != "" {
+			t0 := time.Now()
+			if err := db.EnableANN(bg, "v", freshdb.ANNOptions{M: *annM, EfConstruction: *annEfc}); err != nil {
+				fatal(err)
+			}
+			build := time.Since(t0).Seconds()
+			logf("vector hnsw n=%d: build %.1fs", n, build)
+			db.Close()
+			runtime.GC()
+			t0 = time.Now()
+			if db, err = openFreshDB(dir, false, ""); err != nil {
+				fatal(err)
+			}
+			open := time.Since(t0).Seconds()
+			runtime.GC()
+			var ms runtime.MemStats
+			runtime.ReadMemStats(&ms)
+			logf("vector hnsw n=%d: reopen %.1fs heap %.0f MiB", n, open, float64(ms.HeapAlloc)/(1<<20))
+			for _, ef := range parseInts(*annF) {
+				search := func(q []float32) []string {
+					var ids []string
+					db.View(bg, func(tx *freshdb.Tx) error {
+						hits, err := tx.Vector("v").SearchANN(q, 10, ef)
+						for _, h := range hits {
+							ids = append(ids, h.ID)
+						}
+						return err
+					})
+					return ids
+				}
+				rec := 0.0
+				for i, q := range qs {
+					rec += recall(search(q), truth[i])
+				}
+				rec /= float64(len(qs))
+				for _, c := range parseInts(*clientsF) {
+					var qi atomic.Int64
+					ph := runClosed(c, *dur, func(int) opFunc {
+						return func() error { search(qs[int(qi.Add(1))%len(qs)]); return nil }
+					})
+					sys := fmt.Sprintf("freshdb-hnsw-ef%d", ef)
+					res.Runs = append(res.Runs, vecRun{System: sys, N: n, Dim: *dim, Clients: c, K: 10, RecallAt10: round(rec, 4), QPS: ph.OpsPerSec, Latency: ph.Latency,
+						Index: fmt.Sprintf("HNSW M=%d efC=%d ef=%d", *annM, *annEfc, ef), BuildSecs: round(build, 2), OpenSecs: round(open, 2), HeapMiB: round(float64(ms.HeapAlloc)/(1<<20), 0)})
+					logf("vector %s n=%d c=%d: recall@10 %.4f qps %.1f p50 %.0fus p99 %.0fus", sys, n, c, rec, ph.OpsPerSec, ph.Latency.P50Us, ph.Latency.P99Us)
+				}
 			}
 		}
 		db.Close()

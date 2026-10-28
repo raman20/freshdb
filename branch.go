@@ -221,6 +221,48 @@ func (db *DB) RegisterIndex(ctx context.Context, coll, field string) error {
 	return nil
 }
 
+// ANNOptions configures a collection's HNSW graph; zero fields take the
+// defaults (M 16, EfConstruction 100, EfSearch 64).
+type ANNOptions struct {
+	M              int `json:"m,omitempty"`
+	EfConstruction int `json:"ef_construction,omitempty"`
+	EfSearch       int `json:"ef_search,omitempty"`
+}
+
+func (o ANNOptions) params() lens.ANNParams {
+	return lens.ANNParams{M: o.M, EfConstruction: o.EfConstruction, EfSearch: o.EfSearch}
+}
+
+// EnableANN gives a vector collection an approximate (HNSW) index, on
+// every branch. The declaration is stored in the manifest; graphs are
+// built now in every open view and on every later open (by replay, so
+// opening gets slower). Search then uses the graph for collections of at
+// least ANNExactBelow vectors; SearchExact still scans. Calling it again
+// with other options rebuilds the graphs.
+func (db *DB) EnableANN(ctx context.Context, coll string, o ANNOptions) error {
+	db.lockIdle()
+	defer db.mu.Unlock()
+	if err := db.commitManifest(ctx, func(m *Manifest) error {
+		for i, d := range m.ANN {
+			if d.Coll == coll {
+				m.ANN[i].ANNOptions = o
+				return nil
+			}
+		}
+		m.ANN = append(m.ANN, ANNDecl{coll, o})
+		return nil
+	}); err != nil {
+		return err
+	}
+	for _, id := range sortedMapKeys(db.views) {
+		v := db.views[id]
+		v.mu.Lock()
+		v.vec.EnableANN(coll, o.params())
+		v.mu.Unlock()
+	}
+	return nil
+}
+
 // LensDigests returns the digest of every lens of a branch (for checking
 // lens == fold(log)).
 func (db *DB) LensDigests(branch string) (map[string][32]byte, uint64, error) {

@@ -18,7 +18,8 @@ import (
 // scan with no per-vector allocation. The slot order depends on history,
 // but no result does: hits are totally ordered by (score desc, id asc).
 type Vector struct {
-	m map[string]*vecColl // coll -> vectors
+	m   map[string]*vecColl  // coll -> vectors
+	ann map[string]ANNParams // collections with an HNSW graph (opt-in)
 }
 
 type vecColl struct {
@@ -32,6 +33,8 @@ type slab struct {
 	subj []string
 	data []float32 // len(ids)*dim unit-vector components
 	pos  map[string]int
+	g    *hnsw   // HNSW graph, if the collection opted in
+	node []int32 // slot -> graph node (with g)
 }
 
 func NewVector() *Vector { return &Vector{m: map[string]*vecColl{}} }
@@ -129,6 +132,14 @@ func (l *Vector) add(coll, id, subject string, u []float32) {
 	sl.ids = append(sl.ids, id)
 	sl.subj = append(sl.subj, subject)
 	sl.data = append(sl.data, u...)
+	if p, ok := l.ann[coll]; ok {
+		if sl.g == nil {
+			sl.g = newHNSW(sl, p)
+		} else {
+			sl.node = append(sl.node, -1)
+			sl.g.insert(len(sl.ids) - 1)
+		}
+	}
 }
 
 func (l *Vector) DropSubject(s string) {
@@ -160,13 +171,26 @@ func (l *Vector) del(coll, id string) {
 	delete(c.dim, id)
 	sl := c.slabs[d]
 	i, last := sl.pos[id], len(sl.ids)-1
+	var gone int32 = -1
+	if sl.g != nil {
+		gone = sl.node[i]
+	}
 	if i != last { // move the last slot into the hole
 		sl.ids[i], sl.subj[i] = sl.ids[last], sl.subj[last]
 		copy(sl.data[i*d:(i+1)*d], sl.data[last*d:])
 		sl.pos[sl.ids[i]] = i
+		if sl.g != nil {
+			sl.node[i] = sl.node[last]
+			sl.g.slot[sl.node[i]] = int32(i)
+		}
 	}
 	delete(sl.pos, id)
 	sl.ids, sl.subj, sl.data = sl.ids[:last], sl.subj[:last], sl.data[:last*d]
+	if sl.g != nil {
+		clear(sl.data[last*d : (last+1)*d]) // no copy of a deleted vector stays behind
+		sl.node = sl.node[:last]
+		sl.g.remove(gone)
+	}
 	if last == 0 {
 		delete(c.slabs, d)
 	}
@@ -291,6 +315,42 @@ func MergeHits(parts [][]Hit, k int) []Hit {
 		all = all[:k]
 	}
 	return all
+}
+
+// EnableANN gives a collection an HNSW graph (built now from its current
+// vectors, then maintained on every apply). Exact search stays available.
+func (l *Vector) EnableANN(coll string, p ANNParams) {
+	if l.ann == nil {
+		l.ann = map[string]ANNParams{}
+	}
+	if old, ok := l.ann[coll]; ok && old == p {
+		return
+	}
+	l.ann[coll] = p
+	if c := l.m[coll]; c != nil {
+		for _, sl := range c.slabs { // independent graphs: order is irrelevant
+			sl.g = newHNSW(sl, p)
+		}
+	}
+}
+
+// ANN returns up to k approximate hits (unordered) for the unit query u
+// from the collection's HNSW graph with beam width ef (0 = the
+// collection's EfSearch), and false if the collection has no graph for
+// this dimension or holds fewer than minN vectors.
+func (l *Vector) ANN(coll string, u []float32, k, ef, minN int) ([]Hit, bool) {
+	c := l.m[coll]
+	if c == nil || k <= 0 {
+		return nil, false
+	}
+	sl := c.slabs[len(u)]
+	if sl == nil || sl.g == nil || len(sl.ids) < minN {
+		return nil, false
+	}
+	if ef <= 0 {
+		ef = sl.g.p.EfSearch
+	}
+	return sl.g.knn(u, k, ef), true
 }
 
 // Search returns the top-k ids by cosine similarity (ties broken by id).

@@ -30,6 +30,7 @@ import (
 
 	"github.com/raman20/freshdb"
 	"github.com/raman20/freshdb/format"
+	"github.com/raman20/freshdb/lens"
 )
 
 type Server struct{ DB *freshdb.DB }
@@ -59,6 +60,7 @@ func Handler(db *freshdb.DB) http.Handler {
 	m.HandleFunc("POST /v1/shred/{subject}", s.shred)
 	m.HandleFunc("GET /v1/verify", s.verify)
 	m.HandleFunc("POST /v1/indexes", s.index)
+	m.HandleFunc("POST /v1/vectors/{c}/ann", s.vecANN)
 	m.HandleFunc("POST /v1/compact", s.compact)
 	return m
 }
@@ -426,6 +428,8 @@ func (s *Server) vecSearch(w http.ResponseWriter, r *http.Request) {
 	var q struct {
 		Vector []float32 `json:"vector"`
 		K      int       `json:"k"`
+		Exact  bool      `json:"exact"` // always scan, even with an HNSW graph
+		Ef     int       `json:"ef"`    // HNSW beam width (0 = the collection's)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
 		fail(w, fmt.Errorf("%w: %v", errBad, err))
@@ -440,7 +444,14 @@ func (s *Server) vecSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []hit{}
 	err := view(r, func(tx *freshdb.Tx) error {
-		hs, err := tx.Vector(r.PathValue("c")).Search(q.Vector, q.K)
+		vt := tx.Vector(r.PathValue("c"))
+		var hs []lens.Hit
+		var err error
+		if q.Exact {
+			hs, err = vt.SearchExact(q.Vector, q.K)
+		} else {
+			hs, err = vt.SearchANN(q.Vector, q.K, q.Ef)
+		}
 		for _, h := range hs {
 			out = append(out, hit{h.ID, h.Score})
 		}
@@ -451,6 +462,22 @@ func (s *Server) vecSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, out)
+}
+
+// vecANN enables (or reconfigures) the HNSW graph of a vector collection.
+func (s *Server) vecANN(w http.ResponseWriter, r *http.Request) {
+	var o freshdb.ANNOptions
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&o); err != nil {
+			fail(w, fmt.Errorf("%w: %v", errBad, err))
+			return
+		}
+	}
+	if err := s.DB.EnableANN(r.Context(), r.PathValue("c"), o); err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]any{"ok": true})
 }
 
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
