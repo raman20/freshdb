@@ -58,7 +58,6 @@ type jent struct {
 }
 
 const (
-	jrnFile    = "journal.fj"
 	jrnMagic   = "FRESHJ1\x00"
 	jrnHead    = 32      // magic(8) salt(16) crc(4) pad(4)
 	jrnHdr     = 12      // crc(4) kind(1) pad(1) klen(2) dlen(4)
@@ -80,6 +79,11 @@ func (j *Journal) SetUnsafeNoSync(on bool) { j.noSync = on }
 func NewJournal(dir string) (*Journal, error) {
 	if dir == "" {
 		return nil, errors.New("store: empty path")
+	}
+	if l, err := DetectLayout(dir); err != nil {
+		return nil, err
+	} else if l == LayoutFiles {
+		return nil, fmt.Errorf("store: %s holds the one-file-per-object layout; open it as fs:// or convert it with `freshdb migrate`", dir)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
@@ -286,6 +290,48 @@ func (j *Journal) reserve(upto int64) error {
 		return nil
 	}
 	return j.f.Sync() // size changed: full sync, once per chunk
+}
+
+// Sync makes every record appended so far durable, even with
+// SetUnsafeNoSync (used by Migrate after a bulk copy).
+func (j *Journal) Sync() error {
+	unlock, err := j.lockWrite()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := j.f.Sync(); err != nil {
+		return err
+	}
+	return syncDir(j.dir)
+}
+
+// Close releases the journal's file handles. The Journal is unusable after.
+func (j *Journal) Close() error {
+	j.wmu.Lock()
+	j.rfmu.Lock()
+	defer j.rfmu.Unlock()
+	defer j.wmu.Unlock()
+	e1, e2 := j.f.Close(), j.rf.Close()
+	if e1 != nil {
+		return e1
+	}
+	return e2
+}
+
+// Keys returns every live key, sorted.
+func (j *Journal) Keys(context.Context) ([]string, error) {
+	if err := j.catchUp(); err != nil {
+		return nil, err
+	}
+	j.mu.RLock()
+	out := make([]string, 0, len(j.idx))
+	for k := range j.idx {
+		out = append(out, k)
+	}
+	j.mu.RUnlock()
+	sort.Strings(out)
+	return out, nil
 }
 
 func (j *Journal) sync() error {

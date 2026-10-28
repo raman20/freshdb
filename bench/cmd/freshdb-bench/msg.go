@@ -17,6 +17,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/raman20/freshdb"
+	"github.com/raman20/freshdb/store"
 )
 
 // broker is the messaging surface both freshDB and NATS JetStream are driven through.
@@ -33,8 +34,9 @@ type broker interface {
 // ---- freshDB ----
 
 type freshBroker struct {
-	db    *freshdb.DB
-	fsync bool
+	db     *freshdb.DB
+	fsync  bool
+	layout store.Layout
 }
 
 func (b *freshBroker) setup(string, []string) error { return nil }
@@ -58,7 +60,7 @@ func (b *freshBroker) consume(topic, group string, max int) (out [][]byte, err e
 }
 func (b *freshBroker) durability() string {
 	if b.fsync {
-		return "publish and consume+ack are each a durable transaction (fsync'd group commit)"
+		return "publish and consume+ack are each a durable transaction (fsync'd group commit; " + string(b.layout) + " layout)"
 	}
 	return "SetUnsafeNoSync (no fsync)"
 }
@@ -163,7 +165,7 @@ type msgRun struct {
 
 func cmdMsg(args []string) {
 	fs := flag.NewFlagSet("msg", flag.ExitOnError)
-	system := fs.String("system", "freshdb", "freshdb|freshdb-journal|nats")
+	system := fs.String("system", "freshdb", "freshdb|freshdb-files|freshdb-journal|nats")
 	fsync := fs.Bool("fsync", true, "durable writes")
 	ratesF := fs.String("rates", "1000,5000,10000,20000", "fixed producer rates (msgs/s, aggregate)")
 	groupsF := fs.String("groups", "1,4", "consumer group counts (each group sees every message); run at -group-rate")
@@ -183,12 +185,13 @@ func cmdMsg(args []string) {
 	os.MkdirAll(dir, 0o755)
 	var b broker
 	switch *system {
-	case "freshdb", "freshdb-journal":
-		db, err := openFreshDB(dir, *fsync, *system == "freshdb-journal")
+	case "freshdb", "freshdb-files", "freshdb-journal":
+		db, err := openFreshDB(dir, *fsync, freshLayout(*system))
 		if err != nil {
 			fatal(err)
 		}
-		b = &freshBroker{db, *fsync}
+		l, _ := store.DetectLayout(dir)
+		b = &freshBroker{db, *fsync, l}
 	case "nats":
 		nb, err := openNATS(dir, *fsync)
 		if err != nil {

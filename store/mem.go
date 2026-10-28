@@ -78,3 +78,15 @@ func (s *Mem) Raw(fn func(m map[string][]byte)) {
 	defer s.mu.Unlock()
 	fn(s.m)
 }
+
+// Keys returns every key, sorted.
+func (m *Mem) Keys(context.Context) ([]string, error) {
+	m.mu.Lock()
+	out := make([]string, 0, len(m.m))
+	for k := range m.m {
+		out = append(out, k)
+	}
+	m.mu.Unlock()
+	sort.Strings(out)
+	return out, nil
+}

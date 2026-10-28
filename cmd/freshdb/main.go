@@ -30,6 +30,7 @@ import (
 
 	"github.com/raman20/freshdb"
 	"github.com/raman20/freshdb/server"
+	"github.com/raman20/freshdb/store"
 )
 
 const usage = `freshdb — one log, many lenses (KV, topics, docs, vectors), with branches,
@@ -50,6 +51,7 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
   freshdb log [--from LSN]                    show the raw log
   freshdb shred SUBJECT                       crypto-shred a subject everywhere; prints certificate
   freshdb verify                              check CRCs, hash chains, fencing, shred state
+  freshdb migrate [--to journal|files]         convert a stopped local DB's on-disk layout
   freshdb version
 
 Every command takes --branch B (default main). Use --addr http://host:7070
@@ -116,6 +118,9 @@ func main() {
 		fmt.Println("freshdb", buildVersion())
 		return
 	}
+	if args[0] == "migrate" {
+		os.Exit(migrate(dbURL, flags["to"]))
+	}
 	if args[0] == "serve" {
 		serve(dbURL, flags)
 		return
@@ -148,6 +153,25 @@ func main() {
 	code := c.run()
 	c.close()
 	os.Exit(code)
+}
+
+// migrate converts a local directory between the files layout (v0.1.0) and
+// the journal layout. Every process using the directory must be stopped.
+func migrate(dbURL, to string) int {
+	dir := strings.TrimPrefix(dbURL, "file://")
+	if strings.Contains(dir, "://") {
+		log.Printf("freshdb migrate: %s is not a local directory", dbURL)
+		return 2
+	}
+	if to == "" {
+		to = string(store.DefaultLayout())
+	}
+	if err := store.Migrate(context.Background(), dir, store.Layout(to), log.Printf); err != nil {
+		log.Printf("freshdb migrate: %v", err)
+		return 1
+	}
+	log.Printf("freshdb migrate: %s uses the %s layout", dir, to)
+	return 0
 }
 
 // version is set at release build time: -ldflags "-X main.version=v0.1.0".

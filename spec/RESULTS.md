@@ -14,6 +14,7 @@ the first run reported 32 with identical state counts.
 | FreshLog | object-store log: create-only manifests + epochs, recovery scan, fence segment, group commit, lost/delayed/duplicated PUTs, give-up (unknown outcome), crash, power-loss torn tail + repair, 2 racing writers | 10,415,103 | 2,475,220 | 30 | no error |
 | FreshTxn | OCC serializable txns; consume-message + write-KV + ack-cursor in one txn; 3 concurrent consumers + blind writer; durable-prefix crash | 21,685,744 | 2,421,454 | 20 | no error |
 | FreshBranch | append-only logs with parents; create branch, rewind (fork + ref swap + reflog), time travel | 3,430,206 | 1,845,287 | 16 | no error |
+| FreshMigrate | offline layout migration (files ↔ journal): copy, verify, fsync, rename to `.migrated`, move original to backup, rename into place; volatile vs durable directory state; up to 4 crashes at any step with resume | 149 | 88 | 17 | no error (incl. liveness) |
 | FreshShred | DEK per subject, marker → delete → audit entry + certificate; crash between steps; DEK create landing late; sweep; hash chain | 25,570 | 6,481 | 16 | no error (incl. liveness) |
 
 ## Properties checked
@@ -29,6 +30,13 @@ the first run reported 32 with identical state counts.
 - **FreshBranch**: `RewindExact`, `RewindKeepsOld` (pre-rewind head still readable),
   `DenseLSN`; temporal `AppendOnly`, `TimeTravelStable` (no step ever changes the
   contents of any (log, lsn) read).
+- **FreshMigrate** (2026-10-28): `OriginalSafe` (the original data is
+  reachable under the DB directory or its backup, both in the live and in the
+  crash-surviving state), `CopyReachable` (if the DB directory is missing, a
+  complete copy waits under `.migrated`), `NoPartialVisible` (neither name ever
+  holds an incomplete copy), `DoneCorrect`; temporal `Finishes` (resuming
+  always completes). Sanity check: removing the data fsync before the first
+  rename makes TLC report a `NoPartialVisible` violation.
 - **FreshShred**: `ShreddedNeverRevealed`, `NoWritesAfterShred`, `ChainVerifiable`,
   `CertsVerify`; temporal `AppendOnly`, `KeyEventuallyGone` (under weak fairness
   of sweep/land: `<>[](shredded ⇒ no DEK)`).

@@ -131,6 +131,26 @@ func (c *fdCache) drop(p string) {
 	s.mu.Unlock()
 }
 
+func (c *fdCache) closeAll() {
+	for i := range c.shards {
+		s := &c.shards[i]
+		s.mu.Lock()
+		s.gen++
+		for k, e := range s.m {
+			delete(s.m, k)
+			e.dead = true
+			if e.refs == 0 {
+				e.f.Close()
+			}
+		}
+		s.mu.Unlock()
+	}
+}
+
+// Close releases cached read handles. The FS stays usable (handles are
+// reopened on demand).
+func (s *FS) Close() error { s.fds.closeAll(); return nil }
+
 // GetRange implements RangeReader with pread on a cached handle.
 func (s *FS) GetRange(_ context.Context, key string, off, n int64) ([]byte, error) {
 	p, err := s.path(key)

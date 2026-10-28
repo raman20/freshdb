@@ -75,10 +75,13 @@ type DB struct {
 	vcache  *valueCache
 	failed  error
 	closed  bool
+	owned   io.Closer // store opened by Open from a URL; closed by Close
 }
 
-// Open opens (or creates) the database at url: a directory path,
-// file:///path, mem://name or s3://bucket/prefix?endpoint=...
+// Open opens (or creates) the database at url: a directory path or
+// file:///path (its existing layout, else the journal layout on Unix; see
+// store.OpenLocal), journal:///path, fs:///path, mem://name or
+// s3://bucket/prefix?endpoint=...
 func Open(ctx context.Context, url string, opts ...Option) (*DB, error) {
 	st, err := store.Open(url)
 	if err != nil {
@@ -89,7 +92,15 @@ func Open(ctx context.Context, url string, opts ...Option) (*DB, error) {
 			return nil, err
 		}
 	}
-	return OpenStore(ctx, st, opts...)
+	db, err := OpenStore(ctx, st, opts...)
+	if c, ok := st.(io.Closer); ok {
+		if err != nil {
+			c.Close()
+			return nil, err
+		}
+		db.owned = c
+	}
+	return db, err
 }
 
 // OpenStore opens a database on an explicit Store.
@@ -284,6 +295,9 @@ func (db *DB) Close() error {
 	db.mu.Unlock()
 	for _, id := range sortedMapKeys(ws) {
 		ws[id].stop()
+	}
+	if db.owned != nil {
+		return db.owned.Close()
 	}
 	return nil
 }

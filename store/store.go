@@ -28,13 +28,15 @@ type Store interface {
 	Delete(ctx context.Context, key string) error
 }
 
-// Open opens a store from a URL: mem://name, file:///path (or a bare path),
-// journal:///path (one append-only file; see Journal),
+// Open opens a store from a URL: mem://name; a bare path or file:///path
+// (OpenLocal: the directory's existing layout, else DefaultLayout);
+// journal:///path or fs:///path to force a layout (each refuses a
+// directory holding the other one);
 // s3://bucket/prefix?endpoint=host:port&insecure=1 (credentials from
 // AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY or MINIO_ROOT_USER/PASSWORD).
 func Open(raw string) (Store, error) {
 	if !strings.Contains(raw, "://") {
-		return NewFS(raw)
+		return OpenLocal(raw)
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -44,6 +46,8 @@ func Open(raw string) (Store, error) {
 	case "mem":
 		return SharedMem(u.Host + u.Path), nil
 	case "file":
+		return OpenLocal(u.Path)
+	case "fs":
 		return NewFS(u.Path)
 	case "journal":
 		return NewJournal(u.Path)

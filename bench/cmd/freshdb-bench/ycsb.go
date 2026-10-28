@@ -61,7 +61,7 @@ func keyName(i uint64) string { return fmt.Sprintf("user%019d", i) }
 
 func cmdYCSB(args []string) {
 	fs := flag.NewFlagSet("ycsb", flag.ExitOnError)
-	system := fs.String("system", "freshdb", "freshdb|freshdb-journal|badger|pebble|bbolt|sqlite")
+	system := fs.String("system", "freshdb", "freshdb|freshdb-files|freshdb-journal|badger|pebble|bbolt|sqlite")
 	fsync := fs.Bool("fsync", true, "durable commits (false = each engine's no-sync mode)")
 	keys := fs.Int("keys", 1_000_000, "records loaded before the run")
 	vsize := fs.Int("value", 1024, "value size in bytes")

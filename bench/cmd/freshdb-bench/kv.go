@@ -33,7 +33,7 @@ type KV interface {
 	Durability() string
 }
 
-var kvSystems = []string{"freshdb", "freshdb-journal", "badger", "pebble", "bbolt", "sqlite"}
+var kvSystems = []string{"freshdb", "freshdb-files", "freshdb-journal", "badger", "pebble", "bbolt", "sqlite"}
 
 func openKV(system, dir string, fsync bool) (KV, error) {
 	os.RemoveAll(dir)
@@ -41,10 +41,8 @@ func openKV(system, dir string, fsync bool) (KV, error) {
 		return nil, err
 	}
 	switch system {
-	case "freshdb":
-		return openFresh(dir, fsync, false)
-	case "freshdb-journal":
-		return openFresh(dir, fsync, true)
+	case "freshdb", "freshdb-files", "freshdb-journal":
+		return openFresh(dir, fsync, freshLayout(system))
 	case "badger":
 		return openBadger(dir, fsync)
 	case "pebble":
@@ -65,32 +63,51 @@ type freshKV struct {
 	journal bool
 }
 
-// openFreshDB opens freshDB on the default directory store (one file per
-// segment) or, with journal, on store.Journal (one append-only file).
-func openFreshDB(dir string, fsync, journal bool) (*freshdb.DB, error) {
-	var st interface {
-		store.Store
-		SetUnsafeNoSync(bool)
+// freshLayout maps a system name to a local layout: "freshdb" is the
+// default (store.OpenLocal: journal on Unix for a new directory),
+// "freshdb-files" the v0.1.0 one-file-per-segment layout, "freshdb-journal"
+// the journal explicitly.
+func freshLayout(system string) store.Layout {
+	switch system {
+	case "freshdb-files":
+		return store.LayoutFiles
+	case "freshdb-journal":
+		return store.LayoutJournal
 	}
+	return store.LayoutNone
+}
+
+// openFreshDB opens freshDB on dir in the given layout (LayoutNone = the
+// default for a new local directory).
+func openFreshDB(dir string, fsync bool, layout store.Layout) (*freshdb.DB, error) {
+	var s store.Store
 	var err error
-	if journal {
-		st, err = store.NewJournal(dir)
-	} else {
-		st, err = store.NewFS(dir)
+	switch layout {
+	case store.LayoutJournal:
+		s, err = store.NewJournal(dir)
+	case store.LayoutFiles:
+		s, err = store.NewFS(dir)
+	default:
+		s, err = store.OpenLocal(dir)
 	}
 	if err != nil {
 		return nil, err
 	}
+	st := s.(interface {
+		store.Store
+		SetUnsafeNoSync(bool)
+	})
 	st.SetUnsafeNoSync(!fsync)
 	return freshdb.OpenStore(context.Background(), st, freshdb.WithLogf(func(string, ...any) {}))
 }
 
-func openFresh(dir string, fsync, journal bool) (KV, error) {
-	db, err := openFreshDB(dir, fsync, journal)
+func openFresh(dir string, fsync bool, layout store.Layout) (KV, error) {
+	db, err := openFreshDB(dir, fsync, layout)
 	if err != nil {
 		return nil, err
 	}
-	return &freshKV{db, fsync, journal}, nil
+	l, _ := store.DetectLayout(dir)
+	return &freshKV{db, fsync, l == store.LayoutJournal}, nil
 }
 
 var bg = context.Background()

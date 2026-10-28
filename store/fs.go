@@ -34,6 +34,9 @@ func NewFS(root string) (*FS, error) {
 	if root == "" {
 		return nil, errors.New("store: empty path")
 	}
+	if _, err := os.Stat(filepath.Join(root, jrnFile)); err == nil {
+		return nil, fmt.Errorf("store: %s holds a journal (%s); open it as journal:// or a bare path", root, jrnFile)
+	}
 	if err := os.MkdirAll(filepath.Join(root, tmpDir), 0o755); err != nil {
 		return nil, err
 	}

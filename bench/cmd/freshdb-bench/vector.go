@@ -74,7 +74,7 @@ func cmdVector(args []string) {
 		truth := groundTruth(data, qs, 10)
 
 		dir := filepath.Join(*dataDir, "vector")
-		db, err := openFreshDB(dir, false, false)
+		db, err := openFreshDB(dir, false, "")
 		if err != nil {
 			fatal(err)
 		}

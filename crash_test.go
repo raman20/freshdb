@@ -61,6 +61,13 @@ func crashChild(loc string) {
 }
 
 func TestMain(m *testing.M) {
+	if d := os.Getenv("FRESHDB_MIGRATE_CHILD"); d != "" {
+		fmt.Println("START")
+		if err := store.Migrate(ctx, d, store.LayoutJournal, nil); err != nil {
+			fmt.Println("ERR", err)
+		}
+		return
+	}
 	if d := os.Getenv("FRESHDB_CRASH_CHILD"); d != "" {
 		crashChild(d)
 		return
@@ -68,7 +75,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestCrashKill9PrefixConsistent(t *testing.T) { crashKill9(t, t.TempDir()) }
+func TestCrashKill9PrefixConsistent(t *testing.T) { crashKill9(t, "fs://"+t.TempDir()) }
 
 // The journal store keeps every segment in one file; same invariants.
 func TestCrashKill9Journal(t *testing.T) { crashKill9(t, "journal://"+t.TempDir()) }
