@@ -514,6 +514,10 @@ func (c *cli) run() int {
 func (c *cli) sub() int {
 	t := esc(c.arg(1, "TOPIC"))
 	g := c.flags["group"]
+	var wait []string
+	if c.flags["follow"] != "" {
+		wait = []string{"wait", "30s"} // long-poll: the server answers when messages arrive
+	}
 	for {
 		var st int
 		var b []byte
@@ -522,9 +526,9 @@ func (c *cli) sub() int {
 			if max == "" {
 				max = "100"
 			}
-			st, b = c.call("POST", "/v1/topics/"+t+"/groups/"+esc(g)+"/next"+c.q("max", max), nil, false)
+			st, b = c.call("POST", "/v1/topics/"+t+"/groups/"+esc(g)+"/next"+c.q(append([]string{"max", max}, wait...)...), nil, false)
 		} else {
-			st, b = c.call("GET", "/v1/topics/"+t+c.q(), nil, false)
+			st, b = c.call("GET", "/v1/topics/"+t+c.q(wait...), nil, false)
 		}
 		if st >= 300 {
 			return 1
@@ -537,7 +541,6 @@ func (c *cli) sub() int {
 		if g == "" && len(ms) > 0 {
 			c.flags["from"] = fmt.Sprint(uint64(ms[len(ms)-1]["offset"].(float64)) + 1)
 		}
-		time.Sleep(500 * time.Millisecond)
 	}
 }
 

@@ -16,6 +16,7 @@ the first run reported 32 with identical state counts.
 | FreshBranch | append-only logs with parents; create branch, rewind (fork + ref swap + reflog), time travel | 3,430,206 | 1,845,287 | 16 | no error |
 | FreshMigrate | offline layout migration (files ↔ journal): copy, verify, fsync, rename to `.migrated`, move original to backup, rename into place; volatile vs durable directory state; up to 4 crashes at any step with resume | 149 | 88 | 17 | no error (incl. liveness) |
 | FreshCompact | compaction/GC of a log: base image write, create-only manifest commit with garbage list, garbage + orphan sweeps, 2 processes with crashes and reopen (≤3 epochs), a fenced compactor, a reader holding an old manifest; grace modelled as "readers that started before an object was listed finish first". CI config MaxLSN=2; MaxLSN=3 checked locally: 63,131,325 / 11,134,091 states, depth 32, no error | 1,557,725 | 315,903 | 25 | no error |
+| FreshNotify | consumer change notification: a writer moves the head (commit or rewind) then closes and replaces the channel; 2 waiters run take-channel / read-head / block; MaxHead=2, MaxSteps=5 | 87,149 | 29,427 | 19 | no error |
 | FreshShred | DEK per subject, marker → delete → audit entry + certificate; crash between steps; DEK create landing late; sweep; hash chain | 25,570 | 6,481 | 16 | no error (incl. liveness) |
 
 ## Properties checked
@@ -43,6 +44,9 @@ the first run reported 32 with identical state counts.
   `GarbageFinal` (nothing listed as garbage is referenced by the same or a
   later manifest), `ReaderOK` (under the grace assumption a reader of an
   older manifest never misses an object).
+- **FreshNotify** (2026-10-28): `NoLostWakeup` (a waiter blocked with a
+  stale view of the head always has a newer channel generation, or a
+  pending close, coming) and `TypeOK`.
 - **FreshShred**: `ShreddedNeverRevealed`, `NoWritesAfterShred`, `ChainVerifiable`,
   `CertsVerify`; temporal `AppendOnly`, `KeyEventuallyGone` (under weak fairness
   of sweep/land: `<>[](shredded ⇒ no DEK)`).
@@ -82,6 +86,7 @@ the first run reported 32 with identical state counts.
 | FreshLog without the `Superseded` check | `EpochMonotone` violated (bug #1 above) |
 | FreshTxn with OCC validation removed | `ExactlyOnce` violated (911 states) |
 | FreshCompact without the grace guard on sweeps | `ReaderOK` violated |
+| FreshNotify with the head read before taking the channel (`FreshNotifyBug.cfg`) | `NoLostWakeup` violated |
 | FreshCompact with the manifest commit not create-only (no fencing) | `EpochMonotone` violated |
 | FreshShred with `Sweep` disabled | `KeyEventuallyGone` violated |
 | FreshShred with reads ignoring the shred marker | `ShreddedNeverRevealed` violated |

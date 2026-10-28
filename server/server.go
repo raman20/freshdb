@@ -8,8 +8,9 @@
 //	PUT    /v1/kv/{key}                 write (body = value)
 //	DELETE /v1/kv/{key}
 //	POST   /v1/topics/{t}               publish (body = message)
-//	GET    /v1/topics/{t}?from=&max=&at=
-//	POST   /v1/topics/{t}/groups/{g}/next?max=   fetch + ack in ONE txn
+//	GET    /v1/topics/{t}?from=&max=&at=&wait=   (wait=30s: long-poll, max 60s)
+//	POST   /v1/topics/{t}/groups/{g}/next?max=&wait=   fetch + ack in ONE txn
+//	GET    /v1/topics/{t}/stream?from=   server-sent events (Last-Event-ID resumes)
 //	PUT    /v1/docs/{coll}/{id}  GET /v1/docs/{coll}/{id}  GET /v1/docs/{coll}?field=&value=
 //	PUT    /v1/vectors/{coll}/{id} (body [f,...])  POST /v1/vectors/{coll}/search {"vector":[..],"k":5}
 //	GET    /v1/branches   POST /v1/branches {"name","from","at"}
@@ -46,6 +47,7 @@ func Handler(db *freshdb.DB) http.Handler {
 	m.HandleFunc("POST /v1/topics/{t}", s.pub)
 	m.HandleFunc("GET /v1/topics/{t}", s.read)
 	m.HandleFunc("POST /v1/topics/{t}/groups/{g}/next", s.next)
+	m.HandleFunc("GET /v1/topics/{t}/stream", s.stream)
 	m.HandleFunc("PUT /v1/docs/{c}/{id}", s.docPut)
 	m.HandleFunc("GET /v1/docs/{c}/{id}", s.docGet)
 	m.HandleFunc("GET /v1/docs/{c}", s.docFind)
@@ -312,13 +314,78 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	max, _, _ := u64(r, "max")
-	var ms []freshdb.Message
-	err = view(r, func(tx *freshdb.Tx) (err error) { ms, err = tx.Topic(r.PathValue("t")).Read(from, int(max)); return })
+	_, timeTravel, _ := u64(r, "at")
+	wait, err := waitParam(r)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	reply(w, msgs(ms))
+	ctx, cancel := context.WithTimeout(r.Context(), wait)
+	defer cancel()
+	for {
+		var ms []freshdb.Message
+		var at uint64
+		err = view(r, func(tx *freshdb.Tx) (err error) {
+			at = tx.At()
+			ms, err = tx.Topic(r.PathValue("t")).Read(from, int(max))
+			return
+		})
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		if len(ms) > 0 || wait == 0 || timeTravel {
+			reply(w, msgs(ms))
+			return
+		}
+		if more, err := s.waitHead(ctx, r, at); err != nil {
+			fail(w, err)
+			return
+		} else if !more {
+			reply(w, msgs(ms))
+			return
+		}
+	}
+}
+
+// maxWait caps ?wait= for long-polls.
+const maxWait = 60 * time.Second
+
+// waitParam parses ?wait= (a Go duration like 30s, or seconds); 0 = none.
+func waitParam(r *http.Request) (time.Duration, error) {
+	v := r.URL.Query().Get("wait")
+	if v == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		n, err2 := strconv.ParseUint(v, 10, 32)
+		if err2 != nil {
+			return 0, fmt.Errorf("%w: wait", errBad)
+		}
+		d = time.Duration(n) * time.Second
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("%w: wait", errBad)
+	}
+	return min(d, maxWait), nil
+}
+
+// waitHead waits for the branch head to move past seen. It returns false
+// (and no error) when the wait is over: deadline passed or client gone.
+func (s *Server) waitHead(ctx context.Context, r *http.Request, seen uint64) (bool, error) {
+	b := r.URL.Query().Get("branch")
+	if b == "" {
+		b = "main"
+	}
+	_, err := s.DB.WaitHead(ctx, b, seen)
+	if err == nil {
+		return true, nil
+	}
+	if ctx.Err() != nil {
+		return false, nil
+	}
+	return false, err
 }
 
 // next fetches up to max messages for a consumer group and advances its
@@ -330,20 +397,117 @@ func (s *Server) next(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		max = 10
 	}
-	var ms []freshdb.Message
-	_, err := update(r, func(tx *freshdb.Tx) (err error) {
-		g := tx.Topic(r.PathValue("t")).Group(r.PathValue("g"))
-		if ms, err = g.Fetch(int(max)); err != nil || len(ms) == 0 {
-			return err
-		}
-		return g.Ack(ms[len(ms)-1])
-	})
+	wait, err := waitParam(r)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	reply(w, msgs(ms))
+	ctx, cancel := context.WithTimeout(r.Context(), wait)
+	defer cancel()
+	for {
+		var ms []freshdb.Message
+		var at uint64
+		_, err := update(r, func(tx *freshdb.Tx) (err error) {
+			at = tx.At()
+			g := tx.Topic(r.PathValue("t")).Group(r.PathValue("g"))
+			if ms, err = g.Fetch(int(max)); err != nil || len(ms) == 0 {
+				return err
+			}
+			return g.Ack(ms[len(ms)-1])
+		})
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		if len(ms) > 0 || wait == 0 {
+			reply(w, msgs(ms))
+			return
+		}
+		if more, err := s.waitHead(ctx, r, at); err != nil {
+			fail(w, err)
+			return
+		} else if !more {
+			reply(w, msgs(ms))
+			return
+		}
+	}
 }
+
+// stream sends a topic as server-sent events from ?from= (or the
+// Last-Event-ID header + 1) until the client goes away.
+func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
+	r = s.with(r)
+	from, _, err := u64(r, "from")
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if id := r.Header.Get("Last-Event-ID"); id != "" {
+		n, err := strconv.ParseUint(id, 10, 64)
+		if err != nil {
+			fail(w, fmt.Errorf("%w: Last-Event-ID", errBad))
+			return
+		}
+		from = n + 1
+	}
+	fl, ok := w.(http.Flusher)
+	if !ok {
+		fail(w, errors.New("streaming unsupported"))
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, ": freshdb stream\n\n")
+	fl.Flush()
+	b := r.URL.Query().Get("branch")
+	if b == "" {
+		b = "main"
+	}
+	ctx := r.Context()
+	for {
+		var ms []freshdb.Message
+		var at uint64
+		err := br(r).View(ctx, func(tx *freshdb.Tx) (err error) {
+			at = tx.At()
+			ms, err = tx.Topic(r.PathValue("t")).Read(from, 256)
+			return
+		})
+		if err != nil {
+			fmt.Fprintf(w, "event: error\ndata: %q\n\n", err.Error())
+			fl.Flush()
+			return
+		}
+		for _, m := range msgs(ms) {
+			j, _ := json.Marshal(m)
+			fmt.Fprintf(w, "event: message\nid: %d\ndata: %s\n\n", m.Offset, j)
+			from = m.Offset + 1
+		}
+		if len(ms) > 0 {
+			fl.Flush()
+			continue
+		}
+		pctx, cancel := context.WithTimeout(ctx, streamPing)
+		_, err = s.DB.WaitHead(pctx, b, at)
+		cancel()
+		if ctx.Err() != nil {
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			fmt.Fprint(w, ": ping\n\n")
+			fl.Flush()
+		} else if err != nil {
+			fmt.Fprintf(w, "event: error\ndata: %q\n\n", err.Error())
+			fl.Flush()
+			return
+		}
+	}
+}
+
+// streamPing is the SSE keep-alive interval.
+var streamPing = 15 * time.Second
 
 // ---- docs & vectors ----
 

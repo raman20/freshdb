@@ -72,7 +72,10 @@ type DB struct {
 	keys  *keyring
 	// devKEK: the KEK lives in the bucket (no key supplied).
 	devKEK bool
-	env    env
+	// chg is closed when a branch head may have moved (notify.go).
+	chgMu sync.Mutex
+	chg   chan struct{}
+	env   env
 
 	mu      sync.RWMutex // guards manifest, logs, views, writers
 	man     *Manifest
@@ -260,6 +263,9 @@ func (db *DB) commitManifest(ctx context.Context, change func(m *Manifest) error
 	if db.failed != nil {
 		return db.failed
 	}
+	// Waiters re-read heads under db.mu, which the caller holds until the
+	// views match the new manifest, so waking them here is safe.
+	defer db.bump()
 	next := db.man.clone()
 	if err := change(next); err != nil {
 		return err
@@ -390,6 +396,7 @@ func (db *DB) Close() error {
 	db.bw.Store(nil)
 	ws := db.writers
 	db.mu.Unlock()
+	db.bump()
 	for _, id := range sortedMapKeys(ws) {
 		ws[id].stop()
 	}
@@ -409,6 +416,7 @@ func (db *DB) Crash() {
 	db.failed = ErrClosed
 	ws := db.writers
 	db.mu.Unlock()
+	db.bump()
 	for _, id := range sortedMapKeys(ws) {
 		ws[id].crash()
 	}

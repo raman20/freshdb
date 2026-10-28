@@ -337,6 +337,7 @@ func (w *writer) process(batch []*commitReq) {
 		w.v.apply(e)
 	}
 	w.v.mu.Unlock()
+	w.db.bump()
 	w.head, w.lastTS = head, ts
 	w.recent = append(w.recent, pending...)
 	// Trim to recentMax only once twice that is held, so the copy is

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"flag"
@@ -148,6 +149,7 @@ type msgRun struct {
 	System      string  `json:"system"`
 	Fsync       bool    `json:"fsync"`
 	Durability  string  `json:"durability"`
+	Idle        string  `json:"idle,omitempty"`
 	Kind        string  `json:"kind"` // fixed-rate | max-throughput
 	Rate        float64 `json:"target_rate,omitempty"`
 	Producers   int     `json:"producers"`
@@ -178,6 +180,7 @@ func cmdMsg(args []string) {
 	drain := fs.Duration("drain", 30*time.Second, "max time to let consumers catch up")
 	dataDir := fs.String("dir", "/tmp/freshdb-bench", "data directory (wiped)")
 	out := fs.String("out", "results", "output directory")
+	fs.StringVar(&idleMode, "idle", "spin", "freshdb consumer when empty: spin (200us sleep) | sleep:<dur> (poll) | wait (push: DB.WaitHead)")
 	fs.Parse(args)
 
 	dir := filepath.Join(*dataDir, fmt.Sprintf("msg-%s-%v", *system, *fsync))
@@ -207,7 +210,7 @@ func cmdMsg(args []string) {
 		"e2e": "consumer-side time after the durable ack minus the producer's intended send time (open-loop schedule)",
 	}}
 	if strings.HasPrefix(*system, "freshdb") {
-		res.Notes = append(res.Notes, "freshDB consumers poll: an empty fetch sleeps 200us before retrying (no push notification yet).")
+		res.Notes = append(res.Notes, "freshDB consumer on an empty fetch, -idle="+idleMode+": spin sleeps 200us; sleep:<d> polls every d; wait blocks in DB.WaitHead (push) until the head moves.")
 	}
 	n := 0
 	for _, r := range parseInts(*ratesF) {
@@ -232,6 +235,25 @@ func cmdMsg(args []string) {
 
 // msgOnce runs producers (open loop at rate, or closed loop if rate == 0)
 // while one consumer per group consumes concurrently.
+// idleMode is how a freshDB consumer waits when a fetch comes back empty.
+var idleMode = "spin"
+
+// idleWait blocks a freshDB consumer that saw an empty fetch; seen is the
+// main head read before that fetch, so a commit in between is not missed.
+func idleWait(b broker, seen uint64, ok bool) {
+	switch {
+	case idleMode == "wait" && ok:
+		ctx, cancel := context.WithTimeout(bg, 100*time.Millisecond)
+		b.(*freshBroker).db.WaitHead(ctx, "main", seen)
+		cancel()
+	case strings.HasPrefix(idleMode, "sleep:"):
+		d, _ := time.ParseDuration(strings.TrimPrefix(idleMode, "sleep:"))
+		time.Sleep(d)
+	default:
+		time.Sleep(200 * time.Microsecond)
+	}
+}
+
 func msgOnce(b broker, topic, system string, fsync bool, rate float64, producers, groups, size, batch int, dur, drain time.Duration) msgRun {
 	gnames := make([]string, groups)
 	for i := range gnames {
@@ -254,6 +276,12 @@ func msgOnce(b broker, topic, system string, fsync bool, rate float64, producers
 			defer wg.Done()
 			deadline := time.Time{}
 			for {
+				var seen uint64
+				var seenOK bool
+				if fb, ok := b.(*freshBroker); ok {
+					h, err := fb.db.Head("main")
+					seen, seenOK = h, err == nil
+				}
 				msgs, err := b.consume(topic, gnames[gi], batch)
 				now := time.Now()
 				if err != nil {
@@ -276,7 +304,7 @@ func msgOnce(b broker, topic, system string, fsync bool, rate float64, producers
 					}
 				}
 				if len(msgs) == 0 && strings.HasPrefix(system, "freshdb") {
-					time.Sleep(200 * time.Microsecond)
+					idleWait(b, seen, seenOK)
 				}
 			}
 		}(gi)
@@ -315,7 +343,7 @@ func msgOnce(b broker, topic, system string, fsync bool, rate float64, producers
 		all.Merge(h)
 		minDel = min(minDel, delivered[i].Load())
 	}
-	r := msgRun{System: system, Fsync: fsync, Durability: b.durability(), Kind: kind, Rate: rate, Producers: producers, Groups: groups,
+	r := msgRun{System: system, Fsync: fsync, Durability: b.durability(), Kind: kind, Idle: idleFor(system), Rate: rate, Producers: producers, Groups: groups,
 		Published: published.Load(), PublishRate: ph.OpsPerSec, Delivered: minDel, Backlog: published.Load() - minDel,
 		PublishLat: ph.Latency, EndToEnd: summarize(all), Errors: ph.Errors + cerrs.Load(), FirstError: ph.FirstError}
 	if s, ok := cfirst.Load().(string); ok && r.FirstError == "" {
@@ -330,4 +358,11 @@ func msgOnce(b broker, topic, system string, fsync bool, rate float64, producers
 	logf("msg %s fsync=%v %s rate=%.0f groups=%d: published %d (%.0f/s) delivered %d | e2e p50 %.0fus p99 %.0fus p99.9 %.0fus | errs %d",
 		system, fsync, kind, rate, groups, r.Published, r.PublishRate, minDel, r.EndToEnd.P50Us, r.EndToEnd.P99Us, r.EndToEnd.P999Us, r.Errors)
 	return r
+}
+
+func idleFor(system string) string {
+	if strings.HasPrefix(system, "freshdb") {
+		return idleMode
+	}
+	return ""
 }
