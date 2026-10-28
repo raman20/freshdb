@@ -75,7 +75,7 @@ agents. That is the same bet SQLite made. Read the
 | **KV** | get/put/delete, prefix scan, MVCC history | values over 64 B are read from the log through an off-heap cache (`WithValueCacheBytes`, default 256 MiB) |
 | **Topics** | publish, consumer groups, exactly-once consume+write+ack; push via `WaitHead`, HTTP long-poll (`?wait=`) and SSE | no topic retention; no limit on concurrent waiters/streams |
 | **Documents** | JSON documents, secondary indexes added at any time (built by replaying the log) | equality lookups only |
-| **Vectors** | cosine search, exact (recall 1.0, parallel scan) or opt-in HNSW (`vec ann`) | the HNSW graph is in RAM and rebuilt on every open |
+| **Vectors** | cosine search, exact (recall 1.0, parallel scan) or opt-in HNSW (`vec ann`) | the HNSW graph is in RAM; saved on close and reloaded on open (10 s at 1M), recall@10 0.92 at 1M with the default ef |
 | **Transactions** | serializable OCC across all lenses; hot keys cannot starve | single writer per database |
 | **History** | time travel to any LSN, zero-copy branches, rewind, promote, reflog | after `compact`, history below each branch head is gone (`410`); `gc` keeps a window |
 | **Compaction / GC** | `freshdb compact` drops overwritten, deleted and shredded data; `freshdb gc --keep-for 24h` keeps a history window and also deletes old manifests, retired logs and pruned reflog; `--shrink` rewrites the journal file | new on `main`; commits pause while it runs; shrink is offline; no topic retention |
@@ -504,7 +504,7 @@ Other suites, freshDB `main` vs v0.1.0 (same VM, same commands):
 - **One very hot key.** Nothing gives up any more, but Badger commits more per
   second.
 - **Vectors**: exact search falls linearly with N. The opt-in HNSW index
-  fixes that but is approximate and is rebuilt on every open (23 s at 100k × 128-d).
+  fixes that but is approximate and is saved on close and reloaded on open (0.6 s at 100k × 128-d, 10 s at 1M; 23 s and ~17 min when it was rebuilt).
 - **Old-layout directories** (v0.1.0, `fs://`, Windows) still pay two fsyncs
   per commit: A at 1 client is 5.2k ops/s. Run `freshdb migrate`.
 
@@ -588,9 +588,11 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
   History is only trimmed when you run compaction, which is new and keeps
   every topic message (no retention).
   Snapshots are off by default and don't speed up open yet.
-- The HNSW vector index is opt-in, lives only in RAM and is rebuilt from the
-  lens on every open (about 17 min at 1M vectors); it is not persisted, and
-  at 1M clustered vectors recall@10 is 0.80 at ef 64 (0.92 at ef 128).
+- The HNSW vector index is opt-in and lives in RAM. It is saved only on a
+  clean close; after a crash, vectors newer than the last save are
+  re-inserted on open (22 s for 10k at 1M), and building it is
+  single-threaded (16 min at 1M). At 1M clustered vectors recall@10 is
+  0.92 at the default ef 128 (0.96 at ef 256).
 - SSE has no consumer-group mode. Long-polls and streams are capped
   (`--max-waiters`, `--max-streams`) but not rate-limited per token.
 - One writer per database, with no HA and no replicas.

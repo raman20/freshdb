@@ -242,9 +242,10 @@ OCC transfers, fsync on (commits/s; ops that gave up after 16 retries):
   | 1M | exact | 1.0 | 64 | 85 |
   | 1M | HNSW ef 32 / 64 / 128 | 0.669 / 0.804 / 0.919 | 2,062 / 1,109 / 676 | 29,881 / 16,025 / 8,467 |
 
-  - Build (single-threaded insert) and reopen (the graph is rebuilt from
-    the lens; it is not persisted) take 23 s at 100k and 992 / 1,037 s at
-    1M. Heap after reopen: 107 MiB at 100k, 1,088 MiB at 1M.
+  - Build (single-threaded insert) and reopen (the graph was rebuilt from
+    the lens) took 23 s at 100k and 992 / 1,037 s at 1M. Heap after
+    reopen: 107 MiB at 100k, 1,088 MiB at 1M. Reopen is now fast (next
+    item).
   - At 1M these defaults are not enough: recall 0.92 needs ef 128, and
     larger ef or efConstruction was not measured. Tune `--ef` per query.
   - The first version kept only the closest neighbors when a list
@@ -252,10 +253,24 @@ OCC transfers, fsync on (commits/s; ops that gave up after 16 retries):
     0.72–0.74 at any ef). Pruning with the diversity heuristic fixed it.
   - Below 4,096 vectors, and when the graph returns fewer than k hits,
     search stays exact. Time travel is always exact.
+- **HNSW graphs persisted: reopen 23 s → 0.6 s at 100k, ~17 min → 10 s
+  at 1M.** The graph is saved on `Close` (100k 0.1 s, 1M 2.2 s), checked
+  node by node against the view on open, and caught up by inserting
+  vectors written after the save (crash with 1,000 newer at 100k: 0.9 s;
+  10,000 newer at 1M: 22.4 s). Recall after reopen equals recall after
+  build. At 1M, efConstruction 200 instead of 100 took 1,479 s vs 976 s to
+  build for recall 0.810 / 0.925 / 0.982 vs 0.804 / 0.919 / 0.962 at
+  ef 64 / 128 / 256, so efC stays 100 and the default ef is now 128
+  (1M: 0.919 at 725 QPS c=1; 100k: 0.997 at 4.4k). Results:
+  `bench/results/2026-10-29-hnsw-persist/`, design
+  [10](design/10-hnsw-persist.md).
 - **Server auth (no "before" loss; overhead only).** `BenchmarkAuthGet`,
   in-process `GET /v1/kv/a` through `server.New`, 3 × 2 s: 1.94–2.08 µs
   without a token, 2.01–2.05 µs with one (≈ +0.06–0.1 µs, the header parse
-  and constant-time compare). TLS cost was not measured.
+  and constant-time compare). TLS cost was not measured. With scoped
+  tokens (2026-10-29, per-route permit check and a SHA-256 lookup):
+  1.77–1.82 µs no auth, 2.10–2.12 µs `--token`, 2.05–2.18 µs a scoped
+  token (≈ +0.3 µs; `bench/results/2026-10-29-auth/`).
 - The journal layout has its own conformance, torn-tail, reopen and kill -9
   crash tests, and migration has a TLC-checked model
   ([spec/FreshMigrate.tla](../spec/FreshMigrate.tla)) plus resume-after-crash

@@ -1,0 +1,15 @@
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/server
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkAuthGet/noauth-8         	 1418540	      1819 ns/op
+BenchmarkAuthGet/noauth-8         	 1355720	      1799 ns/op
+BenchmarkAuthGet/noauth-8         	 1330820	      1765 ns/op
+BenchmarkAuthGet/token-8          	 1000000	      2115 ns/op
+BenchmarkAuthGet/token-8          	 1000000	      2098 ns/op
+BenchmarkAuthGet/token-8          	 1000000	      2115 ns/op
+BenchmarkAuthGet/scoped-8         	 1000000	      2176 ns/op
+BenchmarkAuthGet/scoped-8         	 1000000	      2050 ns/op
+BenchmarkAuthGet/scoped-8         	 1000000	      2109 ns/op
+PASS
+ok  	github.com/raman20/freshdb/server	25.527s

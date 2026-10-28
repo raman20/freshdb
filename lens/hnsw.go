@@ -9,7 +9,7 @@ import (
 type ANNParams struct {
 	M              int // links per node above layer 0 (2M at layer 0); default 16
 	EfConstruction int // beam width while inserting; default 100
-	EfSearch       int // default beam width while searching; default 64
+	EfSearch       int // default beam width while searching; default 128
 }
 
 func (p ANNParams) norm() ANNParams {
@@ -20,7 +20,7 @@ func (p ANNParams) norm() ANNParams {
 		p.EfConstruction = max(100, p.M)
 	}
 	if p.EfSearch <= 0 {
-		p.EfSearch = 64
+		p.EfSearch = 128
 	}
 	return p
 }

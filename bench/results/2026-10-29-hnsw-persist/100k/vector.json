@@ -1,0 +1,150 @@
+{
+  "suite": "vector",
+  "env": {
+    "time": "2026-10-29T00:55:26+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "1802bf5",
+    "command": "./bin/freshdb-bench vector -n 100000 -ann 32,64,128,256 -clients 1 -flat=false -queries 100 -duration 3s -out results/2026-10-29-hnsw-persist/100k",
+    "loadavg_at_start": "4.30 2.91 2.07"
+  },
+  "params": {
+    "ann": {
+      "ef": "32,64,128,256",
+      "ef_construction": 100,
+      "m": 16
+    },
+    "clusters": 100,
+    "dataset": "synthetic gaussian clusters (not SIFT/GloVe); ground truth by exact float64 search",
+    "dim": 128,
+    "duration": "3s",
+    "fsync": false,
+    "metric": "cosine",
+    "peak_rss": "511240 kB",
+    "queries": 100,
+    "seed": 42,
+    "sigma": 0.15
+  },
+  "runs": [
+    {
+      "system": "freshdb",
+      "n": 100000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 1,
+      "qps": 1417.2,
+      "latency": {
+        "count": 4252,
+        "mean_us": 705.11,
+        "p50_us": 666.62,
+        "p99_us": 1347.58,
+        "p999_us": 2627.58,
+        "max_us": 4020.22
+      },
+      "insert_vectors_per_sec": 170143,
+      "index": "none (exact brute force over the vector lens)"
+    },
+    {
+      "system": "freshdb-hnsw-ef32",
+      "n": 100000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 0.929,
+      "qps": 8391.6,
+      "latency": {
+        "count": 25175,
+        "mean_us": 118.92,
+        "p50_us": 117.25,
+        "p99_us": 182.14,
+        "p999_us": 250.11,
+        "max_us": 2598.91
+      },
+      "index": "HNSW M=16 efC=100 ef=32",
+      "hnsw_build_secs": 18.18,
+      "open_secs": 0.6,
+      "heap_after_open_mib": 99,
+      "close_secs": 0.11,
+      "catchup_open_secs": 0.95
+    },
+    {
+      "system": "freshdb-hnsw-ef64",
+      "n": 100000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 0.989,
+      "qps": 5737.9,
+      "latency": {
+        "count": 17214,
+        "mean_us": 174.01,
+        "p50_us": 168.7,
+        "p99_us": 247.42,
+        "p999_us": 354.3,
+        "max_us": 4612.1
+      },
+      "index": "HNSW M=16 efC=100 ef=64",
+      "hnsw_build_secs": 18.18,
+      "open_secs": 0.6,
+      "heap_after_open_mib": 99,
+      "close_secs": 0.11,
+      "catchup_open_secs": 0.95
+    },
+    {
+      "system": "freshdb-hnsw-ef128",
+      "n": 100000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 0.997,
+      "qps": 4403.2,
+      "latency": {
+        "count": 13210,
+        "mean_us": 226.85,
+        "p50_us": 220.54,
+        "p99_us": 334.59,
+        "p999_us": 441.6,
+        "max_us": 2428.93
+      },
+      "index": "HNSW M=16 efC=100 ef=128",
+      "hnsw_build_secs": 18.18,
+      "open_secs": 0.6,
+      "heap_after_open_mib": 99,
+      "close_secs": 0.11,
+      "catchup_open_secs": 0.95
+    },
+    {
+      "system": "freshdb-hnsw-ef256",
+      "n": 100000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 0.999,
+      "qps": 2904.5,
+      "latency": {
+        "count": 8714,
+        "mean_us": 343.99,
+        "p50_us": 332.54,
+        "p99_us": 525.82,
+        "p999_us": 660.48,
+        "max_us": 2234.37
+      },
+      "index": "HNSW M=16 efC=100 ef=256",
+      "hnsw_build_secs": 18.18,
+      "open_secs": 0.6,
+      "heap_after_open_mib": 99,
+      "close_secs": 0.11,
+      "catchup_open_secs": 0.95
+    }
+  ],
+  "notes": [
+    "freshdb-hnsw-efN rows use the opt-in HNSW graph (EnableANN) with beam width N; recall is against the same float64 ground truth. Exact search is the 'freshdb' row.",
+    "Exact rows (freshdb, flat-go-loop): search is exact brute force, so recall is 1.0 by construction and QPS falls linearly with N. The flat Go loop is a lower bound on brute-force cost, not an ANN competitor."
+  ]
+}

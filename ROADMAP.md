@@ -15,7 +15,8 @@ bug reports). Everything must respect the [design principles](docs/design-princi
 - [x] Journal layout (one append-only file per local DB) as the default on
   Unix, with `freshdb migrate` for v0.1.0 directories (unreleased)
 - [x] Compaction: base images, garbage with a grace period (unreleased)
-- [x] Opt-in HNSW vector index, exact search stays the default (unreleased)
+- [x] Opt-in HNSW vector index, exact search stays the default; graph
+  saved on close and reloaded on open (unreleased)
 - [x] Bearer-token auth and TLS for `serve`; refuse open binds without a
   token (unreleased)
 - [x] Push consumers: `WaitHead`, HTTP long-poll and SSE (unreleased)
@@ -36,8 +37,10 @@ bug reports). Everything must respect the [design principles](docs/design-princi
   proportional to the tail, not to history.
 - **Disk-backed / mmap lenses.** Lens state is entirely in RAM today, which caps
   database size at memory.
-- **Persisted ANN index.** The opt-in HNSW index (unreleased `main`) is rebuilt
-  on every open; persisting it with snapshots would make open fast.
+- **ANN index follow-ups.** The HNSW graph is now saved on close and
+  reloaded on open (unreleased `main`). Still open: periodic saves (a crash
+  re-inserts everything since the last close), faster build, disk-backed
+  graphs.
 - **KMS clients and rekey.** Ready-made `KeyProvider`s for AWS KMS / GCP
   KMS / Vault, a crash-safe rekey (including dev key → real KEK), and
   clear guidance on object versioning for `keys/`.

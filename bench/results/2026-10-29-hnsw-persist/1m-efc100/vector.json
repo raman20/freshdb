@@ -1,0 +1,127 @@
+{
+  "suite": "vector",
+  "env": {
+    "time": "2026-10-29T00:57:03+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "1802bf5",
+    "command": "./bin/freshdb-bench vector -n 1000000 -ann 64,128,256 -ann-efc 100 -clients 1 -flat=false -queries 100 -duration 3s -out results/2026-10-29-hnsw-persist/1m-efc100",
+    "loadavg_at_start": "1.26 2.29 1.93"
+  },
+  "params": {
+    "ann": {
+      "ef": "64,128,256",
+      "ef_construction": 100,
+      "m": 16
+    },
+    "clusters": 100,
+    "dataset": "synthetic gaussian clusters (not SIFT/GloVe); ground truth by exact float64 search",
+    "dim": 128,
+    "duration": "3s",
+    "fsync": false,
+    "metric": "cosine",
+    "peak_rss": "4747432 kB",
+    "queries": 100,
+    "seed": 42,
+    "sigma": 0.15
+  },
+  "runs": [
+    {
+      "system": "freshdb",
+      "n": 1000000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 1,
+      "qps": 80.7,
+      "latency": {
+        "count": 242,
+        "mean_us": 12395.7,
+        "p50_us": 11821.06,
+        "p99_us": 21512.19,
+        "p999_us": 23412.74,
+        "max_us": 23412.74
+      },
+      "insert_vectors_per_sec": 138644,
+      "index": "none (exact brute force over the vector lens)"
+    },
+    {
+      "system": "freshdb-hnsw-ef64",
+      "n": 1000000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 0.804,
+      "qps": 1251.9,
+      "latency": {
+        "count": 3756,
+        "mean_us": 798.42,
+        "p50_us": 780.8,
+        "p99_us": 1104.9,
+        "p999_us": 1311.74,
+        "max_us": 13328.38
+      },
+      "index": "HNSW M=16 efC=100 ef=64",
+      "hnsw_build_secs": 976.31,
+      "open_secs": 10.11,
+      "heap_after_open_mib": 1047,
+      "close_secs": 2.2,
+      "catchup_open_secs": 22.4
+    },
+    {
+      "system": "freshdb-hnsw-ef128",
+      "n": 1000000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 0.919,
+      "qps": 725.3,
+      "latency": {
+        "count": 2176,
+        "mean_us": 1378.25,
+        "p50_us": 1360.9,
+        "p99_us": 1703.94,
+        "p999_us": 2156.54,
+        "max_us": 5754.88
+      },
+      "index": "HNSW M=16 efC=100 ef=128",
+      "hnsw_build_secs": 976.31,
+      "open_secs": 10.11,
+      "heap_after_open_mib": 1047,
+      "close_secs": 2.2,
+      "catchup_open_secs": 22.4
+    },
+    {
+      "system": "freshdb-hnsw-ef256",
+      "n": 1000000,
+      "dim": 128,
+      "clients": 1,
+      "k": 10,
+      "recall_at_10": 0.962,
+      "qps": 481.3,
+      "latency": {
+        "count": 1444,
+        "mean_us": 2077.34,
+        "p50_us": 2068.48,
+        "p99_us": 2562.05,
+        "p999_us": 2836.48,
+        "max_us": 3051.52
+      },
+      "index": "HNSW M=16 efC=100 ef=256",
+      "hnsw_build_secs": 976.31,
+      "open_secs": 10.11,
+      "heap_after_open_mib": 1047,
+      "close_secs": 2.2,
+      "catchup_open_secs": 22.4
+    }
+  ],
+  "notes": [
+    "freshdb-hnsw-efN rows use the opt-in HNSW graph (EnableANN) with beam width N; recall is against the same float64 ground truth. Exact search is the 'freshdb' row.",
+    "Exact rows (freshdb, flat-go-loop): search is exact brute force, so recall is 1.0 by construction and QPS falls linearly with N. The flat Go loop is a lower bound on brute-force cost, not an ANN competitor."
+  ]
+}

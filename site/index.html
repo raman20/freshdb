@@ -130,7 +130,7 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
   </table></div>
   <div class="split" style="margin-top:22px">
     <div class="card"><span class="tag ok">Better since v0.1.0</span><p>Durable single-client writes 12× faster (journal storage is now the default). Memory down from 7.1 to 1.55 GiB. No read-modify-write gives up any more. Exact vector search at 100k × 128-d: 19 → 1,051 QPS, recall 1.0. Durable publish: 119k msgs/s (NATS JetStream with <code>SyncAlways</code>: 8.5k). Opt-in HNSW: recall@10 0.988 at 3.3k QPS on 100k vectors (exact: 910). Push consumers: p99 at 1k msgs/s 1–15 ms vs 99 ms for a 100 ms poller.</p></div>
-    <div class="card"><span class="tag bad">Where it still loses</span><p>Memory vs Pebble: 1.55 vs 0.7 GiB peak, and ~1.5 vs ~0.09 GiB after Pebble’s bulk load (its data sits in the OS page cache). Point reads are below v0.1.0 (values now come from the log through a cache). Streaming p99 at 1k msgs/s is 3–43 ms across runs vs 1.9 ms for NATS. Badger commits more on one very hot key. HNSW at 1M vectors: recall@10 0.80 at ef 64, and the graph is rebuilt on every open.</p></div>
+    <div class="card"><span class="tag bad">Where it still loses</span><p>Memory vs Pebble: 1.55 vs 0.7 GiB peak, and ~1.5 vs ~0.09 GiB after Pebble’s bulk load (its data sits in the OS page cache). Point reads are below v0.1.0 (values now come from the log through a cache). Streaming p99 at 1k msgs/s is 3–43 ms across runs vs 1.9 ms for NATS. Badger commits more on one very hot key. HNSW at 1M vectors: recall@10 0.92 at the default ef 128 (725 QPS, one client); the graph is saved only on a clean close.</p></div>
   </div>
 </section>
 
@@ -184,7 +184,7 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
     <div class="split">
       <ul class="lim">
         <li>Keys, KV history, topics, documents and vectors live in RAM. Old versions are only dropped by <code>freshdb compact</code> / <code>freshdb gc</code> (new; GC keeps a configurable time-travel window), which keep every topic message; the journal file shrinks only offline (<code>gc --shrink</code>).</li>
-        <li>The opt-in HNSW vector index is rebuilt on every open (about 17 min at 1M vectors).</li>
+        <li>The opt-in HNSW vector index is saved on a clean close and reloaded on open (10 s at 1M vectors, was 17 min); after a crash, newer vectors are re-inserted, and building it is single-threaded.</li>
         <li>One writer per database, with no HA and no read replicas yet.</li>
         <li>Only MinIO is tested. AWS S3 and R2 support the needed conditional writes but are untested.</li>
         <li>The journal layout is new; its 8 MiB growth step stalls the commit path briefly.</li>

@@ -255,7 +255,7 @@ func (db *DB) RegisterIndex(ctx context.Context, coll, field string) error {
 }
 
 // ANNOptions configures a collection's HNSW graph; zero fields take the
-// defaults (M 16, EfConstruction 100, EfSearch 64).
+// defaults (M 16, EfConstruction 100, EfSearch 128).
 type ANNOptions struct {
 	M              int `json:"m,omitempty"`
 	EfConstruction int `json:"ef_construction,omitempty"`

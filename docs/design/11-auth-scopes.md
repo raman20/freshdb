@@ -71,7 +71,13 @@ refused).
 
 ## Results
 
-See the end of this note (filled from `BenchmarkAuthGet`).
+`BenchmarkAuthGet` (in-process `GET /v1/kv/a`, 3 × 2 s,
+`bench/results/2026-10-29-auth/authget.txt`): 1.77–1.82 µs without auth,
+2.10–2.12 µs with `--token`, 2.05–2.18 µs with a scoped token. The
+single-token overhead was +0.06–0.1 µs before; it is now ≈ +0.3 µs for
+either kind (request context plus a permit check per route). Reload,
+revocation and caps are correctness features; their cost is off the
+request path (a 2 s / 10 s `stat`).
 
 ## Limits
 

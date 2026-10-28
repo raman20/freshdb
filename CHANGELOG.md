@@ -63,6 +63,15 @@ in its "Changes since v0.1.0" section.
   one client (exact: 910 QPS); build and reopen take ~23 s. At 1M recall
   is 0.67 / 0.80 / 0.92 (exact: 64 QPS, HNSW ef 128: 676) and build or
   reopen takes ~17 min, because the graph is not persisted.
+- **HNSW graphs are persisted.** Saved on `Close` (`ann/<log>/…` objects,
+  a cache outside the manifest and digests), validated node by node
+  against the vectors on open, then caught up by inserting newer vectors;
+  compaction hands graphs over in memory, shred deletes them, GC drops
+  those of dropped logs. Modelled in `spec/FreshANN.tla`. Reopen: 100k
+  23 s → 0.6 s, 1M ~17 min → 10 s; after a crash with 10k newer vectors
+  at 1M, 22 s. Default `EfSearch` is now 128 (was 64): 1M recall@10 0.80
+  → 0.92 (QPS c=1 1,252 → 725); a saved graph is kept when only EfSearch
+  changes.
 - **Server auth and TLS.** `freshdb serve --token T` (or `--token-file`,
   `FRESHDB_TOKEN`) requires `Authorization: Bearer T` on every request but
   `GET /healthz` (new, always open); `--tls-cert` / `--tls-key` serve HTTPS

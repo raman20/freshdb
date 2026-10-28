@@ -58,7 +58,7 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
   freshdb sub TOPIC [--group G] [--from N] [--max N] [--follow]
   freshdb doc put COLL ID JSON | doc get COLL ID | doc find COLL FIELD VALUE | doc index COLL FIELD
   freshdb vec put COLL ID 0.1,0.2,... | vec del COLL ID | vec search COLL 0.1,0.2,... [-k N] [--exact] [--ef N]
-  freshdb vec ann COLL [--m 16] [--ef-construction 100] [--ef-search 64]   (opt-in HNSW index)
+  freshdb vec ann COLL [--m 16] [--ef-construction 100] [--ef-search 128]   (opt-in HNSW index)
   freshdb tx '[{"op":"put","key":"k","value":"v"},{"op":"pub","topic":"t","value":"m"}]'
   freshdb branch [list] | branch create NAME [--from B] [--at LSN] | branch promote SRC DST | branch delete NAME
   freshdb rewind BRANCH LSN                   move a branch back (old head kept in reflog)

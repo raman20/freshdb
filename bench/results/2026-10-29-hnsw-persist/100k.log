@@ -1,0 +1,10 @@
+00:55:31 vector freshdb n=100000 c=1: recall@10 1.0000 qps 1417.2 p50 667us p99 1348us
+00:55:49 vector hnsw n=100000: build 18.2s
+00:55:49 vector hnsw n=100000: close (saves the graph) 0.1s
+00:55:50 vector hnsw n=100000: reopen 0.6s heap 99 MiB
+00:55:53 vector freshdb-hnsw-ef32 n=100000 c=1: recall@10 0.9290 qps 8391.6 p50 117us p99 182us
+00:55:56 vector freshdb-hnsw-ef64 n=100000 c=1: recall@10 0.9890 qps 5737.9 p50 169us p99 247us
+00:55:59 vector freshdb-hnsw-ef128 n=100000 c=1: recall@10 0.9970 qps 4403.2 p50 221us p99 335us
+00:56:02 vector freshdb-hnsw-ef256 n=100000 c=1: recall@10 0.9990 qps 2904.5 p50 333us p99 526us
+00:56:03 vector hnsw n=100000: reopen after crash with 1000 newer vectors 0.9s
+wrote results/2026-10-29-hnsw-persist/100k/vector.json

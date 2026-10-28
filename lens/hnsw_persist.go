@@ -249,7 +249,10 @@ func (l *Vector) EnableANNFrom(coll string, p ANNParams, snap ANNSnapshot) ANNLo
 		return st
 	}
 	for d, sl := range c.slabs {
-		if s := snap[coll][d]; s != nil && s.p == p.norm() {
+		// M and EfConstruction shape the graph; EfSearch only affects
+		// queries, so a changed EfSearch (or its default) keeps the graph.
+		if s := snap[coll][d]; s != nil && s.p.M == p.norm().M && s.p.EfConstruction == p.norm().EfConstruction {
+			s.p.EfSearch = p.norm().EfSearch
 			sl.g = restoreHNSW(sl, s, &st)
 			st.Graphs++
 		} else {

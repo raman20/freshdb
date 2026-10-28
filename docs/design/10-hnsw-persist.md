@@ -78,7 +78,35 @@ vector check → `GraphCurrent` violated in 6 steps.
 
 ## Results
 
-(filled in from the bench below)
+`freshdb-bench vector`, 128-d clustered vectors, M 16, c=1, same box as
+item 4. Results: `bench/results/2026-10-29-hnsw-persist/`.
+
+| N | build | close (save) | reopen before → after | reopen after a crash, N newer vectors |
+|---|---|---|---|---|
+| 100k | 18.2 s | 0.1 s | 23 s → 0.6 s (heap 99 MiB) | 0.9 s (1,000 newer) |
+| 1M, efC 100 | 976 s | 2.2 s | ~17 min (1,037 s) → 10.1 s (heap 1,047 MiB) | 22.4 s (10,000 newer) |
+| 1M, efC 200 | 1,479 s | 2.0 s | — → 8.9 s | 25.0 s (10,000 newer) |
+
+Recall@10 / QPS c=1 at 1M (100 queries):
+
+| efC | ef 64 | ef 128 | ef 256 |
+|---|---|---|---|
+| 100 | 0.804 / 1,252 | 0.919 / 725 | 0.962 / 481 |
+| 200 | 0.810 / 1,566 | 0.925 / 820 | 0.982 / 475 |
+
+At 100k (efC 100): ef 32 0.929 / 8.4k, ef 64 0.989 / 5.7k, ef 128 0.997
+/ 4.4k, ef 256 0.999 / 2.9k QPS (exact: 1.0 / 1.4k).
+
+Recall after reopen equals recall after build (same graph). efC 200 costs
++52% build time for +0.006 recall at ef 64/128, so the efC default stays
+100. The default EfSearch is now **128** (was 64): at 1M recall 0.804 →
+0.919 for 1,252 → 725 QPS; at 100k 0.989 → 0.997 for 5.7k → 4.4k QPS.
+EfSearch does not shape the graph, so a saved graph is kept when only
+EfSearch changes.
+
+Parallel insert was not done: `dot` is already ~39% of the build profile,
+and insert order must stay deterministic so that the same history builds
+the same graph (the simulator and byte-identity tests rely on it).
 
 ## Limits
 
