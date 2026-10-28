@@ -473,10 +473,11 @@ The other engines were run once, in the v0.1.0 run
 | A (50% update), 1 client | **46k** | 3.7k | 19k | 32k | 22k | 9.3k |
 | A (50% update), 64 clients | **231k** | 81k | 25k | 119k | 24k | 13k |
 | F (read-modify-write), 64 clients | **131k** | 67k ¹ | 28k ¹ | 81k | 22k | 8.9k |
-| Peak RSS, whole run | 2.12 GiB | 7.1 GiB | 3.5 GiB | 0.7 GiB | 1.7 GiB | **0.3 GiB** |
+| Peak RSS, whole run | 1.55 GiB ² | 7.1 GiB | 3.5 GiB | 0.7 GiB | 1.7 GiB | **0.3 GiB** |
 
 ¹ Plus RMWs that gave up after 16 OCC conflict retries: 9,660 for freshDB
 v0.1.0 and 1,045 for Badger. freshDB `main` had none.
+² From the later memory run ([`2026-10-28-memory/`](bench/results/2026-10-28-memory/), was 2.12 GiB). Pebble's 0.7 GiB is its bulk-load peak; after the load it holds ~0.09 GiB and relies on the OS page cache ([design/07-memory.md](docs/design/07-memory.md)).
 
 Other suites, freshDB `main` vs v0.1.0 (same VM, same commands):
 
@@ -488,8 +489,10 @@ Other suites, freshDB `main` vs v0.1.0 (same VM, same commands):
 | OCC transfers, 1 hot key, 64 clients (files layout) | 3.1k commits/s, 0 gave up | 2.1k, 49k gave up | Badger 14.1k, 57.5k gave up |
 
 **Where freshDB loses:**
-- **Memory.** 2.12 GiB peak RSS vs 0.7 for Pebble. Keys, MVCC history,
-  topics, documents and vectors are still in RAM; history is never trimmed.
+- **Memory.** 1.55 GiB peak RSS vs 0.7 for Pebble, and the steady-state
+  gap is larger (~1.5 vs ~0.09 GiB): Pebble's 0.7 is only its bulk load,
+  then its data lives in the OS page cache. Keys, MVCC history (until
+  `Compact`), topics, documents and vectors are in RAM.
 - **Point reads are below v0.1.0** (C at 64 clients: 2.24M vs 2.92M),
   because values now come from the log through a cache instead of RAM.
 - **Low-rate streaming tail latency** (p99 3.1–43 ms at 1k msgs/s across runs vs 1.9 ms
@@ -556,7 +559,9 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
 - Single-client durable writes: journal layout by default for new local
   directories on Unix (one `write` + `fdatasync` per commit).
 - Memory: large KV values stay in the log (7.1 → ~1 GiB on the files layout;
-  2.12 GiB with the journal default and the 256 MiB value cache).
+  1.55 GiB peak with the journal default and the 256 MiB value cache, after
+  packing MVCC versions 72 → 40 B; `GOMEMLIMIT` trades more, see
+  [operations](docs/operations.md#memory-and-cache-sizing)).
 - Hot-key read-modify-write no longer gives up after 16 retries.
 - Exact vector search is ~55× faster at 100k vectors.
 - Concurrent escalated transactions share a group commit (writer batching).

@@ -66,9 +66,10 @@ that in mind. KMS-held keys are on the roadmap.
 
 **How much memory does it need?**
 Keys, KV history, topics, documents and vectors are in RAM; KV values over
-64 B are read from the log through a 256 MiB off-heap cache
-(`WithValueCacheBytes`). The 1M × 1 KiB YCSB run peaked at 2.12 GiB on `main`
-(7.1 GiB on v0.1.0). Old KV versions stay in memory until you run
+64 B are read from the log through an off-heap cache (`WithValueCacheBytes`;
+default 1/16 of the memory limit, 16–256 MiB). The 1M × 1 KiB YCSB run peaked
+at 1.55 GiB on `main` (7.1 GiB on v0.1.0), about half of it Go GC headroom;
+`GOMEMLIMIT` trades that for GC CPU. Old KV versions stay in memory until you run
 `freshdb compact` (new on `main`), which keeps only the latest live version
 of each key; topics keep every message. See
 [operations.md](operations.md#compaction). See [operations.md](operations.md#memory-and-cache-sizing).

@@ -85,8 +85,8 @@ positional argument is ignored. The protocol is model-checked in
 ## Memory and cache sizing
 
 What lives in RAM (per open database):
-- every KV key and its full version history (MVCC; history is never
-  trimmed yet), with values of up to 64 B inline;
+- every KV key and its version history (MVCC, 40 bytes per version plus
+  the key; kept until `Compact`), with values of up to 64 B inline;
 - topic messages, documents and doc indexes, and vectors;
 - the **value cache** for KV values over 64 B, which are otherwise read
   from the log (`pread` locally, ranged GET on S3) and CRC-checked.
@@ -96,15 +96,31 @@ RSS grows by about its size once it fills. Go API options:
 
 | Option | Default | Effect |
 |---|---|---|
-| `WithValueCacheBytes(n)` | 256 MiB | cache size; negative disables the cache |
+| `WithValueCacheBytes(n)` | 1/16 of the memory limit (cgroup v2 `memory.max`, else MemTotal), 16–256 MiB | cache size; negative disables the cache |
 | `WithInlineMax(n)` | 64 B | KV values up to `n` bytes stay in RAM; negative keeps none inline |
 | `WithSnapshotEvery(n)` | 0 (off) | KV+topic snapshot every `n` commits; written synchronously and does not speed up open yet |
 
 The CLI and `freshdb serve` use the defaults; they have no flags for these
-yet. For scale: the 1M × 1 KiB YCSB run peaked at 2.12 GiB RSS with the
-defaults on the journal layout (0.99 GiB on the files layout with the old
-64 MiB cache; v0.1.0: 7.1 GiB). Lower the cache for small machines, raise it
-if your hot set is larger and reads miss.
+yet. For scale: the 1M × 1 KiB YCSB run peaked at 1.55 GiB RSS with the
+defaults on the journal layout (2.05 GiB before the packed versions; v0.1.0:
+7.1 GiB). Lower the cache for small machines, raise it if your hot set is
+larger and reads miss.
+
+**Go GC settings.** About half of RSS with defaults is the Go garbage
+collector's headroom (`GOGC=100` lets the heap reach ~2× the live heap).
+freshDB does not set these itself; set them on the process:
+- `GOMEMLIMIT` caps Go memory (not the value-cache arena, which is
+  outside the Go heap): RSS ≈ limit + cache. On the YCSB run,
+  `GOMEMLIMIT=800MiB` gave 1.06 GiB peak with reads within noise, but
+  read-latest (D) at 64 clients fell 927k → 599k ops/s; at 600 MiB with a
+  64 MiB cache, 0.69 GiB but D fell to 169k (the GC runs constantly).
+  A reasonable start is ~1.5× the live heap after GC.
+- Run `serve --compact-every` so the live heap stops growing with history:
+  with compaction between workloads and `GOMEMLIMIT=800MiB` the run peaked
+  at 1.20 GiB, ended at 0.93 GiB and lost no throughput.
+- Raising `GOGC` (e.g. 200) does the opposite: more RSS, less GC CPU (not measured here).
+
+Full breakdown and curve: [design/07-memory.md](design/07-memory.md).
 
 ## Running a server
 

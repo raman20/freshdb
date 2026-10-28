@@ -34,6 +34,7 @@ otherwise; the latest release is
 | [design/04-hnsw.md](design/04-hnsw.md) | design: the opt-in HNSW vector index |
 | [design/05-auth-tls-keys.md](design/05-auth-tls-keys.md) | design: bearer-token auth, TLS, key providers |
 | [design/06-push-consumers.md](design/06-push-consumers.md) | design: `WaitHead`, long-poll and SSE for topic consumers |
+| [design/07-memory.md](design/07-memory.md) | design: where RSS goes, packed versions, `GOMEMLIMIT` curve, fair Pebble comparison |
 
 ## Evidence and numbers
 

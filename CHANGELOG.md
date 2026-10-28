@@ -64,6 +64,16 @@ in its "Changes since v0.1.0" section.
   version points into a chunk object.
 
 ### Changed
+- **Memory (item 7).** The KV lens stores each version in 40 bytes
+  (was 72) and a key's first version in the map slot itself; the log
+  segment index keeps one chain hash (the tip's) instead of one per
+  segment (64 → 24 B per segment). The default value cache is now 1/16 of
+  the cgroup v2 memory limit (else MemTotal), clamped to 16–256 MiB (still
+  256 MiB on machines with ≥ 4 GiB). YCSB 1M × 1 KiB peak RSS 2.05 →
+  1.55 GiB, live heap 815 → 576 MiB, reads unchanged; see
+  `docs/design/07-memory.md`. `freshdb-bench ycsb` records RSS/anon/file,
+  Go heap and GC goal per phase, data-dir page cache, and gains
+  `-memprofile` and `-compact-between`.
 - **Memory: values are read from the log instead of being held in RAM.**
   The KV lens keeps values larger than `InlineMax` (default 64 B) as a
   position (offset, length, CRC-32C) in their immutable segment, and the

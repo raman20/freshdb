@@ -30,6 +30,7 @@ suites (same VM, same commands and seeds, fsync on), all on unreleased
 - YCSB with the default URL after the read-path work (item 2): [`2026-10-28-read-path/`](../bench/results/2026-10-28-read-path/), commit `e12e909`, same command as `2026-10-28-default-journal`.
 - Compaction (item 3), storage and open time before/after `Compact`: [`2026-10-28-compaction/`](../bench/results/2026-10-28-compaction/), commit `09773ea` (`freshdb-bench compact`).
 - Push consumers (item 6), message latency at 1k msgs/s by consumer idle mode: [`2026-10-28-push/`](../bench/results/2026-10-28-push/), commit `282c3a6` (`freshdb-bench msg -idle ...`).
+- Memory (item 7), YCSB with the default URL plus a memory sampler, before/after and a `GOMEMLIMIT`/cache/compaction curve: [`2026-10-28-memory/`](../bench/results/2026-10-28-memory/), before = `f5c1c22`, after = `c08ceca`; Pebble rerun in the same session.
 - Vectors: [`2026-10-27-after-vector/`](../bench/results/2026-10-27-after-vector/), commit `f539629`. The vector code has not changed since.
 - Intermediate runs: [`after-memory`](../bench/results/2026-10-27-after-memory/) and [`after-occ`](../bench/results/2026-10-27-after-occ/).
 
@@ -62,6 +63,12 @@ directories use.
    FIFO ring with second chance) and its default went 64 → 256 MiB;
    reads no longer take the DB lock exclusively; read-only transactions
    allocate no maps. See [design/02-read-path.md](design/02-read-path.md).
+6. **Memory (item 7).** KV versions packed 72 → 40 B with the first
+   version stored in the map slot, segment index 64 → 24 B, value-cache
+   default sized from the memory limit (1/16, 16–256 MiB). Peak RSS on
+   YCSB 1M × 1 KiB: 2.05 → 1.55 GiB with defaults, reads unchanged. See
+   [design/07-memory.md](design/07-memory.md) for the breakdown and the
+   `GOMEMLIMIT` curve.
 
 | | v0.1.0 | files layout | journal (explicit) | default URL (journal) | default URL, read path | Pebble (v0.1.0 run) |
 |---|---|---|---|---|---|---|
@@ -121,6 +128,13 @@ OCC transfers, fsync on (commits/s; ops that gave up after 16 retries):
 - **Memory: much lower than v0.1.0, but the journal default uses more than the files layout.**
   - Peak RSS over the whole YCSB run: files layout 0.99 GiB, explicit
     journal 1.81 GiB, default URL 1.95 GiB (v0.1.0: 7.12; Pebble: 0.73).
+  - Item 7 (2026-10-28-memory, same-day before/after): default URL
+    2.05 → 1.55 GiB peak, 1.06 GiB with `GOMEMLIMIT=800MiB`, 1.20 GiB peak
+    / 0.93 GiB steady with compaction between workloads. Pebble's 0.73 GiB
+    is its bulk-load peak; after the load it sits at 83–88 MiB RSS, with
+    its data in the OS page cache (1.6 GiB, not in RSS). freshDB keeps
+    keys and version positions in RAM, so in steady state the gap is
+    ~10×, not 3×.
   - A heap profile (300k keys, then 600k updates at 8 clients) found
     217 B of retained heap per update with the journal vs 141 B with the
     files layout. 64% of it is the KV lens's MVCC version history,
@@ -166,6 +180,22 @@ OCC transfers, fsync on (commits/s; ops that gave up after 16 retries):
     (~15-40 ms about every 6 s at 1k × 1.3 KB/s). Not fixed yet.
   - p50 is 0.2 ms in every journal run (files layout: 0.8 ms). Push
     consumers (next bullet) do not remove these disk stalls.
+- **Memory: −24% peak RSS with defaults; `GOMEMLIMIT` trades the rest.**
+  Same-day runs, YCSB 1M × 1 KiB, default URL, fsync on (one run each;
+  ops/s at 64 clients):
+
+  | config | peak RSS | steady RSS | C | D |
+  |---|---|---|---|---|
+  | before (`f5c1c22`) | 2,046 MiB | 2,019 | 1.65M | 881k |
+  | after, defaults | 1,549 | 1,500 | 1.67M | 927k |
+  | `GOMEMLIMIT=800MiB` | 1,058 | 1,019 | 1.48M | 599k |
+  | `GOMEMLIMIT=600MiB`, cache 64 MiB | 703 | 651 | 1.10M | 169k |
+  | compact between workloads + `GOMEMLIMIT=800MiB` | 1,201 | 926 | 1.86M | 931k |
+  | Pebble, defaults | 771 (load only) | 83 | 231k | 315k |
+
+  The 2.24M C c=64 from the read-path run was not reproduced today by
+  either before or after (1.65M / 1.67M); C varied 1.10–1.86M across
+  rows. Full curve and breakdown: [design/07-memory.md](design/07-memory.md).
 - **Push consumers: an idle consumer no longer has to poll.**
   `DB.WaitHead`, HTTP long-poll (`?wait=`) and an SSE stream. Same box,
   default URL, fsync on, 1k msgs/s for 10 s, 8 producers, 1 group, batch
