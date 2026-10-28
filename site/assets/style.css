@@ -60,3 +60,9 @@ table.tbl{width:100%;border-collapse:collapse;font-size:15px;background:#fff;bor
 .one{background:#0f172a;color:#d1fae5;border-radius:12px;padding:14px 18px;text-align:center;font:600 15px ui-monospace,Menlo,monospace}
 ul.lim{margin:0;padding-left:20px}ul.lim li{margin:6px 0;color:#334155}
 @media (max-width:900px){.six{grid-template-columns:repeat(3,1fr)}}
+/* responsive tables, lists, small screens */
+.tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px}.tblwrap table.tbl{min-width:560px}
+.lim{margin:0;padding-left:20px}.lim li{margin:0 0 10px}
+.card .tag{margin-bottom:8px}
+pre.term,pre.code{max-width:100%}
+@media (max-width:600px){.nav-in{height:52px}.lede{font-size:17px}.cta .btn{flex:1 1 auto;text-align:center}.six{grid-template-columns:repeat(2,1fr)}.one{font-size:13px}.sub{font-size:16px}}
