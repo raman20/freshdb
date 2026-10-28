@@ -1,0 +1,56 @@
+{
+  "suite": "commit",
+  "env": {
+    "time": "2026-10-29T00:38:05+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "6aaffc9-dirty",
+    "command": "./bin/freshdb-bench commit -reps 1 -out results/2026-10-29-commit/after-3",
+    "loadavg_at_start": "1.25 1.16 1.83"
+  },
+  "params": {
+    "clients": "1,16",
+    "commits": 30000,
+    "reps": 1,
+    "value": 4096
+  },
+  "runs": [
+    {
+      "clients": 1,
+      "commits": 30000,
+      "ops_per_sec": 19810.39271070578,
+      "latency": {
+        "count": 30000,
+        "mean_us": 50.34,
+        "p50_us": 35.97,
+        "p99_us": 474.11,
+        "p999_us": 1100.8,
+        "max_us": 6795.26
+      },
+      "over_2ms": 5,
+      "over_10ms": 0,
+      "file_mib": 128
+    },
+    {
+      "clients": 16,
+      "commits": 30000,
+      "ops_per_sec": 36817.26839848797,
+      "latency": {
+        "count": 30000,
+        "mean_us": 432.71,
+        "p50_us": 257.41,
+        "p99_us": 1707.01,
+        "p999_us": 2629.63,
+        "max_us": 3274.75
+      },
+      "over_2ms": 127,
+      "over_10ms": 0,
+      "file_mib": 128
+    }
+  ]
+}

@@ -18,6 +18,7 @@ suites:
   vector   recall@10 and QPS on synthetic clustered vectors (exact search)
   s3       commit latency, batching, requests/commit and cold open on S3/MinIO
   compact  storage, open time and heap before/after compaction (overwrite-heavy)
+  commit   commit latency tails on the journal (8 MiB file growth steps)
   gc       disk size per cycle under overwrite + branch + rewind churn: compact vs gc vs gc+shrink
   calib    harness + VM noise floor (no-op latency)
   report   render results/*.json as markdown
@@ -47,6 +48,8 @@ func main() {
 		cmdCompact(args)
 	case "gc":
 		cmdGC(args)
+	case "commit":
+		cmdCommit(args)
 	case "calib":
 		cmdCalib(args)
 	case "report":

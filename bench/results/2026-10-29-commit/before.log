@@ -1,0 +1,9 @@
+00:37:54 commit c=1   18451 commits/s  p50     38us p99    260us p99.9    627us max   26886us  >2ms 19 >10ms 16  file 128 MiB
+00:37:55 commit c=16  38467 commits/s  p50    244us p99   1270us p99.9  15409us max   15884us  >2ms 256 >10ms 224  file 120 MiB
+wrote results/2026-10-29-commit/before-1/commit.json
+00:37:59 commit c=1   19899 commits/s  p50     36us p99    287us p99.9    643us max   24920us  >2ms 20 >10ms 16  file 128 MiB
+00:38:00 commit c=16  39039 commits/s  p50    246us p99   1118us p99.9  16040us max   25788us  >2ms 240 >10ms 207  file 120 MiB
+wrote results/2026-10-29-commit/before-2/commit.json
+00:38:04 commit c=1   20905 commits/s  p50     36us p99    224us p99.9    544us max   15753us  >2ms 16 >10ms 13  file 128 MiB
+00:38:05 commit c=16  35232 commits/s  p50    253us p99   1002us p99.9  16957us max   17891us  >2ms 224 >10ms 224  file 120 MiB
+wrote results/2026-10-29-commit/before-3/commit.json

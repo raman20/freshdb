@@ -497,8 +497,10 @@ Other suites, freshDB `main` vs v0.1.0 (same VM, same commands):
 - **Point reads are below v0.1.0** (C at 64 clients: 2.24M vs 2.92M),
   because values now come from the log through a cache instead of RAM.
 - **Low-rate streaming tail latency** (p99 3.1–43 ms at 1k msgs/s across runs vs 1.9 ms
-  for NATS). Part is this VM's disk; part is freshDB's 8 MiB journal growth
-  stall, which is not fixed yet.
+  for NATS). Part is this VM's disk; the 8 MiB journal growth stall is now
+  off the commit path (commits over 10 ms 13–16 → 0–3 per 30k), but its
+  background writeback roughly doubles commit p99; the streaming bench has
+  not been rerun since.
 - **One very hot key.** Nothing gives up any more, but Badger commits more per
   second.
 - **Vectors**: exact search falls linearly with N. The opt-in HNSW index
@@ -594,8 +596,8 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
   dev key to a real KEK, and no built-in KMS client.
 - Only MinIO is tested; AWS S3 and R2 are not.
 - The journal layout is new and has less mileage than the files layout; its
-  file grows in 8 MiB chunks with a stall on the commit path, and the file
-  never shrinks (compaction punches holes instead).
+  file grows in 8 MiB chunks (zero-filled in the background), and it only
+  shrinks with an offline `freshdb gc --shrink` (compaction punches holes).
 - In-flight commits that race a `rewind` land on the retired log. That log
   stays reachable via the reflog.
 - A DEK create that lands after a shred leaves an orphan key until the next

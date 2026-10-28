@@ -27,6 +27,7 @@ the first run reported 32 with identical state counts.
 | FreshCompact | compaction/GC of a log: base image write, create-only manifest commit with garbage list, garbage + orphan sweeps, 2 processes with crashes and reopen (≤3 epochs), a fenced compactor, a reader holding an old manifest; grace modelled as "readers that started before an object was listed finish first". CI config MaxLSN=2; MaxLSN=3 checked locally: 63,131,325 / 11,134,091 states, depth 32, no error | 1,557,725 | 315,903 | 25 | no error |
 | FreshNotify | consumer change notification: a writer moves the head (commit or rewind) then closes and replaces the channel; 2 waiters run take-channel / read-head / block; MaxHead=2, MaxSteps=5 | 87,149 | 29,427 | 19 | no error |
 | FreshGC | GC with retention (item 8): two logs (main's log and a rewind child forked at P=1, kept by the reflog), retention window W=1 commits, a base at the cut capped by the dependent child's branch point, reflog pruning, dropping unreachable logs, sweeping, deleting old manifests (Keep=1), 2 processes with crashes, ≤2 epochs, a fenced writer that keeps running (incl. committing into a deleted manifest slot), create-only manifest put + post-create List check; MaxLSN=3, MaxMan=6, process symmetry | 6,582,415 | 1,598,697 | 28 | no error |
+| FreshGrow | journal preallocation (item 9): 2 appenders, 2 background growers, a file of ≤6 blocks; appends extend synchronously when needed, growers write one zero block at the current size under the writer lock | 97 | 28 | 8 | no error |
 | FreshShred | DEK per subject, marker → delete → audit entry + certificate; crash between steps; DEK create landing late; sweep; hash chain | 25,570 | 6,481 | 16 | no error (incl. liveness) |
 
 ## Properties checked
@@ -96,6 +97,11 @@ the first run reported 32 with identical state counts.
   always holds the latest manifest), `GarbageFinal` (no present manifest
   lists anything the latest needs as garbage).
 
+- **FreshGrow**: `NoLostRecord` (no zero write lands on a record block),
+  `Covered` (the file covers `end` and every block below it is a record).
+  A small model: it exists to show the locking rule is needed, see the
+  mutant below.
+
 ## Mutation checks (are the properties strong enough?)
 
 | Mutation | Result |
@@ -108,6 +114,7 @@ the first run reported 32 with identical state counts.
 | FreshGC without the post-create manifest List (`FreshGC_nopost.cfg`) | `GarbageFinal` violated in 10 steps: a fenced writer commits its stale GC manifest into a deleted slot below the latest, listing a segment the live child branch needs as garbage |
 | FreshGC with the parent's cut ignoring a dependent branch (`FreshGC_nodeps.cfg`) | `GarbageFinal` violated |
 | FreshGC deleting the manifest it holds (`Keep = 0`, `FreshGC_keep0.cfg`) | `TypeOK` violated (no manifest left) |
+| FreshGrow with the grower writing at a size read before releasing the lock (`FreshGrow_unlocked.cfg`) | `NoLostRecord` violated in 4 steps |
 | FreshShred with `Sweep` disabled | `KeyEventuallyGone` violated |
 | FreshShred with reads ignoring the shred marker | `ShreddedNeverRevealed` violated |
 

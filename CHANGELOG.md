@@ -81,6 +81,12 @@ in its "Changes since v0.1.0" section.
   version points into a chunk object.
 
 ### Changed
+- **Journal preallocation moved off the commit path.** The next 8 MiB
+  chunk is zero-filled by a background goroutine in 256 KiB steps under the
+  writer lock, each written out with `sync_file_range`. On the commit bench
+  commits over 10 ms fell from 13–16 to 0–3 per 30k (c=1) and p99.9 at c=16
+  from 15–17 ms to 2.6–9.1 ms; p99 is about 2× higher and p99.9 at c=1 went
+  0.6 → 1.2 ms (`docs/design/09-journal-prealloc.md`).
 - **TLA+ tools pinned to the stable v1.7.4 release.** `v1.8.0` is a
   prerelease whose jar is rebuilt nightly, so its checksum drifted between
   CI (cached) and fresh downloads. `spec/get_tla.sh` downloads and verifies

@@ -16,7 +16,6 @@ func fillJournal(t *testing.T, d string) (map[string][]byte, int64) {
 	t.Helper()
 	ctx := context.Background()
 	j := mustJournal(t, d)
-	defer j.Close()
 	want := map[string][]byte{}
 	for i := 0; i < 100; i++ {
 		k := fmt.Sprintf("o/%04d", i)
@@ -32,6 +31,7 @@ func fillJournal(t *testing.T, d string) (map[string][]byte, int64) {
 			want[k] = v
 		}
 	}
+	j.Close() // also waits for background preallocation
 	fi, _ := os.Stat(filepath.Join(d, jrnFile))
 	return want, fi.Size()
 }

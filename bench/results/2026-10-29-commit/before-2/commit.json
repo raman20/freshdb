@@ -1,0 +1,56 @@
+{
+  "suite": "commit",
+  "env": {
+    "time": "2026-10-29T00:37:58+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "6aaffc9-dirty",
+    "command": "/tmp/fb-before commit -reps 1 -out results/2026-10-29-commit/before-2",
+    "loadavg_at_start": "1.02 1.11 1.82"
+  },
+  "params": {
+    "clients": "1,16",
+    "commits": 30000,
+    "reps": 1,
+    "value": 4096
+  },
+  "runs": [
+    {
+      "clients": 1,
+      "commits": 30000,
+      "ops_per_sec": 19898.974181614292,
+      "latency": {
+        "count": 30000,
+        "mean_us": 50.12,
+        "p50_us": 35.58,
+        "p99_us": 286.72,
+        "p999_us": 642.56,
+        "max_us": 24920.06
+      },
+      "over_2ms": 20,
+      "over_10ms": 16,
+      "file_mib": 128
+    },
+    {
+      "clients": 16,
+      "commits": 30000,
+      "ops_per_sec": 39039.127508188954,
+      "latency": {
+        "count": 30000,
+        "mean_us": 408.35,
+        "p50_us": 246.4,
+        "p99_us": 1118.21,
+        "p999_us": 16039.94,
+        "max_us": 25788.42
+      },
+      "over_2ms": 240,
+      "over_10ms": 207,
+      "file_mib": 120
+    }
+  ]
+}

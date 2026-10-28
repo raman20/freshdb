@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 )
 
@@ -50,6 +51,10 @@ type Journal struct {
 	mu   sync.RWMutex
 	idx  map[string]jent
 	end  int64 // offset after the last valid record seen
+
+	growing  atomic.Bool    // a background preallocation is running
+	stopGrow atomic.Bool    // set by Close
+	growWG   sync.WaitGroup // the background preallocation
 }
 
 type jent struct {
@@ -60,9 +65,11 @@ type jent struct {
 
 const (
 	jrnMagic   = "FRESHJ1\x00"
-	jrnHead    = 32      // magic(8) salt(16) crc(4) pad(4)
-	jrnHdr     = 12      // crc(4) kind(1) pad(1) klen(2) dlen(4)
-	jrnChunk   = 8 << 20 // preallocation step (zero-filled, then fsync)
+	jrnHead    = 32        // magic(8) salt(16) crc(4) pad(4)
+	jrnHdr     = 12        // crc(4) kind(1) pad(1) klen(2) dlen(4)
+	jrnChunk   = 8 << 20   // preallocation step (zero-filled, then fsync)
+	jrnGrowAt  = 4 << 20   // start the next chunk in the background when this little is left
+	jrnGrowBit = 256 << 10 // background zero-fill step (one writer-lock hold each)
 	jrnMaxKey  = 4096
 	jrnMaxData = 1 << 30
 
@@ -296,7 +303,60 @@ func (j *Journal) appendRec(rec []byte) error {
 	if _, err := j.f.WriteAt(rec, at); err != nil {
 		return err
 	}
+	j.growAhead(at + int64(len(rec)))
 	return j.sync()
+}
+
+// growAhead starts zero-filling the next chunk in the background once the
+// end is within jrnGrowAt of the file size, so commits do not pay for the
+// 8 MiB zero-fill and the fsync that follows it (docs/design/09).
+// Caller holds the writer locks.
+func (j *Journal) growAhead(end int64) {
+	st, err := j.f.Stat()
+	if err != nil || st.Size()-end >= jrnGrowAt || j.stopGrow.Load() || !j.growing.CompareAndSwap(false, true) {
+		return
+	}
+	target := (st.Size()/jrnChunk + 1) * jrnChunk
+	j.growWG.Add(1)
+	go j.grow(target)
+}
+
+// grow extends the file to target with zeros in jrnGrowBit steps. Each step
+// holds the writer locks (in-process and flock) and writes at the current
+// size, so it never touches a record (spec/FreshGrow.tla: an unlocked
+// grower overwrites one). Each step is written out unlocked, so no commit's
+// fdatasync has to flush more than one step; one fsync at the end makes
+// the new size durable.
+func (j *Journal) grow(target int64) {
+	defer j.growWG.Done()
+	defer j.growing.Store(false)
+	zero := make([]byte, jrnGrowBit)
+	grew := false
+	for !j.stopGrow.Load() {
+		j.wmu.Lock()
+		if err := flock(j.f, syscall.LOCK_EX); err != nil {
+			j.wmu.Unlock()
+			return
+		}
+		off, n := int64(-1), int64(0)
+		st, err := j.f.Stat()
+		if err == nil && st.Size() < target {
+			off, n = st.Size(), min(jrnGrowBit, target-st.Size())
+			_, err = j.f.WriteAt(zero[:n], off)
+		}
+		flock(j.f, syscall.LOCK_UN)
+		j.wmu.Unlock()
+		if err != nil || off < 0 {
+			break
+		}
+		grew = true
+		if !j.noSync {
+			writeOut(j.f, off, n)
+		}
+	}
+	if grew && !j.noSync && !j.stopGrow.Load() {
+		j.f.Sync()
+	}
 }
 
 // reserve makes sure [0,upto) is allocated and written (zeros), so later
@@ -340,6 +400,10 @@ func (j *Journal) Sync() error {
 
 // Close releases the journal's file handles. The Journal is unusable after.
 func (j *Journal) Close() error {
+	j.wmu.Lock() // after an in-flight append: later ones see stopGrow
+	j.stopGrow.Store(true)
+	j.wmu.Unlock()
+	j.growWG.Wait()
 	j.wmu.Lock()
 	j.rfmu.Lock()
 	defer j.rfmu.Unlock()
