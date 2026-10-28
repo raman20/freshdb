@@ -157,3 +157,45 @@ case is wrong), plus reopen of branches at every LSN.
   (larger-than-RAM data, not on the roadmap for this item) would close it.
 - freshDB still does 7× Pebble's C reads and 3× its D at 64 clients in the
   same runs, which is what the RAM buys.
+
+## Not built: a disk-backed key index (what closing the gap would take)
+
+The remaining steady-state gap to Pebble (~0.9–1.5 GiB vs ~0.09 GiB anon)
+is the in-RAM index: one map entry per key (key string + 40 B per
+version), one journal-index entry and one `segIdx` per segment. Moving it
+to disk is a storage-engine change, not a tuning step, so it was not
+started in this item (estimate: weeks, not under an hour). What it would
+take:
+
+1. **Split hot and cold.** Keep in RAM only keys written since the last
+   compaction (a memtable-like delta map, as today). Everything folded into
+   a compaction base image moves to an on-disk sorted index.
+2. **On-disk index format.** The base image already holds the latest live
+   version per key in key order. Add an index block per base: sorted
+   (key, lsn, offset, len, crc) entries in ~4 KiB pages, a sparse in-RAM
+   fence array (first key per page: ~1M keys / ~60 per page ≈ 17k fences,
+   < 1 MiB) and a per-base Bloom filter (~10 bits/key ≈ 1.2 MiB per 1M
+   keys). A point read then costs delta-map lookup → Bloom → one page
+   `pread` (usually page-cache hot) → value `pread`.
+3. **History.** Time travel (`AsOf`, branches at old LSNs) needs older
+   versions. Either keep them only until compaction (today's semantics
+   after `Compact` already drop them) or write a second on-disk
+   (key, lsn) index per base; the RAM map would then never hold history.
+4. **Segment indexes.** The journal object map and `segIdx` (≈ 120 MiB
+   at 1M keys after this item) shrink to the segments after the last base;
+   older ones are reachable through the base's index.
+5. **Correctness work.** Recovery must rebuild the delta map from segments
+   after the newest base and trust the base index only if its checksum and
+   manifest commit match; this changes the open path and the compaction
+   commit, so it needs a TLA+ extension of the compaction model
+   (index published atomically with the base) and crash tests.
+6. **Cost.** Reads that miss the delta map pay an extra page lookup, so C
+   would fall from the in-RAM 1.6–1.9M ops/s toward Pebble's range on
+   cold pages; with the page cache warm it should stay well above it.
+   Expected steady anon: delta map + fences + Blooms + value cache, i.e.
+   tens of MiB plus the cache, at the price of the page cache (which is
+   reclaimable and what Pebble already relies on).
+
+Cheaper partial steps, in order: run `Compact` regularly (already halves
+the live heap here); let the latest version live in RAM and page out
+history only (steps 3–4); then the full index (steps 1–2, 5).
