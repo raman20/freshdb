@@ -44,22 +44,24 @@ type Config struct {
 }
 
 type Result struct {
-	Seed      int64
-	Steps     int
-	Acked     int
-	Ambiguous int
-	Crashes   int
-	Takeovers int
-	Shreds    int
-	Rewinds   int
-	Compacts  int
-	GCs       int
-	Faults    int
-	TraceHash [32]byte
+	Seed        int64
+	Steps       int
+	Acked       int
+	Ambiguous   int
+	Crashes     int
+	ANNRestores int // opens that restored a saved HNSW graph
+	Closes      int // clean closes (save the HNSW graph) instead of a crash
+	Takeovers   int
+	Shreds      int
+	Rewinds     int
+	Compacts    int
+	GCs         int
+	Faults      int
+	TraceHash   [32]byte
 }
 
 type mop struct {
-	kind    byte // 'p' put, 'd' del, 't' publish
+	kind    byte // 'p' put, 'd' del, 't' publish, 'v' vector put, 'x' vector del
 	key     string
 	val     string
 	subject string
@@ -121,7 +123,11 @@ func (s *sim) open() (*freshdb.DB, error) {
 		db, err := freshdb.OpenStore(s.ctx, s.st,
 			freshdb.WithClock(func() int64 { return s.clock.Add(1) }),
 			freshdb.WithRand(s.rnd), freshdb.WithSnapshotEvery(1+int(s.seed%7)),
-			freshdb.WithLogf(func(string, ...any) {}),
+			freshdb.WithLogf(func(f string, _ ...any) {
+				if strings.Contains(f, "ANN graphs restored") {
+					s.res.ANNRestores++
+				}
+			}),
 			// even seeds keep every value as a log position (none inline),
 			// and every third seed reads them without the value cache
 			freshdb.WithInlineMax(int(s.seed%2)*64-1), freshdb.WithValueCacheBytes(map[bool]int{true: -1}[s.seed%3 == 0]))
@@ -149,6 +155,11 @@ func Run(seed int64, cfg Config) (Result, error) {
 	if s.db, err = s.open(); err != nil {
 		return s.res, s.fail("initial open: %v", err)
 	}
+	s.st.On = false
+	if err := s.db.EnableANN(s.ctx, "c", freshdb.ANNOptions{M: 2 + int(seed%4), EfConstruction: 4}); err != nil {
+		return s.res, s.fail("enable ann: %v", err)
+	}
+	s.st.On = true
 	for s.res.Steps = 0; s.res.Steps < cfg.Steps; s.res.Steps++ {
 		var err error
 		switch r := s.rng.Intn(100); {
@@ -203,13 +214,17 @@ func (s *sim) txn() error {
 	ops := []mop{}
 	for i := 0; i < n; i++ {
 		m := mop{key: "k" + strconv.Itoa(s.rng.Intn(6)), val: fmt.Sprintf("v%d.%d", id, i), subject: subjects[s.rng.Intn(4)]}
-		switch r := s.rng.Intn(10); {
+		switch r := s.rng.Intn(14); {
 		case r < 6:
 			m.kind = 'p'
 		case r < 8:
 			m.kind, m.val, m.subject = 'd', "", ""
-		default:
+		case r < 10:
 			m.kind = 't'
+		case r < 13:
+			m.kind, m.key = 'v', "e"+strconv.Itoa(s.rng.Intn(40))
+		default:
+			m.kind, m.key, m.val, m.subject = 'x', "e"+strconv.Itoa(s.rng.Intn(40)), "", ""
 		}
 		ops = append(ops, m)
 	}
@@ -229,6 +244,10 @@ func (s *sim) txn() error {
 				err = tx.Delete(m.key)
 			case 't':
 				err = tx.Topic("t").Publish([]byte(m.val), o...)
+			case 'v':
+				err = tx.Vector("c").Put(m.key, simVec(m.val), o...)
+			case 'x':
+				err = tx.Vector("c").Delete(m.key)
 			}
 			if err != nil {
 				return err
@@ -262,7 +281,12 @@ func (s *sim) txn() error {
 // crash kills the process (no clean close) and recovers.
 func (s *sim) crash(faulty bool) error {
 	s.res.Crashes++
-	s.db.Crash()
+	if s.rng.Intn(3) == 0 {
+		s.db.Close() // clean: saves the HNSW graph (through the faulty store)
+		s.res.Closes++
+	} else {
+		s.db.Crash()
+	}
 	if s.rng.Intn(2) == 0 || !faulty {
 		s.st.Flush(s.ctx) // in-flight requests may still land after a crash
 	}
@@ -482,6 +506,7 @@ func (s *sim) check() error {
 	}
 	// expected state = fold of model ops over recovered ids
 	kv := map[string]string{}
+	vec := map[string]string{}
 	var topic []string
 	for _, id := range ids {
 		kv["__tx"] = strconv.Itoa(id)
@@ -502,10 +527,19 @@ func (s *sim) check() error {
 				} else {
 					topic = append(topic, m.val)
 				}
+			case 'v':
+				if gone {
+					delete(vec, m.key)
+				} else {
+					vec[m.key] = m.val
+				}
+			case 'x':
+				delete(vec, m.key)
 			}
 		}
 	}
 	got := map[string]string{}
+	gotVec := map[string]string{}
 	var gotTopic []string
 	err = s.db.View(s.ctx, func(tx *freshdb.Tx) error {
 		kvs, err := tx.Scan("")
@@ -514,6 +548,13 @@ func (s *sim) check() error {
 		}
 		for _, p := range kvs {
 			got[p.Key] = string(p.Value)
+		}
+		hs, err := tx.Vector("c").SearchExact([]float32{1, 0, 0}, 1000)
+		if err != nil {
+			return err
+		}
+		for _, h := range hs {
+			gotVec[h.ID] = ""
 		}
 		ms, err := tx.Topic("t").Read(0, 0)
 		for _, m := range ms {
@@ -530,6 +571,15 @@ func (s *sim) check() error {
 	}
 	if !mapEq(kv, got) {
 		return s.fail("KV lens != model fold\n  want %v\n  got  %v", sorted(kv), sorted(got))
+	}
+	for k := range vec {
+		vec[k] = ""
+	}
+	if !mapEq(vec, gotVec) {
+		return s.fail("vector lens != model fold\n  want %v\n  got  %v", sorted(vec), sorted(gotVec))
+	}
+	if err := s.db.CheckANN("main"); err != nil {
+		return s.fail("%v", err)
 	}
 	if strings.Join(topic, ",") != strings.Join(gotTopic, ",") {
 		return s.fail("topic lens != model fold\n  want %v\n  got  %v", topic, gotTopic)
@@ -573,4 +623,10 @@ func sorted(m map[string]string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// simVec derives a 3-d vector from a value string.
+func simVec(v string) []float32 {
+	h := sha256.Sum256([]byte(v))
+	return []float32{float32(int8(h[0])) + 0.5, float32(int8(h[1])), float32(int8(h[2]))}
 }

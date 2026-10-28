@@ -70,7 +70,11 @@ type DB struct {
 	st    store.Store
 	opts  Options
 	epoch uint64
-	keys  *keyring
+
+	annTainted bool                         // a shred ran: do not save graphs built before it
+	annCarry   map[string]lens.ANNSnapshot  // graphs handed over a compaction reload
+	annStats   map[string]lens.ANNLoadStats // last restore per log (tests)
+	keys       *keyring
 	// devKEK: the KEK lives in the bucket (no key supplied).
 	devKEK bool
 	// chg is closed when a branch head may have moved (notify.go).
@@ -180,7 +184,7 @@ func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
 		o.ValueCacheBytes = defaultValueCacheBytes()
 	}
 	var err error
-	db := &DB{st: st, opts: o, vcache: newValueCache(o.ValueCacheBytes), logs: map[string]*logState{}, views: map[string]*view{}, writers: map[string]*writer{}}
+	db := &DB{st: st, opts: o, vcache: newValueCache(o.ValueCacheBytes), logs: map[string]*logState{}, views: map[string]*view{}, writers: map[string]*writer{}, annStats: map[string]lens.ANNLoadStats{}}
 	if err := db.acquire(ctx); err != nil {
 		return nil, err
 	}
@@ -344,9 +348,7 @@ func (db *DB) openWritable(ctx context.Context, id string) (*writer, error) {
 		return nil, err
 	}
 	// HNSW graphs only on live views: time-travel views scan exactly
-	for _, d := range db.man.ANN {
-		v.vec.EnableANN(d.Coll, d.params())
-	}
+	db.enableANN(ctx, id, v, l.head())
 	db.views[id] = v
 	w := newWriter(db, l, v)
 	db.writers[id] = w
@@ -396,10 +398,18 @@ func (db *DB) Close() error {
 	db.closed = true
 	db.bw.Store(nil)
 	ws := db.writers
+	save := !db.annTainted && db.failed == nil && len(db.man.ANN) > 0
 	db.mu.Unlock()
 	db.bump()
 	for _, id := range sortedMapKeys(ws) {
-		ws[id].stop()
+		w := ws[id]
+		w.stop()
+		w.mu.RLock()
+		ok := save && w.failed == nil && !w.crashed.Load()
+		w.mu.RUnlock()
+		if ok {
+			db.saveANN(context.Background(), w)
+		}
 	}
 	db.vcache.close()
 	if db.owned != nil {

@@ -77,6 +77,23 @@ func (db *DB) Shred(ctx context.Context, subject string) (*Certificate, error) {
 	for _, l := range db.views[db.man.Refs["main"]].lenses() {
 		names = append(names, l.Name())
 	}
+	// Saved HNSW graphs hold a hash per vector and a link structure built
+	// with the shredded vectors present: delete them, and save none built
+	// before now (the next open or compaction rebuilds from scratch).
+	db.annTainted = true
+	ids := map[string]bool{}
+	for id := range db.man.Logs {
+		ids[id] = true
+	}
+	for _, g := range db.man.Garbage {
+		ids[g.Log] = true
+	}
+	for _, id := range sortedMapKeys(ids) {
+		if _, err := db.dropANN(ctx, id); err != nil {
+			db.mu.Unlock()
+			return nil, err
+		}
+	}
 	db.mu.Unlock()
 	lsn, err := db.Branch("main").UpdateLSN(ctx, func(tx *Tx) error {
 		tx.ops = append(tx.ops, format.Op{Kind: format.OpShred, Space: "__audit", Key: h})

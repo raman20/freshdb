@@ -30,6 +30,9 @@ type vecRun struct {
 	BuildSecs  float64 `json:"hnsw_build_secs,omitempty"` // EnableANN on the loaded collection
 	OpenSecs   float64 `json:"open_secs,omitempty"`       // reopen incl. replay (+ graph build with ANN)
 	HeapMiB    float64 `json:"heap_after_open_mib,omitempty"`
+	CloseSecs  float64 `json:"close_secs,omitempty"`        // Close incl. saving the graph
+	CatchSecs  float64 `json:"catchup_open_secs,omitempty"` // reopen after a crash with 1% newer vectors than the saved graph
+
 }
 
 func cmdVector(args []string) {
@@ -152,7 +155,10 @@ func cmdVector(args []string) {
 			}
 			build := time.Since(t0).Seconds()
 			logf("vector hnsw n=%d: build %.1fs", n, build)
+			t0 = time.Now()
 			db.Close()
+			closeS := time.Since(t0).Seconds()
+			logf("vector hnsw n=%d: close (saves the graph) %.1fs", n, closeS)
 			runtime.GC()
 			t0 = time.Now()
 			if db, err = openFreshDB(dir, false, ""); err != nil {
@@ -187,8 +193,37 @@ func cmdVector(args []string) {
 					})
 					sys := fmt.Sprintf("freshdb-hnsw-ef%d", ef)
 					res.Runs = append(res.Runs, vecRun{System: sys, N: n, Dim: *dim, Clients: c, K: 10, RecallAt10: round(rec, 4), QPS: ph.OpsPerSec, Latency: ph.Latency,
-						Index: fmt.Sprintf("HNSW M=%d efC=%d ef=%d", *annM, *annEfc, ef), BuildSecs: round(build, 2), OpenSecs: round(open, 2), HeapMiB: round(float64(ms.HeapAlloc)/(1<<20), 0)})
+						Index: fmt.Sprintf("HNSW M=%d efC=%d ef=%d", *annM, *annEfc, ef), BuildSecs: round(build, 2), OpenSecs: round(open, 2), CloseSecs: round(closeS, 2), HeapMiB: round(float64(ms.HeapAlloc)/(1<<20), 0)})
 					logf("vector %s n=%d c=%d: recall@10 %.4f qps %.1f p50 %.0fus p99 %.0fus", sys, n, c, rec, ph.OpsPerSec, ph.Latency.P50Us, ph.Latency.P99Us)
+				}
+			}
+			// catch-up: 1% more vectors than the saved graph, then a crash
+			extra := max(1, n/100)
+			for i := 0; i < extra; i += 1000 {
+				err := db.Update(bg, func(tx *freshdb.Tx) error {
+					for j := i; j < min(extra, i+1000); j++ {
+						if err := tx.Vector("v").Put(fmt.Sprint("new", j), qs[j%len(qs)]); err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+				if err != nil {
+					fatal(err)
+				}
+			}
+			db.Crash()
+			runtime.GC()
+			t0 = time.Now()
+			if db, err = openFreshDB(dir, false, ""); err != nil {
+				fatal(err)
+			}
+			catch := time.Since(t0).Seconds()
+			logf("vector hnsw n=%d: reopen after crash with %d newer vectors %.1fs", n, extra, catch)
+			for i, x := range res.Runs {
+				if r, ok := x.(vecRun); ok && r.N == n && r.OpenSecs > 0 {
+					r.CatchSecs = round(catch, 2)
+					res.Runs[i] = r
 				}
 			}
 		}

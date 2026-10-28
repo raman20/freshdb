@@ -44,6 +44,8 @@ func TestSimulation(t *testing.T) {
 		tot.Acked += r.Acked
 		tot.Ambiguous += r.Ambiguous
 		tot.Crashes += r.Crashes
+		tot.Closes += r.Closes
+		tot.ANNRestores += r.ANNRestores
 		tot.Takeovers += r.Takeovers
 		tot.Shreds += r.Shreds
 		tot.Rewinds += r.Rewinds
@@ -51,8 +53,8 @@ func TestSimulation(t *testing.T) {
 		tot.GCs += r.GCs
 		tot.Faults += r.Faults
 	}
-	t.Logf("%d seeds OK: %d acked txns, %d ambiguous, %d crashes, %d takeovers, %d shreds, %d rewinds, %d compactions (%d gc), %d injected store faults",
-		n, tot.Acked, tot.Ambiguous, tot.Crashes, tot.Takeovers, tot.Shreds, tot.Rewinds, tot.Compacts, tot.GCs, tot.Faults)
+	t.Logf("%d seeds OK: %d acked txns, %d ambiguous, %d crashes (%d clean closes, %d ann restores), %d takeovers, %d shreds, %d rewinds, %d compactions (%d gc), %d injected store faults",
+		n, tot.Acked, tot.Ambiguous, tot.Crashes, tot.Closes, tot.ANNRestores, tot.Takeovers, tot.Shreds, tot.Rewinds, tot.Compacts, tot.GCs, tot.Faults)
 }
 
 // TestDeterminism: the same seed produces a bit-identical trace.

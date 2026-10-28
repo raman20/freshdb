@@ -129,6 +129,19 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 		return stats, err
 	}
 	// Reload every branch from its base: frees the history held in RAM.
+	// The HNSW graphs are handed over (the vectors are the same), unless
+	// a shred ran since they were built: then rebuilding them clears that.
+	db.annCarry = map[string]lens.ANNSnapshot{}
+	if !db.annTainted {
+		for id, v := range db.views {
+			if b := v.vec.MarshalANN(); b != nil {
+				if s, err := lens.DecodeANN(b); err == nil {
+					db.annCarry[id] = s
+				}
+			}
+		}
+	}
+	defer func() { db.annCarry, db.annTainted = nil, false }()
 	db.logs, db.views, db.writers = map[string]*logState{}, map[string]*view{}, map[string]*writer{}
 	db.bw.Store(nil)
 	for _, name := range sortedMapKeys(db.man.Refs) {
@@ -594,6 +607,13 @@ func (db *DB) deleteGarbage(ctx context.Context, g Garbage) (int, error) {
 			if n, ok := parseNum(k, dir, suf); ok && n < g.Below {
 				keys = append(keys, k)
 			}
+		}
+		if g.Kind == "segs" && g.Below == math.MaxUint64 { // dropped log: its saved graphs too
+			ann, err := db.st.List(ctx, annDir(g.Log))
+			if err != nil {
+				return 0, err
+			}
+			keys = append(keys, ann...)
 		}
 	case "base":
 		keys = append(keys, baseObj(g.Key))

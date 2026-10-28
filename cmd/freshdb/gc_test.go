@@ -47,7 +47,8 @@ func TestGCCommand(t *testing.T) {
 	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &st); err != nil {
 		t.Fatalf("%v: %q", err, out)
 	}
-	if st.SizeBefore != before || st.SizeAfter >= before {
+	// the gc itself appends (and may grow the file ahead) before the shrink
+	if st.SizeBefore < before || st.SizeAfter >= st.SizeBefore || st.SizeAfter >= before {
 		t.Fatalf("shrink did not shrink: %+v (before %d)\n%s", st, before, out)
 	}
 	if got := run("get", "k3"); !strings.Contains(got, big) {
