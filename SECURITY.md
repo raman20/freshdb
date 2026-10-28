@@ -34,16 +34,21 @@ Only the latest `main` and the latest `v0.x` release get fixes.
 These are documented gaps. Reports are still welcome if you find a worse
 consequence than the one described here.
 
-- **The HTTP server has no authentication or TLS.** It binds to `127.0.0.1` by
-  default. Put it behind your own authenticating proxy, or use the embedded
-  library.
+- **The HTTP server has one shared bearer token and no authorization.** It
+  binds to `127.0.0.1` by default and refuses other addresses without a
+  token unless `--insecure-no-auth` is given. Anyone with the token can read
+  and write every branch, shred and compact. Use TLS (`--tls-cert`,
+  `--tls-key`) whenever the token crosses a network.
 - **In dev mode, the key-encryption key (`keys/_kek`) and the certificate
   signing key (`keys/_sign`) are stored in the bucket.** Anyone with read
   access to the bucket can decrypt the values of subjects that have not been
   shredded. Shredded subjects stay unreadable because their DEK is deleted.
   However, storage-level versioning or backups taken before the shred may still
-  hold that DEK. Use `WithKEK` from a KMS, and expire old object versions. A
-  CLI flag and KMS integration are on the [roadmap](ROADMAP.md).
+  hold that DEK. Supply a KEK (`--kek-file`, `FRESHDB_KEK`, or a
+  `KeyProvider` backed by your KMS), and expire old object versions. Open
+  logs a warning in dev-key mode. There is no rekey yet, so a database
+  created in dev-key mode cannot move to a real KEK; see the
+  [roadmap](ROADMAP.md).
 - **Late DEK window.** If a DEK-create PUT is delayed past a shred, an orphan
   DEK can exist until the next open or `verify` sweeps it. freshDB never
   serves plaintext for a shredded subject in that window.

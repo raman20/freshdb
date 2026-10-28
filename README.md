@@ -32,7 +32,7 @@ on object storage or a local disk, with branching, rewind and provable deletion.
 > release is v0.1.0; `main` has unreleased changes (journal storage by
 > default, values read from the log, faster vectors, no OCC give-ups, and a
 > first version of compaction). The correctness core is model-checked and
-> simulation-tested. Still missing: larger-than-RAM lens state, auth/TLS, KMS keys, and testing on
+> simulation-tested. Still missing: larger-than-RAM lens state, built-in KMS clients, and testing on
 > AWS S3 or R2 (only MinIO is tested). The on-storage format may change
 > before 1.0. See [Status and limitations](#status-and-limitations).
 
@@ -81,7 +81,7 @@ agents. That is the same bet SQLite made. Read the
 | **Compaction** | `freshdb compact` / `POST /v1/compact` / `serve --compact-every`: drops overwritten, deleted and shredded data | new on `main`; manual or on a timer, no retention policy yet |
 | **Deletion** | per-subject crypto-shred, signed certificate, `verify` | covers subject-tagged values only |
 | **Storage** | local directory (journal layout on Linux/macOS/BSD), S3-compatible stores, in-memory | only MinIO is tested among object stores |
-| **Interfaces** | Go library, JSON/HTTP server, CLI — one binary | no auth/TLS on the server yet |
+| **Interfaces** | Go library, JSON/HTTP server, CLI — one binary | `serve` has one shared bearer token and optional TLS; no users or scopes |
 
 ## Install
 
@@ -535,9 +535,16 @@ Short version; the full guide is [docs/operations.md](docs/operations.md).
 Please report vulnerabilities privately; see [SECURITY.md](SECURITY.md) and
 [docs/security.md](docs/security.md). Short version:
 
-- The HTTP server has **no auth or TLS**. It binds to `127.0.0.1` by default.
-- In dev mode, the KEK and the signing key are stored in the bucket. The Go
-  API accepts `WithKEK`; the CLI has no `--kek` flag yet.
+- `freshdb serve` binds to `127.0.0.1` by default. `--token` /
+  `FRESHDB_TOKEN` requires `Authorization: Bearer <token>` (one shared
+  token, no users or scopes; `GET /healthz` stays open), and
+  `--tls-cert` / `--tls-key` serve HTTPS. A non-loopback `--listen`
+  without a token is refused unless you pass `--insecure-no-auth`.
+- The KEK comes from `--kek-file`, `FRESHDB_KEK` (64 hex chars or base64),
+  or a Go `KeyProvider` (wrap your KMS). Without one, the database runs in
+  dev-key mode, with the KEK and the signing key stored in the bucket, and
+  `Open` logs a warning. A wrong KEK fails at open (`ErrWrongKEK`). There is
+  no rekey: a database created in dev-key mode stays on the stored key.
 - Only subject-tagged values are encrypted.
 
 ## Status and limitations
@@ -564,7 +571,8 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
 - The HNSW vector index is opt-in, lives only in RAM and is rebuilt from the
   lens on every open; it is not persisted.
 - One writer per database, with no HA and no replicas.
-- The HTTP server has no auth or TLS; the CLI has no `--kek` flag.
+- Server auth is a single shared bearer token; there is no rekey from the
+  dev key to a real KEK, and no built-in KMS client.
 - Only MinIO is tested; AWS S3 and R2 are not.
 - The journal layout is new and has less mileage than the files layout; its
   file grows in 8 MiB chunks with a stall on the commit path.

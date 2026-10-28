@@ -37,22 +37,36 @@ passes because the hash chain covers ciphertext. Limits:
   `main` only) drops it; until then it is unreadable without the DEK.
   Backups taken earlier still hold it.
 
-## Keys (dev mode vs `WithKEK`)
+## Keys (dev mode vs a supplied KEK)
 
 By default (dev mode) the KEK is generated and stored in `keys/_kek`, and
 the certificate signing seed in `keys/_sign`, **in the same storage as the
 data**. Anyone who can read the storage can then decrypt every subject that
-has not been shredded. The Go API accepts `freshdb.WithKEK(key)` so the KEK
-can come from your own secret store. The CLI and server have no `--kek`
-flag yet, and there is no KMS integration (both on the
-[roadmap](../ROADMAP.md)).
+has not been shredded. Open logs a warning in this mode.
+
+Supply the KEK instead with `--kek-file PATH` or `FRESHDB_KEK` (64 hex
+characters or base64 of 32 bytes), or from Go with `WithKEK`,
+`WithKeyProvider(KeyFromEnv(..))`, `KeyFromFile(..)`, or your own
+`KeyProvider` (for example one that calls your KMS). Open stores a small
+check object, `keys/_kekcheck`, sealed under the KEK, so a wrong key fails at
+open with `ErrWrongKEK` even before any subject has a DEK. Limits: there is no
+rekey (a database created in dev mode keeps needing `keys/_kek`), no
+built-in KMS client, and the signing seed `keys/_sign` still lives in the
+bucket ([roadmap](../ROADMAP.md)).
 
 ## Network
 
-`freshdb serve` has **no authentication and no TLS**. It listens on
-`127.0.0.1:7070` by default. Anyone who can reach the port can read, write,
-rewind and shred. Keep it on loopback or put an authenticating TLS proxy in
-front.
+`freshdb serve` listens on `127.0.0.1:7070` by default.
+
+- **Token.** `--token`, `--token-file` or `FRESHDB_TOKEN` makes every request
+  except `GET /healthz` need `Authorization: Bearer <token>` (constant-time
+  compare; 401 otherwise). It is one shared token with full access: anyone
+  holding it can read, write, rewind, compact and shred every branch.
+- **TLS.** `--tls-cert` / `--tls-key` (or `FRESHDB_TLS_CERT` / `_KEY`)
+  serve HTTPS, TLS 1.2 minimum. No mTLS and no reload; restart to rotate.
+- **Open binds.** A non-loopback `--listen` (including `:7070`) without a
+  token is refused unless you pass `--insecure-no-auth`. Over a network,
+  use TLS too, or the token travels in clear text.
 
 ## Integrity
 

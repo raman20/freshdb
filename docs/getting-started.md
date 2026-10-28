@@ -149,8 +149,9 @@ curl -s localhost:7070/v1/kv/k                  # v
 curl -s -X PUT localhost:7070/v1/kv/k2 -d v2    # {"lsn":...}
 ```
 
-The endpoint list is in the [README](../README.md#api-tour). The server has
-**no auth or TLS**; keep it on `127.0.0.1` (the default).
+The endpoint list is in the [README](../README.md#api-tour). The server listens
+on `127.0.0.1` by default. To expose it, add `--token` (or `FRESHDB_TOKEN`)
+and `--tls-cert` / `--tls-key`; see [operations](operations.md).
 
 ## From Go
 

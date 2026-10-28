@@ -196,6 +196,10 @@ OCC transfers, fsync on (commits/s; ops that gave up after 16 retries):
     0.72–0.74 at any ef). Pruning with the diversity heuristic fixed it.
   - Below 4,096 vectors, and when the graph returns fewer than k hits,
     search stays exact. Time travel is always exact.
+- **Server auth (no "before" loss; overhead only).** `BenchmarkAuthGet`,
+  in-process `GET /v1/kv/a` through `server.New`, 3 × 2 s: 1.94–2.08 µs
+  without a token, 2.01–2.05 µs with one (≈ +0.06–0.1 µs, the header parse
+  and constant-time compare). TLS cost was not measured.
 - The journal layout has its own conformance, torn-tail, reopen and kill -9
   crash tests, and migration has a TLC-checked model
   ([spec/FreshMigrate.tla](../spec/FreshMigrate.tla)) plus resume-after-crash

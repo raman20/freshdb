@@ -26,6 +26,8 @@ type Options struct {
 	// KEK is the 32-byte key-encryption key. Nil = dev mode: generated and
 	// stored in the bucket at keys/_kek (NOT safe against bucket backups).
 	KEK []byte
+	// Keys, if set, supplies the KEK at open (overrides KEK).
+	Keys KeyProvider
 	// SnapshotEvery writes a KV/topic checkpoint every N commits per log
 	// (<= 0 = never, the default). Snapshots are written synchronously in the
 	// commit path, copy the whole lens state, and do not yet make open faster
@@ -68,7 +70,9 @@ type DB struct {
 	opts  Options
 	epoch uint64
 	keys  *keyring
-	env   env
+	// devKEK: the KEK lives in the bucket (no key supplied).
+	devKEK bool
+	env    env
 
 	mu      sync.RWMutex // guards manifest, logs, views, writers
 	man     *Manifest
@@ -176,7 +180,22 @@ func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
 	if err := db.acquire(ctx); err != nil {
 		return nil, err
 	}
-	if db.keys, err = openKeyring(ctx, st, o.Rand, o.KEK); err != nil {
+	kek := o.KEK
+	if o.Keys != nil {
+		if kek, err = o.Keys.KEK(ctx); err != nil {
+			return nil, err
+		}
+		if len(kek) != 32 {
+			return nil, fmt.Errorf("freshdb: key provider returned %d bytes, want 32", len(kek))
+		}
+	}
+	db.devKEK = kek == nil
+	if db.devKEK {
+		devKEKWarn.Do(func() {
+			db.logf("freshdb: WARNING: dev-mode key: the key-encryption key is stored in the bucket at keys/_kek; anyone with a copy of the bucket can read unshredded data. Supply a KEK (WithKeyProvider, FRESHDB_KEK, --kek-file) in production.")
+		})
+	}
+	if db.keys, err = openKeyring(ctx, st, o.Rand, kek); err != nil {
 		return nil, err
 	}
 	db.env = env{db.keys}
@@ -187,6 +206,13 @@ func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
 	}
 	return db, nil
 }
+
+// devKEKWarn: Open warns once per process (through Logf) in dev-key mode.
+var devKEKWarn sync.Once
+
+// DevKEK reports whether this database runs on the dev-mode key stored in
+// the bucket (no KEK or key provider was supplied).
+func (db *DB) DevKEK() bool { return db.devKEK }
 
 func (db *DB) logf(f string, a ...any) {
 	if db.opts.Logf != nil {

@@ -34,7 +34,19 @@ in its "Changes since v0.1.0" section.
   one client (exact: 910 QPS); build and reopen take ~23 s. At 1M recall
   is 0.67 / 0.80 / 0.92 (exact: 64 QPS, HNSW ef 128: 676) and build or
   reopen takes ~17 min, because the graph is not persisted.
- for reads, branches and rewinds below a
+- **Server auth and TLS.** `freshdb serve --token T` (or `--token-file`,
+  `FRESHDB_TOKEN`) requires `Authorization: Bearer T` on every request but
+  `GET /healthz` (new, always open); `--tls-cert` / `--tls-key` serve HTTPS
+  (TLS 1.2+). `serve` now **refuses a non-loopback `--listen` without a
+  token** unless `--insecure-no-auth` is given. The CLI sends
+  `--token` / `FRESHDB_TOKEN` with `--addr`. Go: `server.New(db,
+  server.Options{Token})`. A token adds ~0.1 µs per in-process request.
+- **Key provider.** `KeyProvider`, `WithKeyProvider`, `KeyFromEnv`,
+  `KeyFromFile`, `ParseKey`; CLI `--kek-file` and `FRESHDB_KEK` (hex or
+  base64). Open writes `keys/_kekcheck` and returns `ErrWrongKEK` for a
+  wrong key, even on a database with no DEKs. Dev-key mode (no key
+  supplied) is unchanged but now logs a warning once per process. No rekey.
+- `ErrCompacted` (HTTP 410) for reads, branches and rewinds below a
   compacted log's base. Time travel below the base is gone by design.
 - Manifest format 2 (written after the first compaction; v0.1.0 binaries
   cannot open a compacted database). KV snapshots use `KV3` only when a

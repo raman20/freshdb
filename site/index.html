@@ -183,13 +183,13 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
     <div class="split">
       <ul class="lim">
         <li>Keys, KV history, topics, documents and vectors live in RAM. Old versions are only dropped by <code>freshdb compact</code>, which is new, has no benchmarks yet, keeps every topic message, and removes time travel below each branch head.</li>
-        <li>Vector search is exact brute force; there is no ANN index.</li>
+        <li>The opt-in HNSW vector index is rebuilt on every open (about 17 min at 1M vectors).</li>
         <li>One writer per database, with no HA and no read replicas yet.</li>
         <li>Only MinIO is tested. AWS S3 and R2 support the needed conditional writes but are untested.</li>
         <li>The journal layout is new; its 8 MiB growth step stalls the commit path briefly.</li>
       </ul>
       <ul class="lim">
-        <li>The HTTP server has no auth or TLS (it binds to 127.0.0.1).</li>
+        <li>The HTTP server has one shared bearer token and optional TLS; it binds to 127.0.0.1 by default.</li>
         <li>In dev mode the KEK lives in the bucket. Backups taken before a shred can still decrypt that subject.</li>
         <li>Keys and values without a subject are plaintext and are not covered by shred.</li>
         <li>The on-storage format may change before 1.0.</li>

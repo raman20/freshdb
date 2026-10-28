@@ -84,6 +84,10 @@ func openKeyring(ctx context.Context, st store.Store, rnd io.Reader, kek []byte)
 		return nil, err
 	}
 	k.sign = ed25519.NewKeyFromSeed(seed)
+	hasCheck, err := k.verifyKEKCheck(ctx)
+	if err != nil {
+		return nil, err
+	}
 	sh, err := st.List(ctx, "keys/shredded/")
 	if err != nil {
 		return nil, err
@@ -115,9 +119,14 @@ func openKeyring(ctx context.Context, st store.Store, rnd io.Reader, kek []byte)
 		}
 		a, err := k.unwrap(h, b)
 		if err != nil {
-			return nil, fmt.Errorf("freshdb: cannot unwrap DEK %s: %w", h, err)
+			return nil, fmt.Errorf("%w (cannot unwrap DEK %s: %v)", ErrWrongKEK, h, err)
 		}
 		k.deks[h] = a
+	}
+	if !hasCheck { // new database, or one created before the check existed
+		if err := k.writeKEKCheck(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return k, nil
 }

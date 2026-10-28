@@ -3,8 +3,8 @@
 **Is freshDB production-ready?**
 No. It is a pre-1.0 prototype (latest release v0.1.0; `main` has unreleased
 improvements). Its correctness core is model-checked and
-simulation-tested, but it has no production users, only a first version of compaction, no
-auth/TLS, and most lens state lives in RAM. See the README's
+simulation-tested, but it has no production users, only a first version of compaction, a single
+shared-token auth, and most lens state lives in RAM. See the README's
 [status section](../README.md#status-and-limitations).
 
 **Why not just Postgres?**

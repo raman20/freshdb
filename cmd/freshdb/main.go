@@ -14,11 +14,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -40,6 +42,9 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
 
   freshdb serve [--listen :7070]              run the HTTP API
         [--compact-every 1h] [--compact-grace 5m]   optional background compaction
+        [--token T | --token-file F]          require "Authorization: Bearer T" (or FRESHDB_TOKEN)
+        [--tls-cert F --tls-key F]            serve HTTPS (or FRESHDB_TLS_CERT/_KEY)
+        [--insecure-no-auth]                  allow a non-loopback --listen without a token
   freshdb put KEY VALUE [--subject S]         write a key
   freshdb get KEY [--at LSN]                  read a key (time travel with --at)
   freshdb del KEY
@@ -62,7 +67,10 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
   freshdb version
 
 Every command takes --branch B (default main). Use --addr http://host:7070
-(or FRESHDB_ADDR) to talk to a running server instead of opening the DB.
+(or FRESHDB_ADDR) to talk to a running server instead of opening the DB;
+--token / FRESHDB_TOKEN is sent as the bearer token.
+Key-encryption key: --kek-file F or FRESHDB_KEK (64 hex chars or base64 of
+32 bytes). Without one the DB runs in dev-key mode (key stored in the bucket).
 `
 
 type cli struct {
@@ -75,7 +83,7 @@ type cli struct {
 func parse(argv []string) ([]string, map[string]string) {
 	var args []string
 	flags := map[string]string{}
-	bools := map[string]bool{"follow": true, "help": true, "h": true, "exact": true}
+	bools := map[string]bool{"follow": true, "help": true, "h": true, "exact": true, "insecure-no-auth": true}
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
 		if strings.HasPrefix(a, "-") && len(a) > 1 && !isNumberish(a) {
@@ -141,11 +149,14 @@ func main() {
 		c.do = func(r *http.Request) (*http.Response, error) {
 			u, _ := url.Parse(base + r.URL.String())
 			r.URL = u
+			if tok := secret(flags, "token"); tok != "" {
+				r.Header.Set("Authorization", "Bearer "+tok)
+			}
 			return http.DefaultClient.Do(r)
 		}
 		c.close = func() {}
 	} else {
-		db, err := freshdb.Open(context.Background(), dbURL, freshdb.WithLogf(func(string, ...any) {}))
+		db, err := freshdb.Open(context.Background(), dbURL, append(keyOpts(flags), freshdb.WithLogf(func(string, ...any) {}))...)
 		if err != nil {
 			log.Fatalf("freshdb: open %s: %v", dbURL, err)
 		}
@@ -199,11 +210,29 @@ func serve(dbURL string, flags map[string]string) {
 	if listen == "" {
 		listen = env("FRESHDB_LISTEN", "127.0.0.1:7070")
 	}
-	db, err := freshdb.Open(context.Background(), dbURL)
+	token := secret(flags, "token")
+	cert, key := flags["tls-cert"], flags["tls-key"]
+	if cert == "" {
+		cert = os.Getenv("FRESHDB_TLS_CERT")
+	}
+	if key == "" {
+		key = os.Getenv("FRESHDB_TLS_KEY")
+	}
+	if (cert == "") != (key == "") {
+		log.Fatal("freshdb: --tls-cert and --tls-key go together")
+	}
+	if token == "" && !isLoopback(listen) {
+		if flags["insecure-no-auth"] == "" {
+			log.Fatalf("freshdb: refusing to listen on %s (not loopback) without auth: set --token / FRESHDB_TOKEN, or pass --insecure-no-auth", listen)
+		}
+		log.Printf("freshdb: WARNING: --insecure-no-auth: anyone who can reach %s can read and write every branch", listen)
+	}
+	db, err := freshdb.Open(context.Background(), dbURL, keyOpts(flags)...)
 	if err != nil {
 		log.Fatalf("freshdb: open %s: %v", dbURL, err)
 	}
-	srv := &http.Server{Addr: listen, Handler: server.Handler(db), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Addr: listen, Handler: server.New(db, server.Options{Token: token}), ReadHeaderTimeout: 10 * time.Second,
+		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}}
 	go func() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
@@ -215,11 +244,62 @@ func serve(dbURL string, flags map[string]string) {
 	if every := flags["compact-every"]; every != "" {
 		startCompactor(db, every, flags["compact-grace"])
 	}
-	log.Printf("freshdb: serving %s on http://%s (epoch %d)", dbURL, listen, db.Epoch())
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	scheme := "http"
+	if cert != "" {
+		scheme = "https"
+	}
+	log.Printf("freshdb: serving %s on %s://%s (epoch %d, auth %v)", dbURL, scheme, listen, db.Epoch(), token != "")
+	if cert != "" {
+		err = srv.ListenAndServeTLS(cert, key)
+	} else {
+		err = srv.ListenAndServe()
+	}
+	if err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
 	db.Close()
+}
+
+// secret returns --NAME, else the first line of --NAME-file, else
+// $FRESHDB_NAME.
+func secret(flags map[string]string, name string) string {
+	if v := flags[name]; v != "" {
+		return v
+	}
+	if f := flags[name+"-file"]; f != "" {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			log.Fatalf("freshdb: --%s-file: %v", name, err)
+		}
+		return strings.TrimSpace(string(b))
+	}
+	return os.Getenv("FRESHDB_" + strings.ToUpper(name))
+}
+
+// keyOpts picks the KEK source: --kek-file, else $FRESHDB_KEK, else none
+// (dev mode).
+func keyOpts(flags map[string]string) []freshdb.Option {
+	if f := flags["kek-file"]; f != "" {
+		return []freshdb.Option{freshdb.WithKeyProvider(freshdb.KeyFromFile(f))}
+	}
+	if os.Getenv("FRESHDB_KEK") != "" {
+		return []freshdb.Option{freshdb.WithKeyProvider(freshdb.KeyFromEnv("FRESHDB_KEK"))}
+	}
+	return nil
+}
+
+// isLoopback reports whether a listen address binds only loopback. An
+// empty host (":7070") binds every interface.
+func isLoopback(listen string) bool {
+	host, _, err := net.SplitHostPort(listen)
+	if err != nil {
+		host = listen
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
 
 // startCompactor compacts every interval in the background.

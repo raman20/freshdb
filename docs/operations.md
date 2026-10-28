@@ -119,8 +119,17 @@ export FRESHDB_ADDR=http://127.0.0.1:7070            # point CLI calls at it
   calls against a URL a server is using; use `--addr` instead.
 - Every embedded CLI call is an open (a manifest and a fence segment), so
   prefer a long-running server.
-- The server has **no auth or TLS** and binds to `127.0.0.1` by default.
-  If you expose it, put an authenticating TLS proxy in front.
+- The server binds to `127.0.0.1` by default. To expose it, set a token
+  (`--token`, `--token-file` or `FRESHDB_TOKEN`) and TLS (`--tls-cert`,
+  `--tls-key`); `serve` refuses a non-loopback `--listen` without a token
+  unless you pass `--insecure-no-auth`. Clients send the token with
+  `--addr ... --token` or `FRESHDB_TOKEN`. `GET /healthz` needs no token.
+  Certificates are read at start; restart to rotate them.
+- Supply the KEK with `--kek-file` or `FRESHDB_KEK` (64 hex chars or
+  base64 of 32 bytes) on every process that opens the database, including
+  embedded CLI calls. A wrong key fails at open with "wrong key-encryption
+  key". A database first opened without a key stays in dev-key mode
+  (no rekey yet).
 - To scale, shard by database (one per tenant or agent).
 
 ## Backups and restore

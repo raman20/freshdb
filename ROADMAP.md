@@ -15,7 +15,7 @@ bug reports). Everything must respect the [design principles](docs/design-princi
 - [x] Journal layout (one append-only file per local DB) as the default on
   Unix, with `freshdb migrate` for v0.1.0 directories (unreleased)
 - [ ] Test on AWS S3 and Cloudflare R2 (only MinIO is tested today)
-- [ ] `--kek` / `FRESHDB_KEK` for the CLI and server (the Go API has `WithKEK`)
+- [x] `--kek-file` / `FRESHDB_KEK` and a `KeyProvider` interface (unreleased)
 - [ ] Prebuilt binaries for every release, and checksums
 
 ## Next — v0.2–v0.4: make it last
@@ -32,9 +32,11 @@ bug reports). Everything must respect the [design principles](docs/design-princi
   database size at memory.
 - **Persisted ANN index.** The opt-in HNSW index (unreleased `main`) is rebuilt
   on every open; persisting it with snapshots would make open fast.
-- **KMS key support.** KEK held in AWS KMS / GCP KMS / Vault, never in the
-  bucket, plus clear guidance on object versioning for `keys/`.
-- **Auth and TLS** for `freshdb serve` (token auth first).
+- **KMS clients and rekey.** Ready-made `KeyProvider`s for AWS KMS / GCP
+  KMS / Vault, a crash-safe rekey (including dev key → real KEK), and
+  clear guidance on object versioning for `keys/`.
+- **Auth beyond one token.** Per-client tokens or mTLS, scopes (read-only,
+  per-branch), and certificate reload. Token auth and TLS shipped first.
 - **Read replicas without Raft.** Processes that tail the log from object
   storage and serve reads at a known LSN. They need no consensus, because the
   log on S3 is already the source of truth.
@@ -56,11 +58,9 @@ tests. Comment on (or open) an issue before starting, so work is not duplicated.
 
 1. **`freshdb version` in the HTTP API.** Add `GET /v1/version`, with a test in
    `server/server_test.go`.
-2. **`--kek` flag / `FRESHDB_KEK` env** for CLI and server, passed to
-   `WithKEK`. Hex or base64, with clear errors.
+2. **`--token-file` reload on SIGHUP** for `freshdb serve`.
 3. **`freshdb scan --keys-only`** and `--limit`.
-4. **Health endpoint** `GET /healthz` for `freshdb serve` (no DB call). Useful
-   behind load balancers.
+4. **Readiness endpoint** `GET /readyz` that also checks the store.
 5. **`freshdb log --follow`** that tails new entries, like `sub --follow`.
 6. **Better CLI errors for bad URLs.** Example: `s3://` without a bucket
    should name the problem and show an example URL.
