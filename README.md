@@ -420,7 +420,7 @@ Reproduce:
 go test -race ./...                                   # everything (500 sim seeds)
 go test ./sim -run TestSimulation -seeds=10000        # more seeds; -seed=N replays one
 go test -run '^$' -fuzz '^FuzzDecodePayload$' -fuzztime 60s ./format
-JAVA=java TLA_JAR=/path/to/tla2tools.jar spec/run_tlc.sh
+spec/get_tla.sh && TLA_JAR=~/tla/tla2tools.jar spec/run_tlc.sh   # pinned TLA+ v1.7.4
 ```
 
 What the evidence does **not** show: the specs are bounded and matched to the

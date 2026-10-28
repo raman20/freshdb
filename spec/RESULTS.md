@@ -1,6 +1,15 @@
 # TLA+ model-checking results
 
 TLC 2.19 (tla2tools v1.8.0), Java 21, 8 workers, on the dev box (2026-10-27).
+
+**Jar pin (2026-10-29).** `v1.8.0` turned out to be a prerelease tag whose
+`tla2tools.jar` is rebuilt from master every night (the asset was updated
+2026-10-28 01:50 UTC), so CI's pinned checksum only passed because the jar
+was cached, and the box had a later build with a different checksum. Both
+were "v1.8.0" nightlies; neither was a fixed release. CI and local runs now
+use `spec/get_tla.sh`, which downloads the stable **v1.7.4** release
+(TLC 2.19 of 08 August 2024, sha256 `936a2620…0e88`) and verifies it. All
+seven specs pass with it (FreshLog: same 10,415,103 / 2,475,220 states).
 Run with `spec/run_tlc.sh` (CI runs it on every push). Every run below explored the **complete** bounded
 state space (0 states left on queue). Bounds are in each `.cfg`.
 

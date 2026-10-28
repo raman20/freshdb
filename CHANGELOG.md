@@ -64,6 +64,10 @@ in its "Changes since v0.1.0" section.
   version points into a chunk object.
 
 ### Changed
+- **TLA+ tools pinned to the stable v1.7.4 release.** `v1.8.0` is a
+  prerelease whose jar is rebuilt nightly, so its checksum drifted between
+  CI (cached) and fresh downloads. `spec/get_tla.sh` downloads and verifies
+  the pinned jar for CI and local runs.
 - **Memory (item 7).** The KV lens stores each version in 40 bytes
   (was 72) and a key's first version in the map slot itself; the log
   segment index keeps one chain hash (the tip's) instead of one per

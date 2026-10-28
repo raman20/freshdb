@@ -178,17 +178,11 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: cache tla2tools.jar
-        id: cache
         uses: actions/cache@v4
         with:
           path: ~/tla/tla2tools.jar
-          key: tla2tools-v1.8.0
-      - name: download tla2tools.jar v1.8.0
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p ~/tla
-          curl -fsSL -o ~/tla/tla2tools.jar https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar
-      - name: verify jar checksum
-        run: echo "78f7e2c6bf9a8b65eda665a23e94431255587e0b43a834a4e2af1723562d9b4a  $HOME/tla/tla2tools.jar" | sha256sum -c
+          key: tla2tools-v1.7.4-936a2620
+      - name: download and verify tla2tools.jar (pinned v1.7.4)
+        run: spec/get_tla.sh $HOME/tla/tla2tools.jar
       - name: model-check all specs
         run: TLC_XMX=5g TLA_JAR=$HOME/tla/tla2tools.jar spec/run_tlc.sh
