@@ -1,6 +1,8 @@
 # Architecture
 
-> Status: describes v0.1.0 (prototype). See [formats.md](formats.md) for byte layouts.
+> Status: describes unreleased `main` (pre-1.0 prototype); v0.1.0 differences
+> are noted. See [formats.md](formats.md) for byte layouts and
+> [operations.md](operations.md) for running it.
 
 ```mermaid
 flowchart LR
@@ -14,7 +16,7 @@ flowchart LR
     W -->|"apply after ack"| Lenses
     TX -->|reads| Lenses
   end
-  W -->|"create-only PUT<br/>one object per commit"| S3[("object storage<br/>S3 / MinIO / R2 / local dir")]
+  W -->|"create-only PUT<br/>one object per commit"| S3[("storage<br/>S3 / MinIO / R2 · local journal or dir")]
   S3 --- M["manifest/…mf<br/>epoch, branches, reflog"]
   S3 --- L["log/&lt;log&gt;/&lt;seq&gt;.seg<br/>CRC32C frames, hash chain"]
   S3 --- K["keys/<br/>wrapped DEKs, shred markers, certs"]
@@ -23,11 +25,22 @@ flowchart LR
 ## The pieces
 
 **Store** (`store/`). The only interface to the outside world. Besides
-get/list/delete, it has one key primitive: `PutIfAbsent` (create-only). On S3
-that is `PUT` with `If-None-Match: *`; on a local directory it is a temp file
-plus `renameat2(RENAME_NOREPLACE)` (or `link`), with fsync of the file and the
-directory. `mem://` exists for tests, and `store.Faulty` wraps any store to
-inject failed, lost, delayed, duplicated and torn writes for the simulator.
+get/list/delete and ranged reads, it has one key primitive: `PutIfAbsent`
+(create-only). Implementations:
+- **S3** (`s3://`): `PUT` with `If-None-Match: *`; ranged `GET` for reads.
+- **Journal** (`journal://`, and the default for new local directories on
+  Unix): every object is a record in one preallocated append-only file,
+  `journal.fj`, indexed in memory. A create-only put is one `write` plus one
+  `fdatasync`. An exclusive `flock` guards writers.
+- **Files** (`fs://`, the v0.1.0 layout and the Windows default): one file per
+  object, written as a temp file plus `renameat2(RENAME_NOREPLACE)` (or
+  `link`), with fsync of the file and the directory.
+- `mem://` for tests, and `store.Faulty`, which wraps any store to inject
+  failed, lost, delayed, duplicated and torn writes for the simulator.
+
+`store.OpenLocal` picks the local layout: an existing directory keeps its
+own, and `freshdb migrate` converts offline (model-checked in
+`spec/FreshMigrate.tla`; see [design 01](design/01-journal-default.md)).
 
 **Manifest** (`manifest.go`). A small JSON document holding the writer epoch,
 the logs (each with an optional parent and fork LSN), branch refs → log ids,
@@ -54,7 +67,12 @@ write, or sees the newer epoch, and stops with `ErrFenced`.
 
 **Writer** (`writer.go`). There is one writer per log. Transactions run
 optimistically against a snapshot, and at commit the writer validates their
-read sets (OCC), which makes them serializable. It then assigns LSNs and
+read sets (OCC), which makes them serializable. Hot keys cannot starve:
+transactions that already lost a conflict are validated first in the next
+batch and back off with jitter, and after 3 lost conflicts the body runs on
+the writer itself at the applied head, so it commits on that attempt.
+Several such escalated transactions can share a batch; one that conflicts
+with an earlier write in the batch moves to the next. It then assigns LSNs and
 encrypts subject-tagged values. All transactions that arrive within a batch
 become **one segment object** (group commit). A transaction is acknowledged
 only after that object is durable. If a PUT's outcome is unknown (for example
@@ -64,8 +82,16 @@ returns `ErrUnknownOutcome` and never acks.
 **Lenses** (`lens/`). KV with full version history (MVCC), topics with
 consumer-group cursors, documents with secondary indexes, and vectors with
 cosine search. Each is a deterministic fold over log entries; see
-[lens-authoring.md](lens-authoring.md). Lens state lives in memory. KV and
-topic lenses can be checkpointed to `snap/`, but checkpoints are an
+[lens-authoring.md](lens-authoring.md). Lens state lives in memory, with one
+exception: the KV lens keeps values larger than `InlineMax` (64 B) as a
+position (segment, offset, length, CRC-32C) in their immutable segment, and
+reads them back on demand through the **value cache** (`vcache.go`: 64
+shards of byte rings in one off-heap `mmap` arena, default 256 MiB,
+`WithValueCacheBytes`). Every value read from storage is CRC-checked before
+it is returned or cached, and values are copied on the way in and out.
+Vectors live in one contiguous `float32` slab per collection; search is an
+exact, parallel scan with a bounded top-k heap. KV and topic lenses can be
+checkpointed to `snap/` (off by default), but checkpoints are an
 optimisation, never the source of truth.
 
 **Branches** (`branch.go`). A branch is a log with a parent and a fork LSN, so

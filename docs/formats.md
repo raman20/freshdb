@@ -1,4 +1,7 @@
-# On-storage formats (v0.1.0)
+# On-storage formats
+
+Describes unreleased `main`. v0.1.0 used the same segment, payload and
+manifest formats and only the files layout for local directories.
 
 > **Pre-1.0: these formats may change between minor versions.** Readers refuse
 > unknown versions instead of guessing. A version bump will always come with
@@ -26,7 +29,7 @@ payload's bytes canonical, which the hash chain relies on.
 `subjectHash` is a truncated SHA-256 of the subject id (`SubjectHash` in
 `keyring.go`). Raw subject ids never reach storage.
 
-## Local directory layouts (unreleased)
+## Local directory layouts
 
 A local directory stores the objects above in one of two layouts. The
 objects and their bytes are the same in both.
@@ -56,9 +59,20 @@ objects and their bytes are the same in both.
 - any other content (except an empty `.tmp/`) makes it files;
 - an empty or missing directory gets the platform default.
 
-`freshdb migrate` converts between the layouts offline, with a backup. It
-is crash-safe; see [design 01](design/01-journal-default.md) and
-`spec/FreshMigrate.tla`.
+`freshdb migrate --db DIR [--to journal|files]` converts between the
+layouts offline, with a backup. It is crash-safe; see
+[operations.md](operations.md#migrating-a-v010-directory),
+[design 01](design/01-journal-default.md) and
+[`spec/FreshMigrate.tla`](../spec/FreshMigrate.tla).
+
+## Value positions (in memory, not on storage)
+
+KV values larger than `InlineMax` (default 64 B) are not kept in RAM. The
+KV lens stores a position into the immutable segment that holds them
+(segment, offset within the segment, length, CRC-32C of the stored bytes)
+and reads them back with a ranged read. The position is derived from the
+log, so this changes no on-storage bytes; it is why KV snapshots record the
+inline limit (below).
 
 ## Segment (`.seg`)
 
@@ -138,3 +152,8 @@ u32  CRC32C(all of the above)
 
 A snapshot that is missing or corrupt is ignored, and the lens is rebuilt from
 the log.
+
+The KV part starts with the tag `KV2` and records the inline limit it was
+written with. A `KV1` snapshot (v0.1.0) or one written with a different
+limit is ignored the same way, and the log is replayed. Snapshots are off by
+default (`WithSnapshotEvery`).

@@ -5,7 +5,7 @@ consumer groups, documents with secondary indexes, and vectors. This guide
 explains the contract every lens must satisfy. Read it before you change one
 or propose a new one.
 
-> v0.1.0 limitation: lenses are compiled in. There is no plugin API yet, so
+> Limitation (v0.1.0 and `main`): lenses are compiled in. There is no plugin API yet, so
 > adding a lens means changing `lens/` and `view.go` in this repo.
 > A public lens API is on the [roadmap](../ROADMAP.md).
 
@@ -47,3 +47,12 @@ type Lens interface {
 - [ ] A reference model (the simplest correct implementation) and a refinement test against it
 - [ ] Wire into `view.go` (`lenses()`, `buildView`) and expose it on `Tx`
 - [ ] Run `go test ./lens ./sim` and the engine property test `TestPropEngineLensEqualsFoldAcrossRestart`
+
+## Values that live in the log
+
+A lens may keep a *position* instead of a value, as the KV lens does for
+values over `InlineMax`: the position (segment, offset, length, CRC) is a
+pure function of the log, so it keeps the fold deterministic. Reading the
+bytes back is the engine's job, not the lens's (`Apply` must not do I/O).
+If the snapshot encoding depends on such a setting, record it in the
+snapshot and reject mismatches, as `KV2` does.
