@@ -397,7 +397,13 @@ func (j *Journal) lookup(key string, refresh bool) (jent, bool, error) {
 // live re-reads a record's header and key and reports whether it is still
 // a valid put of key (a concurrent delete marks it dead before erasing).
 func (j *Journal) live(e jent, key string) bool {
-	b := make([]byte, jrnHdr+e.klen)
+	var buf [jrnHdr + 128]byte // most keys fit: no allocation per read
+	var b []byte
+	if n := jrnHdr + e.klen; n <= len(buf) {
+		b = buf[:n]
+	} else {
+		b = make([]byte, n)
+	}
 	if n, _ := j.f.ReadAt(b, e.off); n < len(b) {
 		return false
 	}

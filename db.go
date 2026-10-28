@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/raman20/freshdb/lens"
@@ -38,8 +39,10 @@ type Options struct {
 	// ones are kept as (segment, offset, length) positions and read from
 	// the log on demand. 0 = default (64); negative = keep none inline.
 	InlineMax int
-	// ValueCacheBytes bounds the cache of values read from segments.
-	// 0 = default (64 MiB); negative = no cache.
+	// ValueCacheBytes bounds the cache of values read from segments. The
+	// cache lives off the Go heap (anonymous mmap where available), so RSS
+	// grows by about this much once it fills, not by a GC multiple.
+	// 0 = default (256 MiB); negative = no cache.
 	ValueCacheBytes int
 }
 
@@ -55,7 +58,7 @@ func WithValueCacheBytes(n int) Option       { return func(o *Options) { o.Value
 
 const (
 	defaultInlineMax  = 64
-	defaultValueCache = 64 << 20
+	defaultValueCache = 256 << 20
 )
 
 // DB is an open database. One process holds the write lease (epoch); a newer
@@ -67,15 +70,19 @@ type DB struct {
 	keys  *keyring
 	env   env
 
-	mu      sync.Mutex // guards manifest, logs, views, writers
+	mu      sync.RWMutex // guards manifest, logs, views, writers
 	man     *Manifest
 	logs    map[string]*logState
 	views   map[string]*view   // live views of writable logs
 	writers map[string]*writer // by log id
 	vcache  *valueCache
-	failed  error
-	closed  bool
-	owned   io.Closer // store opened by Open from a URL; closed by Close
+	// bw caches branch name -> writer for the read path; nil = rebuild.
+	// Reset (under db.mu held exclusively) whenever refs, writers or
+	// closed change, so readers never need db.mu on a hit.
+	bw     atomic.Pointer[map[string]*writer]
+	failed error
+	closed bool
+	owned  io.Closer // store opened by Open from a URL; closed by Close
 }
 
 // Open opens (or creates) the database at url: a directory path or
@@ -180,6 +187,7 @@ func (db *DB) acquire(ctx context.Context) error {
 			return err
 		}
 		db.man, db.epoch = next, next.Epoch
+		db.bw.Store(nil)
 		return nil
 	}
 	return errors.New("freshdb: could not acquire write lease (manifest contention)")
@@ -207,6 +215,7 @@ func (db *DB) commitManifest(ctx context.Context, change func(m *Manifest) error
 		return err
 	}
 	db.man = next
+	db.bw.Store(nil)
 	return nil
 }
 
@@ -262,15 +271,30 @@ func (db *DB) openWritable(ctx context.Context, id string) (*writer, error) {
 	db.views[id] = v
 	w := newWriter(db, l, v)
 	db.writers[id] = w
+	db.bw.Store(nil)
 	return w, nil
 }
 
 // branchWriter returns the writer of a named branch.
 func (db *DB) branchWriter(name string) (*writer, error) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
+	if m := db.bw.Load(); m != nil {
+		if w, ok := (*m)[name]; ok {
+			return w, nil
+		}
+	}
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 	if db.closed {
 		return nil, ErrClosed
+	}
+	if db.bw.Load() == nil {
+		m := make(map[string]*writer, len(db.man.Refs))
+		for ref, id := range db.man.Refs {
+			if w, ok := db.writers[id]; ok {
+				m[ref] = w
+			}
+		}
+		db.bw.Store(&m) // still under db.mu: no reset can interleave
 	}
 	id, ok := db.man.Refs[name]
 	if !ok {
@@ -291,11 +315,13 @@ func (db *DB) Close() error {
 		return nil
 	}
 	db.closed = true
+	db.bw.Store(nil)
 	ws := db.writers
 	db.mu.Unlock()
 	for _, id := range sortedMapKeys(ws) {
 		ws[id].stop()
 	}
+	db.vcache.close()
 	if db.owned != nil {
 		return db.owned.Close()
 	}
@@ -307,12 +333,14 @@ func (db *DB) Close() error {
 func (db *DB) Crash() {
 	db.mu.Lock()
 	db.closed = true
+	db.bw.Store(nil)
 	db.failed = ErrClosed
 	ws := db.writers
 	db.mu.Unlock()
 	for _, id := range sortedMapKeys(ws) {
 		ws[id].crash()
 	}
+	db.vcache.close()
 }
 
 // Epoch returns this writer's fencing epoch.

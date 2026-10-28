@@ -141,3 +141,95 @@ func TestValueChecksumDetectsCorruption(t *testing.T) {
 		t.Fatalf("corrupted value: err=%v", err)
 	}
 }
+
+// Values returned by Get and Scan belong to the caller: scribbling on them
+// must not change what later reads see (the value cache and inline lens
+// values are shared between reads).
+func TestReturnedValuesAreCallerOwned(t *testing.T) {
+	db := mustOpen(t, store.NewMem())
+	big := bigVal("own", 1)
+	if err := db.Update(ctx, func(tx *Tx) error {
+		if err := tx.Put("big", big); err != nil {
+			return err
+		}
+		return tx.Put("small", []byte("tiny"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"big", "small"} {
+		want, err := db.Get(ctx, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = append([]byte(nil), want...)
+		for round := 0; round < 3; round++ {
+			got, err := db.Get(ctx, k)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("%s round %d: read %q after a caller modified an earlier result", k, round, got[:8])
+			}
+			for i := range got {
+				got[i] = 'X'
+			}
+		}
+		if err := db.View(ctx, func(tx *Tx) error {
+			kvs, err := tx.Scan(k)
+			if err != nil {
+				return err
+			}
+			for i := range kvs[0].Value {
+				kvs[0].Value[i] = 'Y'
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := db.Get(ctx, k); !bytes.Equal(got, want) {
+			t.Fatalf("%s: read %q after a caller modified a Scan result", k, got[:8])
+		}
+	}
+}
+
+// Buffers passed to Put/Publish may be reused by the caller once the call
+// returns, and topic messages read back belong to the caller too.
+func TestWrittenBuffersAreNotRetained(t *testing.T) {
+	db := mustOpen(t, store.NewMem())
+	for _, n := range []int{8, 4000} {
+		buf := bytes.Repeat([]byte("a"), n)
+		key := fmt.Sprint("k", n)
+		if err := db.Update(ctx, func(tx *Tx) error {
+			if err := tx.Put(key, buf); err != nil {
+				return err
+			}
+			return tx.Topic("t").Publish(buf)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		for i := range buf {
+			buf[i] = 'Z'
+		}
+		want := bytes.Repeat([]byte("a"), n)
+		if got, err := db.Get(ctx, key); err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("Get %s after the caller reused its Put buffer: %q %v", key, got[:4], err)
+		}
+		for round := 0; round < 2; round++ {
+			var msgs []Message
+			if err := db.View(ctx, func(tx *Tx) error {
+				var err error
+				msgs, err = tx.Topic("t").Read(0, 10)
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+			last := msgs[len(msgs)-1].Value
+			if !bytes.Equal(last, want) {
+				t.Fatalf("topic read (n=%d round %d): %q", n, round, last[:4])
+			}
+			for i := range last {
+				last[i] = 'Q'
+			}
+		}
+	}
+}

@@ -48,7 +48,11 @@ type Tx struct {
 	reads    map[rkey]bool
 	prefixes []rkey
 	local    map[rkey]*localVal
-	lazy     func() (*view, error) // ephemeral exact view for time travel
+	// Ephemeral exact view for time travel, built on first use by
+	// lensView (read-only branch views only; nil lazyLog = never).
+	lazyCtx context.Context
+	lazyLog *logState
+	eph     *view
 }
 
 type localVal struct {
@@ -69,6 +73,9 @@ func (tx *Tx) write(op format.Op, opts []WriteOpt) error {
 	if op.Subject != "" && tx.db.keys.isShredded(SubjectHash(op.Subject)) {
 		return ErrShredded
 	}
+	// The caller may reuse its buffer once the call returns; small values
+	// are kept inline in the lens, so never retain the caller's slice.
+	op.Value = bytes.Clone(op.Value)
 	tx.ops = append(tx.ops, op)
 	if op.Kind == format.OpPut || op.Kind == format.OpDel {
 		tx.local[rkey{op.Space, op.Key}] = &localVal{val: op.Value, del: op.Kind == format.OpDel}
@@ -101,7 +108,7 @@ func (tx *Tx) get(space, key string) ([]byte, error) {
 // the log when the lens keeps only their position, and decrypts subject
 // data. Shredded data is indistinguishable from absent (ErrNotFound).
 func (tx *Tx) open(ver lens.Version, space, key string) ([]byte, error) {
-	val := ver.Val
+	val, owned := ver.Val, false // ver.Val is shared lens state
 	var logID string
 	if ver.Ref() || ver.Subject != "" {
 		x, s, ok := tx.v.log.locate(ver.LSN)
@@ -114,10 +121,14 @@ func (tx *Tx) open(ver lens.Version, space, key string) ([]byte, error) {
 			if val, err = tx.db.readValue(x, s.seq, ver); err != nil {
 				return nil, err
 			}
+			owned = true // readValue returns a private copy
 		}
 	}
 	if ver.Subject == "" {
-		return val, nil
+		if owned {
+			return val, nil
+		}
+		return bytes.Clone(val), nil // the caller owns what it gets back
 	}
 	if p, ok := tx.db.keys.open(ver.Subject, val, aad(logID, ver.LSN, int(ver.Op), space, key)); ok {
 		return p, nil
@@ -308,10 +319,20 @@ func (tx *Tx) lensView() (*view, error) {
 	tx.v.mu.RLock()
 	h := tx.v.head
 	tx.v.mu.RUnlock()
-	if tx.lazy == nil || h == tx.at || tx.writable {
+	if tx.lazyLog == nil || h == tx.at || tx.writable {
 		return tx.v, nil
 	}
-	return tx.lazy()
+	if tx.eph == nil {
+		tx.db.mu.Lock()
+		idx := append([]IndexDecl{}, tx.db.man.Indexes...)
+		tx.db.mu.Unlock()
+		v, err := buildView(tx.lazyCtx, tx.lazyLog, tx.at, tx.db.env, idx, nil, tx.db.opts.InlineMax)
+		if err != nil {
+			return nil, err
+		}
+		tx.eph = v
+	}
+	return tx.eph, nil
 }
 
 // ---- Topics and consumer groups ----
@@ -349,7 +370,7 @@ func (t TopicTx) Read(from uint64, max int) ([]Message, error) {
 		msg := Message{Topic: t.topic, Offset: m.Offset, LSN: m.LSN, TS: m.TS, Redacted: m.Redacted}
 		if !m.Redacted {
 			if m.Subject == "" {
-				msg.Value = m.Val
+				msg.Value = bytes.Clone(m.Val) // m.Val is shared lens state
 			} else if p, err := t.tx.openAppend(m); err == nil {
 				msg.Value = p
 			} else {
@@ -551,21 +572,8 @@ func (b *Branch) ViewAt(ctx context.Context, at uint64, fn func(*Tx) error) erro
 	if at > head {
 		return fmt.Errorf("%w: %d > head %d", ErrBadLSN, at, head)
 	}
-	tx := &Tx{db: b.db, v: w.v, at: at, reads: map[rkey]bool{}, local: map[rkey]*localVal{}}
-	var eph *view
-	tx.lazy = func() (*view, error) {
-		if eph == nil {
-			b.db.mu.Lock()
-			idx := append([]IndexDecl{}, b.db.man.Indexes...)
-			b.db.mu.Unlock()
-			v, err := buildView(ctx, w.l, at, b.db.env, idx, nil, b.db.opts.InlineMax)
-			if err != nil {
-				return nil, err
-			}
-			eph = v
-		}
-		return eph, nil
-	}
+	// Read-only: no read set and no local writes, so no maps to allocate.
+	tx := &Tx{db: b.db, v: w.v, at: at, lazyCtx: ctx, lazyLog: w.l}
 	return fn(tx)
 }
 

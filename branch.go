@@ -139,6 +139,7 @@ func (db *DB) retireUnreferenced(id string) *writer {
 	w := db.writers[id]
 	delete(db.writers, id)
 	delete(db.views, id)
+	db.bw.Store(nil)
 	return w
 }
 
@@ -159,7 +160,7 @@ func (db *DB) ViewLog(ctx context.Context, logID string, at uint64, fn func(*Tx)
 	if err != nil {
 		return err
 	}
-	return fn(&Tx{db: db, v: v, at: at, reads: map[rkey]bool{}, local: map[rkey]*localVal{}})
+	return fn(&Tx{db: db, v: v, at: at})
 }
 
 // RegisterIndex declares a secondary index on a document field. It is

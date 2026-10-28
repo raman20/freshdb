@@ -79,6 +79,9 @@ func freshLayout(system string) store.Layout {
 
 // openFreshDB opens freshDB on dir in the given layout (LayoutNone = the
 // default for a new local directory).
+// valueCacheBytes overrides freshDB's default value cache (0 = default).
+var valueCacheBytes int
+
 func openFreshDB(dir string, fsync bool, layout store.Layout) (*freshdb.DB, error) {
 	var s store.Store
 	var err error
@@ -98,7 +101,11 @@ func openFreshDB(dir string, fsync bool, layout store.Layout) (*freshdb.DB, erro
 		SetUnsafeNoSync(bool)
 	})
 	st.SetUnsafeNoSync(!fsync)
-	return freshdb.OpenStore(context.Background(), st, freshdb.WithLogf(func(string, ...any) {}))
+	opts := []freshdb.Option{freshdb.WithLogf(func(string, ...any) {})}
+	if valueCacheBytes != 0 {
+		opts = append(opts, freshdb.WithValueCacheBytes(valueCacheBytes))
+	}
+	return freshdb.OpenStore(context.Background(), st, opts...)
 }
 
 func openFresh(dir string, fsync bool, layout store.Layout) (KV, error) {

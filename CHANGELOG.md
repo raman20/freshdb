@@ -47,6 +47,14 @@ in its "Changes since v0.1.0" section.
   other layout.
 - `DB.Close` now closes a store that `Open` created from a URL (journal
   file handles, FS read-handle cache).
+- **Value cache moved off the Go heap and default raised to 256 MiB.** The
+  cache is now 64 byte-ring shards in one anonymous `mmap` arena (heap on
+  non-Unix), FIFO with a second chance for entries hit near eviction. The
+  GC does not scan or count it, so RSS grows by about the cache size.
+  C-only probe at 64 clients: 1.95M → 2.39M ops/s, peak RSS 897 MB →
+  1.15 GB. `WithValueCacheBytes(n)` still sets the size; negative disables.
+- Read path: no exclusive `DB` lock per read (atomic snapshot of branch
+  writers), read-only transactions allocate no maps.
 
 ### Added
 - `freshdb migrate [--to journal|files]` (`store.Migrate`): offline,
@@ -71,8 +79,15 @@ in its "Changes since v0.1.0" section.
   reopen/torn-tail and kill -9 crash tests. It is now the default for new
   local directories on Unix (see Changed).
 - `freshdb-bench`: `freshdb-journal` system for `ycsb` and `msg`.
+- `freshdb-bench ycsb`: `-cpuprofile` (closed-loop phase only) and
+  `-value-cache` (recorded in the result params).
 
 ### Fixed
+- **Returned values no longer alias internal memory** (present since
+  v0.1.0). `Get`, `Scan` and `Topic.Read` could return slices shared with
+  the value cache or the in-memory lens, and `Put`/`Publish` kept the
+  caller's slice; a caller writing into either could change what later
+  reads returned. Values are now copied in both directions.
 - The FS store's fd cache is sized from `RLIMIT_NOFILE` (clamped) through
   build-tagged helpers, so Windows builds again.
 

@@ -4,8 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"math/rand/v2"
+	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -51,6 +53,7 @@ type ycsbParams struct {
 	OpenCap    float64 `json:"open_loop_cap_ops_per_sec"`
 	Seed       uint64  `json:"seed"`
 	Theta      float64 `json:"zipf_theta"`
+	ValueCache int     `json:"freshdb_value_cache_bytes,omitempty"` // 0 = library default
 	LoadSecs   float64 `json:"load_seconds"`
 	LoadRate   float64 `json:"load_keys_per_sec"`
 	DiskAfter  string  `json:"disk_after_run"`
@@ -76,6 +79,8 @@ func cmdYCSB(args []string) {
 	dataDir := fs.String("dir", "/tmp/freshdb-bench", "data directory (wiped)")
 	out := fs.String("out", "results", "output directory")
 	fs.DurationVar(&boltBatchDelay, "bolt-batch-delay", 0, "bbolt only: 0 = db.Update per write; >0 = db.Batch with this MaxBatchDelay")
+	cpuprof := fs.String("cpuprofile", "", "write a CPU profile of the measured closed-loop phase to this file (use with a single workload and client count)")
+	fs.IntVar(&valueCacheBytes, "value-cache", 0, "freshdb only: value cache bytes (0 = the library default; -1 = off)")
 	fs.Parse(args)
 	clients := parseInts(*clientsF)
 
@@ -100,6 +105,13 @@ func cmdYCSB(args []string) {
 	}
 	loadSecs := time.Since(t0).Seconds()
 	logf("loaded in %.1fs", loadSecs)
+	var prof *os.File
+	if *cpuprof != "" {
+		if prof, err = os.Create(*cpuprof); err != nil {
+			fatal(err)
+		}
+		defer prof.Close()
+	}
 
 	n := uint64(*keys)
 	z := newZipfian(n, *theta)
@@ -152,7 +164,15 @@ func cmdYCSB(args []string) {
 				}
 			}
 			runClosed(c, *warm, mk(1))
+			if prof != nil {
+				if err := pprof.StartCPUProfile(prof); err != nil {
+					fatal(err) // only one closed-loop cell can be profiled per run
+				}
+			}
 			closed := runClosed(c, *dur, mk(2))
+			if prof != nil {
+				pprof.StopCPUProfile()
+			}
 			rate := closed.OpsPerSec * *frac
 			if rate > *openCap {
 				rate = *openCap
@@ -167,7 +187,7 @@ func cmdYCSB(args []string) {
 	kv.Close()
 	runtime.GC()
 	res.Params = ycsbParams{System: *system, Fsync: *fsync, Keys: *keys, ValueBytes: *vsize, Workloads: *wls, Clients: clients,
-		Warmup: warm.String(), Duration: dur.String(), OpenFrac: *frac, OpenCap: *openCap, Seed: *seed, Theta: *theta,
+		Warmup: warm.String(), Duration: dur.String(), OpenFrac: *frac, OpenCap: *openCap, Seed: *seed, Theta: *theta, ValueCache: valueCacheBytes,
 		LoadSecs: round(loadSecs, 2), LoadRate: round(float64(*keys)/loadSecs, 0), DiskAfter: diskUsage(dir), PeakRSS: peakRSS()}
 	writeResult(*out, fmt.Sprintf("ycsb-%s-fsync-%v", *system, *fsync), res)
 	wipe(dir)
