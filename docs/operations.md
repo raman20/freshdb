@@ -211,10 +211,46 @@ is not returned.
 Measured (`freshdb-bench compact`, 10k keys × 1 KiB overwritten 50 times:
 9.8 MiB live of 488 MiB written; see [benchmarks](benchmarks.md#changes-since-v010-unreleased-main)):
 journal 504 → 34 MiB allocated and open 1.6 s → 30 ms; files layout 5,004
-files → 9. Commits wait while it runs (0.9 s here). Manifests are never
-deleted (two small objects per compaction, plus one manifest and fence per
-open). Retired logs from `rewind` stay in the manifest (the reflog points
-at them) and are compacted like any other log, not deleted.
+files → 9. Commits wait while it runs (0.9 s here). `compact` never deletes
+manifests or retired logs; use `gc` for that.
+
+## GC and retention
+
+`gc` is compaction with a history window, plus collection of what nothing
+can reach any more. Design: [design/08-gc-retention.md](design/08-gc-retention.md);
+model: [`spec/FreshGC.tla`](../spec/FreshGC.tla).
+
+```sh
+freshdb gc --keep-for 24h --keep-commits 1000   # keep both windows (the larger wins)
+freshdb gc --keep-reflog 64 --keep-manifests 16 # the defaults
+freshdb gc --shrink                             # then rewrite the journal file (offline)
+freshdb serve --gc-every 1h --keep-for 24h      # background, grace = --compact-grace
+curl -XPOST '127.0.0.1:7070/v1/gc?keep-for=24h&grace=5m'
+freshdb branch delete NAME                      # GC drops its log once the reflog entry ages out
+```
+
+- Each log is compacted at the newest segment boundary that keeps the last
+  `--keep-commits` commits and everything newer than `--keep-for`; time
+  travel, `rewind` and `branch create --at` work inside the window and
+  return `410` below it. A branch's parent keeps what the branch needs.
+- Logs no branch and no kept reflog entry can reach are dropped. The
+  reflog keeps the newest `--keep-reflog` entries and any newer than
+  `--keep-for`.
+- Manifests older than the newest `--keep-manifests` are deleted. A writer
+  that was fenced and comes back cannot commit into a deleted slot: every
+  manifest write re-lists and backs out if a newer one exists.
+- `--shrink` copies the live records into a new journal file and renames it
+  over the old one. It refuses while any process has the journal open
+  (`journal.lock`). **Binaries older than this change do not take that
+  lock**: stop them before shrinking. A crash mid-shrink leaves the old file
+  intact (the temporary copy is removed on the next open).
+
+Measured (`freshdb-bench gc`, 20 cycles of overwrite + branch + rewind churn,
+195 MiB written, 9.8 MiB live): disk 441 MiB with `compact`, 38.5 MiB with
+`gc`, 32 MiB with `gc --shrink` after each cycle. Without shrinking, the
+journal still keeps about one 4 KiB block per deleted object (dead record
+headers and hole edges; +0.33 MiB per cycle here) and its apparent size
+only grows, so run `gc --shrink` during maintenance windows.
 
 
 ## Health checks

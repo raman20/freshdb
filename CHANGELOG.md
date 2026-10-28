@@ -11,6 +11,23 @@ Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
 ### Added
+- **GC with retention.** `(*DB).GC(ctx, GCOptions{KeepFor, KeepCommits,
+  KeepReflog, KeepManifests, Grace})`, `freshdb gc [--keep-for 24h]
+  [--keep-commits N] [--keep-reflog 64] [--keep-manifests 16] [--shrink]`,
+  `POST /v1/gc` and `freshdb serve --gc-every D`. Compacts each log at a
+  segment boundary that keeps the requested history window (time travel,
+  rewind and branch points inside it still work), drops logs no branch or
+  kept reflog entry can reach, prunes the reflog and deletes old manifests.
+  Deleting manifests needed a new fencing rule (a writer re-lists after its
+  create-only put and backs out if a newer manifest exists), checked in
+  `spec/FreshGC.tla` with mutants that fail without it. `--shrink` rewrites
+  the journal file offline. On `freshdb-bench gc` (20 churn cycles) disk was
+  441 MiB with compact only, 38.5 MiB with GC, 32 MiB with GC + shrink.
+- **`DeleteBranch`**, `freshdb branch delete NAME`,
+  `DELETE /v1/branches/{b}` (main cannot be deleted; the log stays
+  readable via the reflog until GC prunes it).
+- `store.ShrinkJournal(dir)`; every journal now holds a shared flock on
+  `journal.lock` for its lifetime so a shrink cannot run under it.
 - **Compaction.** `(*DB).Compact`, `freshdb compact [--grace]`,
   `POST /v1/compact?grace=` and `freshdb serve --compact-every D
   --compact-grace G`. Each log gets a base image at its head (the latest

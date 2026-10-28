@@ -166,6 +166,7 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
     <tr><td>FreshBranch</td><td>rewind exact, old head kept, append-only, time travel stable</td><td class="n">3,430,206</td><td class="n">1,845,287</td></tr>
     <tr><td>FreshMigrate</td><td>files ↔ journal migration: original always reachable, never a partial copy, resume finishes</td><td class="n">149</td><td class="n">88</td></tr>
     <tr><td>FreshCompact</td><td>compaction: no loss, fenced compactors can't commit, garbage is final, readers safe within the grace period</td><td class="n">1,557,725</td><td class="n">315,903</td></tr>
+        <tr><td>FreshGC</td><td>GC with retention: nothing reachable deleted, window kept, deleted manifests can't be reused by a zombie writer</td><td class="n">6,582,415</td><td class="n">1,598,697</td></tr>
     <tr><td>FreshShred</td><td>shredded never revealed, no writes after shred, chain verifiable, key eventually gone</td><td class="n">25,570</td><td class="n">6,481</td></tr>
   </table></div>
   <div class="cards3" style="margin-top:18px">
@@ -182,7 +183,7 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
     <p class="sub">A pre-1.0 prototype. Please don't put real personal data in it yet.</p>
     <div class="split">
       <ul class="lim">
-        <li>Keys, KV history, topics, documents and vectors live in RAM. Old versions are only dropped by <code>freshdb compact</code>, which is new, keeps every topic message, and removes time travel below each branch head.</li>
+        <li>Keys, KV history, topics, documents and vectors live in RAM. Old versions are only dropped by <code>freshdb compact</code> / <code>freshdb gc</code> (new; GC keeps a configurable time-travel window), which keep every topic message; the journal file shrinks only offline (<code>gc --shrink</code>).</li>
         <li>The opt-in HNSW vector index is rebuilt on every open (about 17 min at 1M vectors).</li>
         <li>One writer per database, with no HA and no read replicas yet.</li>
         <li>Only MinIO is tested. AWS S3 and R2 support the needed conditional writes but are untested.</li>
@@ -203,7 +204,7 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
   <h2>Roadmap</h2>
   <p class="sub">No dates. Everything has to respect the design principles. <a href="https://github.com/raman20/freshdb/blob/main/ROADMAP.md">ROADMAP.md</a></p>
   <div class="road">
-    <div><b>Retention + TTL</b><br>on top of compaction (now on main)</div>
+    <div><b>Topic retention + TTL</b><br>on top of GC (history windows now on main)</div>
     <div><b>Persisted lens snapshots</b><br>open in O(tail), not O(history)</div>
     <div><b>Disk-backed lenses</b><br>datasets larger than RAM</div>
     <div><b>Persisted ANN index</b><br>HNSW is on main; save it with snapshots</div>

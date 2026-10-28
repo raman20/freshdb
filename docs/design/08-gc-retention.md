@@ -90,12 +90,41 @@ type GCOptions struct {
 - G4 garbage is final (as compaction's C3); readers holding an old
   manifest are covered by the grace assumption (FreshCompact C4).
 
+## Results (freshdb-bench gc, 2026-10-29)
+
+10k keys × 1 KiB, 20 cycles; each cycle overwrites every key once (9.8 MiB),
+creates a branch and writes to it, deletes the previous cycle's branch and
+rewinds main to its head (retiring a log), then runs maintenance. GC uses
+`KeepCommits 10, KeepReflog 4, KeepManifests 4`. Journal layout, ext4.
+Raw data: `bench/results/2026-10-29-gc/`.
+
+| mode | disk after cycle 0 → 19 (allocated) | apparent | logs | manifests kept | per run |
+|---|---|---|---|---|---|
+| compact | 38.4 → 441.0 MiB | 48 → 832 MiB | 3 → 41 | all 100 | 244–288 ms |
+| gc | 15.4 → 38.5 MiB | 24 → 416 MiB | 5 | 4 | 106–159 ms |
+| gc + shrink (offline) | 16.0 → 32.0 MiB | 16 → 32 MiB | 5 | 4 | 202–292 ms (close, shrink, reopen) |
+
+Compact alone grows with every retired log (they are compacted, never
+dropped). GC is flat in objects and manifests but not quite in bytes: a
+60-cycle run went 31.3 MiB (cycle 9) → 51.6 MiB (cycle 59), about
+0.33 MiB per cycle. Each deleted journal record keeps its header and key
+(the file is scanned record by record, so the dead marker must stay) and the
+partial blocks at both ends of a punched hole: roughly one 4 KiB block per
+deleted object. The apparent size never shrinks (holes). `gc --shrink`
+rewrites the live records into a new file and removes both; it is offline
+(no process may have the journal open).
+
 ## Not covered / limits
 
 - Retention by time uses frame timestamps (writer clocks). A clock that
   jumps backwards keeps more history, never less than `KeepCommits`.
 - Shrink is offline only (a live shrink would need every process to
-  switch files atomically).
+  switch files atomically). Binaries older than this change do not take
+  `journal.lock`, so the shrink cannot see them: stop them first.
+- Without a shrink the journal keeps ~4 KiB allocated per deleted object
+  (see Results), and the apparent file size only grows.
+- A deleted branch's log stays (readable via `ViewLog`) until its reflog
+  entry is pruned.
 - Topics still keep every message (offsets stay dense); a base stores the
   messages up to the cut. Topic retention is not part of this item.
 

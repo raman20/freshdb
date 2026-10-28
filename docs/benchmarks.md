@@ -31,6 +31,7 @@ suites (same VM, same commands and seeds, fsync on), all on unreleased
 - Compaction (item 3), storage and open time before/after `Compact`: [`2026-10-28-compaction/`](../bench/results/2026-10-28-compaction/), commit `09773ea` (`freshdb-bench compact`).
 - Push consumers (item 6), message latency at 1k msgs/s by consumer idle mode: [`2026-10-28-push/`](../bench/results/2026-10-28-push/), commit `282c3a6` (`freshdb-bench msg -idle ...`).
 - Memory (item 7), YCSB with the default URL plus a memory sampler, before/after and a `GOMEMLIMIT`/cache/compaction curve: [`2026-10-28-memory/`](../bench/results/2026-10-28-memory/), before = `f5c1c22`, after = `c08ceca`; Pebble rerun in the same session.
+- GC (item 8), disk per cycle under overwrite + branch + rewind churn, compact vs gc vs gc + shrink: [`2026-10-29-gc/`](../bench/results/2026-10-29-gc/), commit `415c9b7` (`freshdb-bench gc`). 20 cycles, 195 MiB written, 9.8 MiB live: 441 / 38.5 / 32.0 MiB allocated; 41 / 5 / 5 logs; 100 / 4 / 4 manifests.
 - Vectors: [`2026-10-27-after-vector/`](../bench/results/2026-10-27-after-vector/), commit `f539629`. The vector code has not changed since.
 - Intermediate runs: [`after-memory`](../bench/results/2026-10-27-after-memory/) and [`after-occ`](../bench/results/2026-10-27-after-occ/).
 

@@ -25,11 +25,10 @@ bug reports). Everything must respect the [design principles](docs/design-princi
 
 ## Next — v0.2–v0.4: make it last
 
-- **Compaction follow-ups.** Compaction (base images + garbage with a
-  grace period) is on `main`. Still open: collecting old manifests and
-  fences (needs a fencing argument in TLA+), compacting without pausing
-  commits, shrinking the journal file itself, retention policies (keep N
-  hours of time travel), and topic retention.
+- **Compaction follow-ups.** Compaction and GC with retention windows
+  (old manifests, retired logs, reflog, offline journal shrink) are on
+  `main`. Still open: compacting without pausing commits, an online journal
+  shrink or record-header reuse, and topic retention.
 - **Persisted lens snapshots for all lenses.** Today only KV and topics
   checkpoint, and recovery still scans every segment. The goal is open time
   proportional to the tail, not to history.
