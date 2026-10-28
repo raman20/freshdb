@@ -20,9 +20,11 @@ bug reports). Everything must respect the [design principles](docs/design-princi
 
 ## Next — v0.2–v0.4: make it last
 
-- **Compaction.** Merge small per-commit segments into larger ones, and
-  garbage-collect retired logs that no branch or reflog entry references.
-  Today the object count grows by one per group commit.
+- **Compaction follow-ups.** Compaction (base images + garbage with a
+  grace period) is on `main`. Still open: collecting old manifests and
+  fences (needs a fencing argument in TLA+), compacting without pausing
+  commits, shrinking the journal file itself, retention policies (keep N
+  hours of time travel), and topic retention.
 - **Persisted lens snapshots for all lenses.** Today only KV and topics
   checkpoint, and recovery still scans every segment. The goal is open time
   proportional to the tail, not to history.

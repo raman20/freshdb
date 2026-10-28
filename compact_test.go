@@ -409,7 +409,8 @@ func TestCompactCrashAndSweepRetry(t *testing.T) {
 	bases, _ := objects(t, mem, "base/")
 	segs, _ := objects(t, mem, "log/")
 	if bases > 2 || segs > 3 {
-		t.Fatalf("left %d base objects, %d segments", bases, segs)
+		ks, _ := store.Keys(ctx, mem)
+		t.Fatalf("left %d base objects, %d segments: %v %+v", bases, segs, ks, db.Manifest().Logs)
 	}
 	if r, _ := db.Verify(ctx); !r.OK {
 		t.Fatalf("%+v", r)
@@ -556,4 +557,71 @@ func TestPropCompactEqualsUncompacted(t *testing.T) {
 			t.Fatalf("verify %+v %v", r, err)
 		}
 	})
+}
+
+// TestCompactBoundsStorage: with a fixed live set, repeated overwrite +
+// compact cycles keep data objects and bytes flat instead of growing with
+// history. Manifests are not collected yet (deleting them needs a fencing
+// argument, see docs/design/03-compaction.md); they grow by at most two
+// small objects per compaction.
+func TestCompactBoundsStorage(t *testing.T) {
+	st := store.NewMem()
+	db := mustOpen(t, st)
+	val := bytes.Repeat([]byte("x"), 200)
+	data := func() (int, int64) {
+		n, size := objects(t, st, "")
+		mn, msize := objects(t, st, "manifest/")
+		return n - mn, size - msize
+	}
+	var first int64
+	var firstN, firstM int
+	for cycle := 0; cycle < 8; cycle++ {
+		for r := 0; r < 20; r++ {
+			err := db.Update(ctx, func(tx *Tx) error {
+				for k := 0; k < 50; k++ {
+					if err := tx.Put(fmt.Sprint("k", k), append([]byte(fmt.Sprint(cycle, r)), val...)); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		_, grown := data()
+		if _, err := db.Compact(ctx, CompactOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		n, size := data()
+		m, _ := objects(t, st, "manifest/")
+		if cycle == 0 {
+			first, firstN, firstM = size, n, m
+		}
+		t.Logf("cycle %d: %d B before, %d data objects / %d B after, %d manifests", cycle, grown, n, size, m)
+		if size > first+first/10 || n != firstN || size*5 > grown || m > firstM+2*cycle {
+			t.Fatalf("cycle %d: storage not bounded: %d objects %d B, %d manifests (first %d / %d B / %d)", cycle, n, size, m, firstN, first, firstM)
+		}
+	}
+	v, err := db.Get(ctx, "k3")
+	if err != nil || !bytes.HasPrefix(v, []byte("7 19")) {
+		t.Fatalf("k3 = %.8q, %v", v, err)
+	}
+}
+
+func TestBaseEpoch(t *testing.T) {
+	for k, want := range map[string]uint64{
+		"base/L1/00000000000000000010-e1-e7cd8346":   1,
+		"base/L1/00000000000000000010-e12-0e5d8346":  12,
+		"base/L-e9/00000000000000000010-e3-ee000000": 3,
+	} {
+		if got, ok := baseEpoch(k); !ok || got != want {
+			t.Errorf("%s: %d %v", k, got, ok)
+		}
+	}
+	for _, k := range []string{"base/L1/10-x1-ab", "base/L1/10-e1", "base/L1/10-ex-ab"} {
+		if _, ok := baseEpoch(k); ok {
+			t.Errorf("%s parsed", k)
+		}
+	}
 }

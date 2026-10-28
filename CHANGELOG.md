@@ -10,6 +10,23 @@ break APIs and the on-storage format.
 Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
+### Added
+- **Compaction.** `(*DB).Compact`, `freshdb compact [--grace]`,
+  `POST /v1/compact?grace=` and `freshdb serve --compact-every D
+  --compact-grace G`. Each log gets a base image at its head (the latest
+  live KV version per key; all topic messages, redacted ones as
+  placeholders; large values in ~64 MiB chunk objects); one manifest
+  commit drops the parents, and the old segments, snapshots and bases are
+  deleted after a grace period (default 5 min via the API, 0 in the CLI).
+  Commits pause for the duration. Modelled in `spec/FreshCompact.tla`.
+  On the compaction bench (488 MiB written, 9.8 MiB live) disk fell from
+  504 to 34 MiB and open from 1.6 s to 30 ms.
+- `ErrCompacted` (HTTP 410) for reads, branches and rewinds below a
+  compacted log's base. Time travel below the base is gone by design.
+- Manifest format 2 (written after the first compaction; v0.1.0 binaries
+  cannot open a compacted database). KV snapshots use `KV3` only when a
+  version points into a chunk object.
+
 ### Changed
 - **Memory: values are read from the log instead of being held in RAM.**
   The KV lens keeps values larger than `InlineMax` (default 64 B) as a

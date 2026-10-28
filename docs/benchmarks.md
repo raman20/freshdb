@@ -28,6 +28,7 @@ suites (same VM, same commands and seeds, fsync on), all on unreleased
 - YCSB, streaming and OCC, explicit layouts: [`2026-10-27-after-journal/`](../bench/results/2026-10-27-after-journal/), commit `60068f3`. Two of its files say `60068f3-dirty` because CHANGELOG/docs were being edited during the run; the code was `60068f3`.
 - YCSB and streaming with the **default URL** (a bare path, which now means the journal layout on Unix): [`2026-10-28-default-journal/`](../bench/results/2026-10-28-default-journal/), commit `6e7b172`, plus a back-to-back default-vs-`journal://` A/B at 1k msgs/s in [`ab-1k/`](../bench/results/2026-10-28-default-journal/ab-1k/).
 - YCSB with the default URL after the read-path work (item 2): [`2026-10-28-read-path/`](../bench/results/2026-10-28-read-path/), commit `e12e909`, same command as `2026-10-28-default-journal`.
+- Compaction (item 3), storage and open time before/after `Compact`: [`2026-10-28-compaction/`](../bench/results/2026-10-28-compaction/), commit `09773ea` (`freshdb-bench compact`).
 - Vectors: [`2026-10-27-after-vector/`](../bench/results/2026-10-27-after-vector/), commit `f539629`. The vector code has not changed since.
 - Intermediate runs: [`after-memory`](../bench/results/2026-10-27-after-memory/) and [`after-occ`](../bench/results/2026-10-27-after-occ/).
 
@@ -124,7 +125,7 @@ OCC transfers, fsync on (commits/s; ops that gave up after 16 retries):
     files layout. 64% of it is the KV lens's MVCC version history,
     which is kept forever. The journal run also did about 2.8× more
     writes in the same timed phases (2.99M vs 1.06M), so it built more
-    history. Bounding this needs history retention / compaction (planned),
+    history. Bounding this needs history retention / compaction (now on `main`: run `Compact`),
     not a store change.
 - **Reads got slower, then partly recovered.** Point reads that miss the
   value cache pay a `pread` and a CRC check. YCSB C at 64 clients fell
@@ -176,6 +177,28 @@ OCC transfers, fsync on (commits/s; ops that gave up after 16 retries):
   crash tests, and migration has a TLC-checked model
   ([spec/FreshMigrate.tla](../spec/FreshMigrate.tla)) plus resume-after-crash
   and kill -9 tests, but it has less mileage than the files layout.
+- **Compaction: storage and open time now follow the live data, not the
+  history.** `freshdb-bench compact`: 10,000 keys × 1 KiB, each overwritten
+  50 times (488 MiB written, 9.8 MiB live), batches of 100, then one
+  `Compact` (grace 0), then a fresh open. One run per layout; a second
+  journal run was within 2%.
+
+  | layout | disk before → after | open before → after | heap after open | compact |
+  |---|---|---|---|---|
+  | journal (default) | 504 → 33.9 MiB allocated (file size stays 512 MiB) | 1,626 → 30 ms | 54.1 → 2.8 MiB | 869 ms, 5,002 objects deleted |
+  | files (`fs://`) | 508 MiB / 5,004 files → 10.6 MiB / 9 files | 1,383 → 6.7 ms | 53.6 → 2.8 MiB | 850 ms |
+
+  - The journal frees space by punching holes, so `du` drops but the file's
+    apparent size never shrinks, and the 8 MiB preallocation plus
+    hole-punch granularity leave ~34 MiB allocated for 10.5 MiB of base.
+  - Heap falls because the KV lens no longer holds the overwritten
+    versions: compaction is what bounds the memory growth noted above.
+    Between compactions the history grows again.
+  - Manifests are not collected: each compaction adds two small manifest
+    objects (and each open still adds a manifest and a fence).
+  - Not measured: compaction under concurrent load, S3, or live sets larger
+    than RAM. YCSB was not rerun; the commit path is unchanged except for a
+    pause check.
 
 ## Summary
 

@@ -1,0 +1,53 @@
+{
+  "suite": "compact",
+  "env": {
+    "time": "2026-10-28T15:25:10+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "09773ea",
+    "command": "./bin/freshdb-bench compact -out /tmp/cb2",
+    "loadavg_at_start": "0.56 0.92 1.08"
+  },
+  "params": {
+    "batch": 100,
+    "keys": 10000,
+    "rounds": 50,
+    "url": "/tmp/freshdb-bench/compact",
+    "value": 1024
+  },
+  "runs": [
+    {
+      "phase": "before",
+      "disk_bytes": 528486400,
+      "apparent_bytes": 528482304,
+      "files": 1,
+      "open_ms": 1656.251,
+      "heap_mib": 54.10113525390625,
+      "write_secs": 3.701667392,
+      "live_keys": 10000,
+      "logical_mib": 9.765625,
+      "written_mib": 488.28125,
+      "read_check_ok": true
+    },
+    {
+      "phase": "after",
+      "disk_bytes": 35495936,
+      "apparent_bytes": 536870912,
+      "files": 1,
+      "open_ms": 31.789,
+      "heap_mib": 2.7842864990234375,
+      "compact_ms": 898.114,
+      "live_keys": 10000,
+      "logical_mib": 9.765625,
+      "written_mib": 488.28125,
+      "deleted_objects": 5002,
+      "base_mib": 10.519108772277832,
+      "read_check_ok": true
+    }
+  ]
+}

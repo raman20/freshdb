@@ -167,7 +167,7 @@ What you give up:
   so the chain still verifies from there).
 
 What it does not do yet: no retention for topics (every message is kept),
-no TTL, and no benchmark results for it so far. Values of a subject
+no TTL. Values of a subject
 shredded after the last compaction are dropped by the next one.
 
 Disk space: on the files layout and S3, replaced objects are deleted. In the
@@ -175,6 +175,14 @@ journal file they are hole-punched on Linux, so `du` drops but the file's
 apparent size does not (tested: 25 MiB → 5.7 MiB after overwriting three
 large keys 200 times). On macOS/BSD the bytes are zeroed instead and space
 is not returned.
+
+Measured (`freshdb-bench compact`, 10k keys × 1 KiB overwritten 50 times:
+9.8 MiB live of 488 MiB written; see [benchmarks](benchmarks.md#changes-since-v010-unreleased-main)):
+journal 504 → 34 MiB allocated and open 1.6 s → 30 ms; files layout 5,004
+files → 9. Commits wait while it runs (0.9 s here). Manifests are never
+deleted (two small objects per compaction, plus one manifest and fence per
+open). Retired logs from `rewind` stay in the manifest (the reflog points
+at them) and are compacted like any other log, not deleted.
 
 
 ## Health checks

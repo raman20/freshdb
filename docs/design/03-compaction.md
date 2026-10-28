@@ -94,3 +94,27 @@ Why it is safe:
 - TLA+: FreshCompact.tla (crashes, a fenced compactor, a slow reader).
 - Bench: storage bytes and open time before/after compaction for an
   overwrite-heavy workload; YCSB unaffected.
+
+## Outcome (commits b873ae3, 09773ea)
+- Implemented as designed. TLC found a same-key base reuse bug in the model
+  before any code (fixed by the epoch + nonce in the base key).
+- Tests: unit/ErrCompacted paths on mem, fs and journal; a rapid property
+  test (random ops + compactions + reopen equal an uncompacted twin, 2,000
+  checks); a failing-store test at the manifest commit and the sweep;
+  fenced compactor; grace with a fake clock; a storage bound test (8
+  overwrite + compact cycles: data objects and bytes stay flat); kill -9 of
+  a child compacting every 5 ms (fs and journal); 2,000 sim seeds with
+  4,190 compactions under injected faults.
+- Mutations caught: dropping topics from the base; the wrong re-seal AAD.
+- Bug found after the first push: the orphan sweep parsed the epoch with
+  `LastIndex("-e")`, so a base whose hex nonce starts with `e` (1 in 16)
+  was never swept (a leak, not data loss). Fixed by splitting the key's
+  fields; `TestBaseEpoch` and 500 reruns of the sweep test.
+- Bench (`freshdb-bench compact`, 9.8 MiB live of 488 MiB written): journal
+  disk 504 → 34 MiB allocated, open 1.6 s → 30 ms, heap 54 → 2.8 MiB; files
+  layout 508 MiB / 5,004 files → 10.6 MiB / 9 files.
+- Not done: manifest/fence collection (a stale fenced writer holding
+  manifest k relies on `manifest/k+1` existing; deleting old manifests
+  needs that argument in TLA+ first), compaction without pausing commits,
+  shrinking the journal file, retention windows, and retired-log removal.
+  There is no TTL feature, so there is no "expired data" to drop.

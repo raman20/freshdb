@@ -527,7 +527,7 @@ Short version; the full guide is [docs/operations.md](docs/operations.md).
   overwritten, deleted and shredded data; it also removes time travel below
   each branch head. See [operations](docs/operations.md#compaction). Prefer `freshdb serve`
   for long-running use (every embedded CLI call is an open, which writes a
-  manifest and a fence).
+  manifest and a fence; manifests are never deleted, compaction included).
 
 ## Security
 
@@ -557,8 +557,8 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
 
 **Still true:**
 - Keys, KV version history, topics, documents and vectors live in RAM.
-  History is only trimmed when you run compaction, which is new, has no
-  benchmark results yet, and keeps every topic message (no retention).
+  History is only trimmed when you run compaction, which is new and keeps
+  every topic message (no retention).
   Snapshots are off by default and don't speed up open yet.
 - Vector search is exact brute force; there is no ANN index.
 - One writer per database, with no HA and no replicas.

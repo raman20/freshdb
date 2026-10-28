@@ -575,15 +575,12 @@ func baseKeyOf(obj string) (string, bool) {
 
 // baseEpoch parses the epoch from base/<log>/<lsn>-e<epoch>-<nonce>.
 func baseEpoch(key string) (uint64, bool) {
-	i := strings.LastIndex(key, "-e")
-	if i < 0 {
+	// fields of the last path element: <lsn>, e<epoch>, <nonce>; the hex
+	// nonce may itself start with "e", so split rather than search
+	f := strings.Split(key[strings.LastIndexByte(key, '/')+1:], "-")
+	if len(f) != 3 || !strings.HasPrefix(f[1], "e") {
 		return 0, false
 	}
-	rest := key[i+2:]
-	j := strings.IndexByte(rest, '-')
-	if j < 0 {
-		return 0, false
-	}
-	ep, err := strconv.ParseUint(rest[:j], 10, 64)
+	ep, err := strconv.ParseUint(f[1][1:], 10, 64)
 	return ep, err == nil
 }
