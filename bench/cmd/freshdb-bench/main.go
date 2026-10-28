@@ -17,6 +17,7 @@ suites:
   txn      contended OCC transactions and multi-lens consume+write transactions
   vector   recall@10 and QPS on synthetic clustered vectors (exact search)
   s3       commit latency, batching, requests/commit and cold open on S3/MinIO
+  compact  storage, open time and heap before/after compaction (overwrite-heavy)
   calib    harness + VM noise floor (no-op latency)
   report   render results/*.json as markdown
 
@@ -41,6 +42,8 @@ func main() {
 		cmdVector(args)
 	case "s3":
 		cmdS3(args)
+	case "compact":
+		cmdCompact(args)
 	case "calib":
 		cmdCalib(args)
 	case "report":

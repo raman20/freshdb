@@ -26,6 +26,30 @@ type Manifest struct {
 	Refs    map[string]string   `json:"refs"` // branch name -> log id
 	Reflog  []RefChange         `json:"reflog,omitempty"`
 	Indexes []IndexDecl         `json:"indexes,omitempty"`
+	Garbage []Garbage           `json:"garbage,omitempty"` // objects to delete once due (compaction)
+}
+
+// Garbage is storage that no manifest from this one on refers to. It is
+// deleted by a sweep once the clock passes After (the grace period that
+// lets readers of older manifests finish).
+type Garbage struct {
+	Kind   string `json:"kind"` // "segs": log/<Log>/ seq < Below; "snaps": snap/<Log>/ lsn < Below; "base": Key + Chunks
+	Log    string `json:"log,omitempty"`
+	Below  uint64 `json:"below,omitempty"`
+	Key    string `json:"key,omitempty"`
+	Chunks int    `json:"chunks,omitempty"`
+	After  int64  `json:"after"`
+}
+
+// BaseMeta locates a log's compaction base: the full state at LSN, in
+// object Key plus Chunks value chunks. Segments before Seq are covered.
+type BaseMeta struct {
+	LSN    uint64 `json:"lsn"`
+	Seq    uint64 `json:"seq"`
+	Key    string `json:"key"`
+	Chunks int    `json:"chunks"`
+	Chain  string `json:"chain"` // hex hash-chain head at LSN
+	TS     int64  `json:"ts"`
 }
 
 // LogMeta describes one log. A branch is a log whose history is its
@@ -36,6 +60,9 @@ type LogMeta struct {
 	ParentLSN uint64 `json:"parent_lsn,omitempty"`
 	SnapLSN   uint64 `json:"snap_lsn,omitempty"`
 	SnapKey   string `json:"snap_key,omitempty"`
+	// Base, if set, holds the state at Base.LSN: the log no longer needs
+	// its parent or its segments before Base.Seq (see compact.go).
+	Base *BaseMeta `json:"base,omitempty"`
 }
 
 type RefChange struct {
@@ -51,7 +78,13 @@ type IndexDecl struct {
 	Field string `json:"field"`
 }
 
-const manifestFormat = 1
+// manifestFormat is what a new database starts with; compaction writes
+// manifestFormatBase (bases and garbage), which older binaries refuse
+// instead of misreading a log whose first segments are gone.
+const (
+	manifestFormat     = 1
+	manifestFormatBase = 2
+)
 
 func manifestKey(id uint64) string { return fmt.Sprintf("manifest/%020d.mf", id) }
 
@@ -81,7 +114,7 @@ func decodeManifest(b []byte) (*Manifest, error) {
 	if err := json.Unmarshal(b[:len(b)-4], &m); err != nil {
 		return nil, fmt.Errorf("%w: manifest: %v", ErrCorrupt, err)
 	}
-	if m.Format != manifestFormat {
+	if m.Format != manifestFormat && m.Format != manifestFormatBase {
 		return nil, fmt.Errorf("freshdb: manifest format %d not supported by this binary (refusing to downgrade)", m.Format)
 	}
 	c := m.clone2()

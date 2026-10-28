@@ -169,6 +169,11 @@ func (db *DB) Verify(ctx context.Context) (*VerifyReport, error) {
 			continue
 		}
 		r.Logs++
+		if l.meta.Base != nil {
+			if _, err := fresh.loadBase(ctx, l); err != nil {
+				bad("log %s: %v", id, err)
+			}
+		}
 		segs, _ := db.st.List(ctx, "log/"+id+"/")
 		r.Segments += len(segs)
 		err = l.eachOwn(ctx, l.head(), func(e *lens.Entry) error { // the parent is verified on its own

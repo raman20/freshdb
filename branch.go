@@ -22,7 +22,7 @@ func (db *DB) headOf(id string) uint64 {
 // CreateBranch creates branch `name` from branch `from` at LSN `at`
 // (0 = from's head). O(1): one manifest write, no data copied.
 func (db *DB) CreateBranch(ctx context.Context, name, from string, at uint64) error {
-	db.mu.Lock()
+	db.lockIdle()
 	defer db.mu.Unlock()
 	if db.closed {
 		return ErrClosed
@@ -40,6 +40,9 @@ func (db *DB) CreateBranch(ctx context.Context, name, from string, at uint64) er
 	}
 	if at > head {
 		return fmt.Errorf("%w: %d > head %d", ErrBadLSN, at, head)
+	}
+	if f := db.floorOf(fromID); at < f {
+		return fmt.Errorf("%w: branch point %d < base %d", ErrCompacted, at, f)
 	}
 	newID := fmt.Sprintf("L%d", db.man.NextLog)
 	if err := db.commitManifest(ctx, func(m *Manifest) error {
@@ -59,7 +62,7 @@ func (db *DB) CreateBranch(ctx context.Context, name, from string, at uint64) er
 // becomes the branch; the old head stays readable via the reflog
 // (ViewLog). Commits racing with Rewind land on the retired log.
 func (db *DB) Rewind(ctx context.Context, name string, at uint64) error {
-	db.mu.Lock()
+	db.lockIdle()
 	oldID, ok := db.man.Refs[name]
 	if !ok {
 		db.mu.Unlock()
@@ -68,6 +71,10 @@ func (db *DB) Rewind(ctx context.Context, name string, at uint64) error {
 	if head := db.headOf(oldID); at > head {
 		db.mu.Unlock()
 		return fmt.Errorf("%w: %d > head %d", ErrBadLSN, at, head)
+	}
+	if f := db.floorOf(oldID); at < f {
+		db.mu.Unlock()
+		return fmt.Errorf("%w: rewind target %d < base %d", ErrCompacted, at, f)
 	}
 	newID := fmt.Sprintf("L%d", db.man.NextLog)
 	err := db.commitManifest(ctx, func(m *Manifest) error {
@@ -91,7 +98,7 @@ func (db *DB) Rewind(ctx context.Context, name string, at uint64) error {
 // Promote fast-forwards branch dst to src (dst's head must be in src's
 // history). Afterwards both names refer to the same log.
 func (db *DB) Promote(ctx context.Context, src, dst string) error {
-	db.mu.Lock()
+	db.lockIdle()
 	srcID, ok1 := db.man.Refs[src]
 	dstID, ok2 := db.man.Refs[dst]
 	if !ok1 || !ok2 {
@@ -101,12 +108,17 @@ func (db *DB) Promote(ctx context.Context, src, dst string) error {
 	dstHead := db.headOf(dstID)
 	ff := false
 	reach := db.headOf(srcID)
-	for l := db.logs[srcID]; l != nil; l = l.parent {
-		if l.meta.ID == dstID {
+	// walk the manifest, not loaded parents: a compacted log does not
+	// load its parent but is still descended from it
+	for m := db.man.Logs[srcID]; m != nil; m = db.man.Logs[m.Parent] {
+		if m.ID == dstID {
 			ff = reach >= dstHead
 			break
 		}
-		reach = min(reach, l.meta.ParentLSN)
+		if m.Parent == "" {
+			break
+		}
+		reach = min(reach, m.ParentLSN)
 	}
 	if !ff {
 		db.mu.Unlock()
@@ -126,6 +138,20 @@ func (db *DB) Promote(ctx context.Context, src, dst string) error {
 		retired.stop()
 	}
 	return err
+}
+
+// floorOf is the compaction floor of log id's lineage (0 if none),
+// from the manifest. Caller holds db.mu.
+func (db *DB) floorOf(id string) uint64 {
+	for m := db.man.Logs[id]; m != nil; m = db.man.Logs[m.Parent] {
+		if m.Base != nil {
+			return m.Base.LSN
+		}
+		if m.Parent == "" {
+			break
+		}
+	}
+	return 0
 }
 
 // retireUnreferenced removes the writer of a log no branch points to.
@@ -156,7 +182,7 @@ func (db *DB) ViewLog(ctx context.Context, logID string, at uint64, fn func(*Tx)
 	if at == 0 || at > l.head() {
 		at = l.head()
 	}
-	v, err := buildView(ctx, l, at, db.env, idx, nil, db.opts.InlineMax)
+	v, err := db.buildView(ctx, l, at, idx, nil)
 	if err != nil {
 		return err
 	}
@@ -166,7 +192,7 @@ func (db *DB) ViewLog(ctx context.Context, logID string, at uint64, fn func(*Tx)
 // RegisterIndex declares a secondary index on a document field. It is
 // built by replaying the log (no migration) and maintained from then on.
 func (db *DB) RegisterIndex(ctx context.Context, coll, field string) error {
-	db.mu.Lock()
+	db.lockIdle()
 	defer db.mu.Unlock()
 	for _, d := range db.man.Indexes {
 		if d.Coll == coll && d.Field == field {
@@ -183,7 +209,7 @@ func (db *DB) RegisterIndex(ctx context.Context, coll, field string) error {
 		v := db.views[id]
 		v.mu.Lock() // blocks the writer's apply: the replay is consistent
 		ix := lens.NewDocIndex(coll, field)
-		err := v.log.each(ctx, v.head, func(e *lens.Entry) error { ix.Apply(e, v.env); return nil })
+		err := db.fold(ctx, v.log, v.head, func(e *lens.Entry) error { ix.Apply(e, v.env); return nil })
 		if err == nil {
 			v.idx[idxKey(coll, field)] = ix
 		}
@@ -224,7 +250,7 @@ func (db *DB) RebuildDigests(branch string) (map[string][32]byte, error) {
 	w.v.mu.RLock()
 	h := w.v.head
 	w.v.mu.RUnlock()
-	v, err := buildView(context.Background(), w.l, h, db.env, idx, nil, db.opts.InlineMax)
+	v, err := db.buildView(context.Background(), w.l, h, idx, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -230,6 +230,20 @@ func (k *keyring) open(h string, ct, ad []byte) ([]byte, bool) {
 	return p, true
 }
 
+// reseal encrypts plain under subject hash h's DEK (compaction re-seals
+// values under the based log's AAD). false if the subject is shredded.
+func (k *keyring) reseal(h string, plain, ad []byte) ([]byte, bool, error) {
+	k.mu.RLock()
+	a, ok := k.deks[h]
+	sh := k.shredded[h]
+	k.mu.RUnlock()
+	if sh || !ok {
+		return nil, false, nil
+	}
+	ct, err := k.seal(a, plain, ad)
+	return ct, err == nil, err
+}
+
 // env implements lens.Env on top of the keyring.
 type env struct{ k *keyring }
 

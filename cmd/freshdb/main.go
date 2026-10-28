@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -37,6 +38,7 @@ const usage = `freshdb — one log, many lenses (KV, topics, docs, vectors), wit
 time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./freshdb-data.
 
   freshdb serve [--listen :7070]              run the HTTP API
+        [--compact-every 1h] [--compact-grace 5m]   optional background compaction
   freshdb put KEY VALUE [--subject S]         write a key
   freshdb get KEY [--at LSN]                  read a key (time travel with --at)
   freshdb del KEY
@@ -51,6 +53,9 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
   freshdb log [--from LSN]                    show the raw log
   freshdb shred SUBJECT                       crypto-shred a subject everywhere; prints certificate
   freshdb verify                              check CRCs, hash chains, fencing, shred state
+  freshdb compact [--grace 0s]                drop overwritten/deleted/shredded data and the
+                                              history below each branch head (no time travel
+                                              below it afterwards); --grace delays deletion
   freshdb migrate [--to journal|files]         convert a stopped local DB's on-disk layout
   freshdb version
 
@@ -205,11 +210,42 @@ func serve(dbURL string, flags map[string]string) {
 		defer cancel()
 		srv.Shutdown(ctx)
 	}()
+	if every := flags["compact-every"]; every != "" {
+		startCompactor(db, every, flags["compact-grace"])
+	}
 	log.Printf("freshdb: serving %s on http://%s (epoch %d)", dbURL, listen, db.Epoch())
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
 	db.Close()
+}
+
+// startCompactor compacts every interval in the background.
+func startCompactor(db *freshdb.DB, every, grace string) {
+	d, err := time.ParseDuration(every)
+	if err != nil || d <= 0 {
+		log.Fatalf("freshdb: --compact-every %q: want a positive duration like 1h", every)
+	}
+	g := 5 * time.Minute
+	if grace != "" {
+		if g, err = time.ParseDuration(grace); err != nil || g < 0 {
+			log.Fatalf("freshdb: --compact-grace %q: want a duration like 5m", grace)
+		}
+	}
+	go func() {
+		for range time.Tick(d) {
+			st, err := db.Compact(context.Background(), freshdb.CompactOptions{Grace: g})
+			if errors.Is(err, freshdb.ErrClosed) {
+				return
+			}
+			if err != nil {
+				log.Printf("freshdb: compaction: %v", err)
+				continue
+			}
+			log.Printf("freshdb: compacted %d logs (%d keys, %d messages, %d bytes written, %d objects deleted, %d garbage items pending)",
+				st.Logs, st.Keys, st.Messages, st.BaseBytes, st.Deleted, st.Pending)
+		}
+	}()
 }
 
 // ---- commands ----
@@ -366,6 +402,12 @@ func (c *cli) run() int {
 		st, _ = c.call("GET", "/v1/log"+c.q(), nil, false)
 	case "shred":
 		st, _ = c.call("POST", "/v1/shred/"+esc(c.arg(1, "SUBJECT")), nil, false)
+	case "compact":
+		g := c.flags["grace"]
+		if g == "" {
+			g = "0s"
+		}
+		st, _ = c.call("POST", "/v1/compact?grace="+url.QueryEscape(g), nil, false)
 	case "verify":
 		var b []byte
 		st, b = c.call("GET", "/v1/verify", nil, false)

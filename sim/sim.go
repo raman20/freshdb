@@ -52,6 +52,7 @@ type Result struct {
 	Takeovers int
 	Shreds    int
 	Rewinds   int
+	Compacts  int
 	Faults    int
 	TraceHash [32]byte
 }
@@ -78,9 +79,18 @@ type sim struct {
 	shred   map[string]bool // subject -> definitely shredded
 	shredQ  map[string]bool // shred outcome unknown
 	rewindQ uint64          // ambiguous rewind target (+1), 0 = none
-	nextID  int
-	res     Result
-	trace   []string
+	// prefix: tx ids (and LSNs) in each compaction base, by "log@LSN";
+	// the log only has entries above the base
+	prefix map[string]txPrefix
+	nextID int
+	lsns   []uint64 // LSNs of the ids last returned by recovered
+	res    Result
+	trace  []string
+}
+
+type txPrefix struct {
+	ids  []int
+	lsns []uint64
 }
 
 type lockedRand struct {
@@ -129,7 +139,7 @@ func (s *sim) open() (*freshdb.DB, error) {
 func Run(seed int64, cfg Config) (Result, error) {
 	s := &sim{ctx: context.Background(), rng: rand.New(rand.NewSource(seed)), seed: seed,
 		txs: map[int][]mop{}, acked: map[int]uint64{}, amb: map[int]bool{},
-		shred: map[string]bool{}, shredQ: map[string]bool{}}
+		shred: map[string]bool{}, shredQ: map[string]bool{}, prefix: map[string]txPrefix{}}
 	s.res.Seed = seed
 	s.rnd = &lockedRand{r: rand.New(rand.NewSource(seed ^ 0x5eed))}
 	s.mem = store.NewMem()
@@ -141,8 +151,10 @@ func Run(seed int64, cfg Config) (Result, error) {
 	for s.res.Steps = 0; s.res.Steps < cfg.Steps; s.res.Steps++ {
 		var err error
 		switch r := s.rng.Intn(100); {
-		case r < 70:
+		case r < 66:
 			err = s.txn()
+		case r < 70:
+			err = s.compact()
 		case r < 80:
 			err = s.crash(true)
 		case r < 85:
@@ -311,6 +323,9 @@ func (s *sim) rewind() error {
 	}
 	err = s.db.Rewind(s.ctx, "main", at)
 	s.log("rewind %d=%v", at, err)
+	if errors.Is(err, freshdb.ErrCompacted) {
+		return nil // below the base: refused, nothing changed
+	}
 	if err == nil {
 		s.res.Rewinds++
 		s.truncate(at)
@@ -336,6 +351,13 @@ func (s *sim) recovered() ([]int, error) {
 	}
 	var ids []int
 	var lsns []uint64
+	if key := s.floorKey(); key != "" {
+		p, ok := s.prefix[key]
+		if !ok {
+			return nil, fmt.Errorf("main starts from base %s that no compaction made", key)
+		}
+		ids, lsns = append(ids, p.ids...), append(lsns, p.lsns...)
+	}
 	for _, e := range es {
 		for _, op := range e.Ops {
 			if op.Kind == format.OpPut && op.Space == "kv" && op.Key == "__tx" {
@@ -369,8 +391,49 @@ func (s *sim) recovered() ([]int, error) {
 			s.truncate(at)
 		}
 	}
-	_ = lsns
+	s.lsns = lsns
 	return ids, nil
+}
+
+// floorKey names main's compaction base ("" if none).
+func (s *sim) floorKey() string {
+	m := s.db.Manifest()
+	for lm := m.Logs[m.Refs["main"]]; lm != nil; lm = m.Logs[lm.Parent] {
+		if lm.Base != nil {
+			return fmt.Sprintf("%s@%d", lm.ID, lm.Base.LSN)
+		}
+		if lm.Parent == "" {
+			break
+		}
+	}
+	return ""
+}
+
+// compact records which txns are at main's head, then compacts. A
+// failed compaction may still have committed: recover and check.
+func (s *sim) compact() error {
+	if err := s.check(); err != nil {
+		return err
+	}
+	s.st.On = false // bookkeeping read, not under test
+	head, err := s.db.Branch("main").Head()
+	if err != nil {
+		return s.fail("%v", err)
+	}
+	ids, err := s.recovered()
+	s.st.On = true
+	if err != nil {
+		return s.fail("%v", err)
+	}
+	m := s.db.Manifest()
+	s.prefix[fmt.Sprintf("%s@%d", m.Refs["main"], head)] = txPrefix{ids, s.lsns}
+	_, err = s.db.Compact(s.ctx, freshdb.CompactOptions{})
+	s.log("compact @%d=%v", head, err)
+	if err == nil {
+		s.res.Compacts++
+		return s.check()
+	}
+	return s.crash(true)
 }
 
 func (s *sim) check() error {

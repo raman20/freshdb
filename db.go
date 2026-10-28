@@ -83,6 +83,40 @@ type DB struct {
 	failed error
 	closed bool
 	owned  io.Closer // store opened by Open from a URL; closed by Close
+	// compacting is set while Compact runs; branch ops wait on
+	// compactDone (lockIdle) and paused writers' callers retry after it.
+	compacting  bool
+	compactDone chan struct{}
+}
+
+// lockIdle takes db.mu once no compaction is running.
+func (db *DB) lockIdle() {
+	for {
+		db.mu.Lock()
+		if !db.compacting {
+			return
+		}
+		ch := db.compactDone
+		db.mu.Unlock()
+		<-ch
+	}
+}
+
+// waitCompaction blocks until a running compaction finishes.
+func (db *DB) waitCompaction(ctx context.Context) error {
+	db.mu.RLock()
+	ch := db.compactDone
+	busy := db.compacting
+	db.mu.RUnlock()
+	if !busy {
+		return nil
+	}
+	select {
+	case <-ch:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Open opens (or creates) the database at url: a directory path or
@@ -230,7 +264,15 @@ func (db *DB) loadLog(ctx context.Context, id string, writable bool) (*logState,
 		return nil, fmt.Errorf("%w: unknown log %s", ErrCorrupt, id)
 	}
 	l := &logState{meta: *meta, st: db.st}
-	if meta.Parent != "" {
+	if b := meta.Base; b != nil {
+		// A compacted log starts from its base: no parent, no older segments.
+		c, err := hex.DecodeString(b.Chain)
+		if err != nil || len(c) != 32 || b.LSN < meta.ParentLSN {
+			return nil, fmt.Errorf("%w: log %s: bad base", ErrCorrupt, id)
+		}
+		copy(l.base[:], c)
+		l.n, l.lastTS, l.nextSeq = b.LSN-meta.ParentLSN, b.TS, b.Seq
+	} else if meta.Parent != "" {
 		p, err := db.loadLog(ctx, meta.Parent, false)
 		if err != nil {
 			return nil, err
@@ -264,7 +306,7 @@ func (db *DB) openWritable(ctx context.Context, id string) (*writer, error) {
 		return nil, err
 	}
 	snap := db.loadSnapshot(ctx, l)
-	v, err := buildView(ctx, l, l.head(), db.env, db.man.Indexes, snap, db.opts.InlineMax)
+	v, err := db.buildView(ctx, l, l.head(), db.man.Indexes, snap)
 	if err != nil {
 		return nil, err
 	}

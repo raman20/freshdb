@@ -111,14 +111,14 @@ func (tx *Tx) open(ver lens.Version, space, key string) ([]byte, error) {
 	val, owned := ver.Val, false // ver.Val is shared lens state
 	var logID string
 	if ver.Ref() || ver.Subject != "" {
-		x, s, ok := tx.v.log.locate(ver.LSN)
+		x, seq, ok := tx.v.log.source(ver)
 		if !ok {
 			return nil, fmt.Errorf("%w: LSN %d of %s/%s not in the log", ErrCorrupt, ver.LSN, space, key)
 		}
 		logID = x.meta.ID
 		if ver.Ref() {
 			var err error
-			if val, err = tx.db.readValue(x, s.seq, ver); err != nil {
+			if val, err = tx.db.readValue(x, seq, ver); err != nil {
 				return nil, err
 			}
 			owned = true // readValue returns a private copy
@@ -326,7 +326,7 @@ func (tx *Tx) lensView() (*view, error) {
 		tx.db.mu.Lock()
 		idx := append([]IndexDecl{}, tx.db.man.Indexes...)
 		tx.db.mu.Unlock()
-		v, err := buildView(tx.lazyCtx, tx.lazyLog, tx.at, tx.db.env, idx, nil, tx.db.opts.InlineMax)
+		v, err := tx.db.buildView(tx.lazyCtx, tx.lazyLog, tx.at, idx, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -371,7 +371,7 @@ func (t TopicTx) Read(from uint64, max int) ([]Message, error) {
 		if !m.Redacted {
 			if m.Subject == "" {
 				msg.Value = bytes.Clone(m.Val) // m.Val is shared lens state
-			} else if p, err := t.tx.openAppend(m); err == nil {
+			} else if p, err := t.tx.openAppend(topicSpace(t.topic), m); err == nil {
 				msg.Value = p
 			} else {
 				msg.Redacted = true
@@ -382,14 +382,27 @@ func (t TopicTx) Read(from uint64, max int) ([]Message, error) {
 	return out, nil
 }
 
-func (tx *Tx) openAppend(m lens.Msg) ([]byte, error) {
-	e, err := tx.v.log.entryAt(context.Background(), m.LSN)
+func (tx *Tx) openAppend(space string, m lens.Msg) ([]byte, error) {
+	return tx.db.openMsg(tx.v.log, space, m)
+}
+
+// openMsg decrypts a subject topic message of lineage l. Messages in a
+// compaction base were re-sealed under baseMsgAAD; others are found by
+// re-reading their log entry.
+func (db *DB) openMsg(l *logState, space string, m lens.Msg) ([]byte, error) {
+	if b := l.based(); b != nil && m.LSN <= b.meta.Base.LSN {
+		if p, ok := db.keys.open(m.Subject, m.Val, baseMsgAAD(b.meta.ID, space, m)); ok {
+			return p, nil
+		}
+		return nil, ErrShredded
+	}
+	e, err := l.entryAt(context.Background(), m.LSN)
 	if err != nil {
 		return nil, err
 	}
 	for i, op := range e.Ops {
 		if op.Kind == format.OpAppend && bytes.Equal(op.Value, m.Val) {
-			if p, ok := tx.db.env.Open(e, i); ok {
+			if p, ok := db.env.Open(e, i); ok {
 				return p, nil
 			}
 		}
@@ -493,6 +506,13 @@ func (b *Branch) UpdateLSN(ctx context.Context, fn func(*Tx) error) (uint64, err
 				return 0, err
 			}
 			res := w.submit(&commitReq{attempt: i, exec: fn})
+			if errors.Is(res.err, errPaused) { // compaction swapped the writer: not an attempt
+				if err := b.db.waitCompaction(ctx); err != nil {
+					return 0, err
+				}
+				i--
+				continue
+			}
 			if res.panicked != nil {
 				panic(res.panicked)
 			}
@@ -516,6 +536,13 @@ func (b *Branch) UpdateLSN(ctx context.Context, fn func(*Tx) error) (uint64, err
 			return 0, err
 		}
 		res := w.submit(&commitReq{at: tx.at, ops: tx.ops, reads: tx.reads, prefixes: tx.prefixes, attempt: i})
+		if errors.Is(res.err, errPaused) {
+			if err := b.db.waitCompaction(ctx); err != nil {
+				return 0, err
+			}
+			i--
+			continue
+		}
 		if errors.Is(res.err, ErrConflict) {
 			last = res.err
 			if err := conflictBackoff(ctx, i); err != nil {
@@ -571,6 +598,9 @@ func (b *Branch) ViewAt(ctx context.Context, at uint64, fn func(*Tx) error) erro
 	}
 	if at > head {
 		return fmt.Errorf("%w: %d > head %d", ErrBadLSN, at, head)
+	}
+	if f := w.l.floor(); at < f {
+		return fmt.Errorf("%w: LSN %d < base %d", ErrCompacted, at, f)
 	}
 	// Read-only: no read set and no local writes, so no maps to allocate.
 	tx := &Tx{db: b.db, v: w.v, at: at, lazyCtx: ctx, lazyLog: w.l}

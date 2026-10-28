@@ -47,6 +47,37 @@ func (l *logState) head() uint64 {
 	return l.meta.ParentLSN + l.n
 }
 
+// based returns the log in this lineage that has a compaction base
+// (lineages stop at a based log), or nil.
+func (l *logState) based() *logState {
+	for x := l; x != nil; x = x.parent {
+		if x.meta.Base != nil {
+			return x
+		}
+	}
+	return nil
+}
+
+// floor is the LSN of the lineage's compaction base (0 if none): history
+// at or below it exists only as the base image.
+func (l *logState) floor() uint64 {
+	if b := l.based(); b != nil {
+		return b.meta.Base.LSN
+	}
+	return 0
+}
+
+// source finds where a version's bytes live and which log sealed them:
+// the based log for anything at or below the compaction base (its value
+// chunks, re-sealed under its ID), else the segment holding the LSN.
+func (l *logState) source(ver lens.Version) (*logState, uint64, bool) {
+	if b := l.based(); b != nil && (ver.Chunk != 0 || ver.LSN <= b.meta.Base.LSN) {
+		return b, 0, true
+	}
+	x, s, ok := l.locate(ver.LSN)
+	return x, s.seq, ok
+}
+
 // tip returns the chain head after the last frame. Caller holds l.mu.
 func (l *logState) tip() [32]byte {
 	if n := len(l.segs); n > 0 {
@@ -107,6 +138,12 @@ func (l *logState) chainAt(ctx context.Context, lsn uint64) ([32]byte, error) {
 	if lsn == 0 {
 		return [32]byte{}, nil
 	}
+	if b := l.based(); b != nil && lsn <= b.meta.Base.LSN {
+		if lsn == b.meta.Base.LSN {
+			return b.base, nil
+		}
+		return [32]byte{}, fmt.Errorf("%w: LSN %d < base %d", ErrCompacted, lsn, b.meta.Base.LSN)
+	}
 	x, s, ok := l.locate(lsn)
 	if !ok {
 		return [32]byte{}, fmt.Errorf("%w: LSN %d not in log %s", ErrBadLSN, lsn, l.meta.ID)
@@ -166,6 +203,9 @@ func (l *logState) lineage(ctx context.Context, upto uint64) ([]*lens.Entry, err
 
 // entryAt returns the entry with the given LSN in this lineage.
 func (l *logState) entryAt(ctx context.Context, lsn uint64) (*lens.Entry, error) {
+	if lsn <= l.floor() {
+		return nil, fmt.Errorf("%w: LSN %d", ErrCompacted, lsn)
+	}
 	x, s, ok := l.locate(lsn)
 	if !ok {
 		return nil, ErrNotFound

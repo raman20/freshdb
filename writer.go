@@ -51,6 +51,7 @@ type writer struct {
 
 	mu      sync.RWMutex
 	closed  bool
+	paused  bool // stopped for compaction: submit returns errPaused
 	ch      chan *commitReq
 	done    chan struct{}
 	crashed atomic.Bool
@@ -81,8 +82,12 @@ func (w *writer) submit(r *commitReq) commitRes {
 	r.done = make(chan commitRes, 1)
 	w.mu.RLock()
 	if w.closed {
+		err := ErrClosed
+		if w.paused {
+			err = errPaused
+		}
 		w.mu.RUnlock()
-		return commitRes{err: ErrClosed}
+		return commitRes{err: err}
 	}
 	w.ch <- r
 	w.mu.RUnlock()
@@ -97,6 +102,15 @@ func (w *writer) stop() {
 	}
 	w.mu.Unlock()
 	<-w.done
+}
+
+// pause stops the writer for compaction; later submits get errPaused
+// and retry on the writer that replaces it.
+func (w *writer) pause() {
+	w.mu.Lock()
+	w.paused = true
+	w.mu.Unlock()
+	w.stop()
 }
 
 func (w *writer) crash() {
@@ -374,7 +388,7 @@ func (db *DB) writeSnapshot(ctx context.Context, logID string, v *view) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	return db.commitManifest(ctx, func(m *Manifest) error {
-		if lm := m.Logs[logID]; lm != nil && lm.SnapLSN < lsn {
+		if lm := m.Logs[logID]; lm != nil && lm.SnapLSN < lsn && (lm.Base == nil || lm.Base.LSN < lsn) {
 			lm.SnapLSN, lm.SnapKey = lsn, key
 		}
 		return nil
@@ -394,7 +408,7 @@ func (db *DB) loadSnapshot(ctx context.Context, l *logState) *snapshot {
 	lsn := binary.LittleEndian.Uint64(b)
 	n := binary.LittleEndian.Uint64(b[8:])
 	body := b[16 : len(b)-4]
-	if n > uint64(len(body)) || lsn > l.head() {
+	if n > uint64(len(body)) || lsn > l.head() || lsn < l.floor() {
 		return nil
 	}
 	kv, err1 := lens.LoadKV(body[:n], db.opts.InlineMax)

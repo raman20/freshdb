@@ -47,10 +47,11 @@ func TestSimulation(t *testing.T) {
 		tot.Takeovers += r.Takeovers
 		tot.Shreds += r.Shreds
 		tot.Rewinds += r.Rewinds
+		tot.Compacts += r.Compacts
 		tot.Faults += r.Faults
 	}
-	t.Logf("%d seeds OK: %d acked txns, %d ambiguous, %d crashes, %d takeovers, %d shreds, %d rewinds, %d injected store faults",
-		n, tot.Acked, tot.Ambiguous, tot.Crashes, tot.Takeovers, tot.Shreds, tot.Rewinds, tot.Faults)
+	t.Logf("%d seeds OK: %d acked txns, %d ambiguous, %d crashes, %d takeovers, %d shreds, %d rewinds, %d compactions, %d injected store faults",
+		n, tot.Acked, tot.Ambiguous, tot.Crashes, tot.Takeovers, tot.Shreds, tot.Rewinds, tot.Compacts, tot.Faults)
 }
 
 // TestDeterminism: the same seed produces a bit-identical trace.

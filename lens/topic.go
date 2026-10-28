@@ -131,3 +131,12 @@ func LoadTopic(b []byte) (*Topic, error) {
 	}
 	return l, nil
 }
+
+// Spaces returns the topic spaces in order.
+func (l *Topic) Spaces() []string { return sortedKeys(l.m) }
+
+// All returns every message of space (shared; do not modify).
+func (l *Topic) All(space string) []Msg { return l.m[space] }
+
+// SetAll replaces the messages of space. For building compaction bases.
+func (l *Topic) SetAll(space string, ms []Msg) { l.m[space] = ms }

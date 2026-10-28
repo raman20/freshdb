@@ -22,6 +22,7 @@ type Version struct {
 	Op      uint32 // index of the op in its frame (AEAD associated data)
 	Sum     uint32 // CRC-32C of the stored bytes when Off != 0
 	Del     bool   // delete, or redacted (shredded) put
+	Chunk   uint32 // != 0: the value is in value chunk Chunk-1 of the log's compaction base, at Off
 	Subject string
 	Val     []byte // inline stored bytes (ciphertext if Subject != "")
 }
@@ -53,7 +54,7 @@ func NewKVInline(max int) *KV {
 	return &KV{m: map[string][]Version{}, inline: max}
 }
 
-func redact(v *Version) { v.Val, v.Del, v.Off, v.Len, v.Sum = nil, true, 0, 0, 0 }
+func redact(v *Version) { v.Val, v.Del, v.Off, v.Len, v.Sum, v.Chunk = nil, true, 0, 0, 0, 0 }
 
 func (*KV) Name() string { return "kv" }
 
@@ -143,8 +144,21 @@ func (l *KV) Scan(space, prefix string, at uint64) []Pair {
 }
 
 func (l *KV) encode() []byte {
+	// KV3 adds a chunk number per version; it is written only when some
+	// version lives in a compaction base, so KV2 bytes (and digests) of
+	// uncompacted state are unchanged.
+	v3 := false
+	for _, vs := range l.m {
+		for _, v := range vs {
+			v3 = v3 || v.Chunk != 0
+		}
+	}
 	e := &enc{}
-	e.str("KV2")
+	if v3 {
+		e.str("KV3")
+	} else {
+		e.str("KV2")
+	}
 	e.u64(uint64(l.inline))
 	e.u64(uint64(len(l.m)))
 	for _, k := range sortedKeys(l.m) {
@@ -155,6 +169,9 @@ func (l *KV) encode() []byte {
 			e.u64(v.LSN)
 			e.u64(uint64(v.Off)<<32 | uint64(v.Len))
 			e.u64(uint64(v.Op)<<32 | uint64(v.Sum))
+			if v3 {
+				e.u64(uint64(v.Chunk))
+			}
 			e.bytes(v.Val)
 			e.str(v.Subject)
 			e.bool(v.Del)
@@ -174,13 +191,22 @@ var ErrBadSnapshot = errors.New("lens: bad snapshot")
 // LoadKV loads a snapshot. A snapshot written with a different inline
 // limit (or by v0.1.0, format KV1) is rejected; the caller then replays the
 // log instead, so the result is always fold(log).
-func LoadKV(b []byte, inline int) (*KV, error) {
+func LoadKV(b []byte, inline int) (*KV, error) { return loadKV(b, inline, true) }
+
+// LoadKVBase loads a compaction base image. Unlike a snapshot (a cache
+// that is rebuilt when it does not match), a base is the only copy of its
+// state, so it loads under any inline limit: the limit only decides how
+// values committed later are held.
+func LoadKVBase(b []byte, inline int) (*KV, error) { return loadKV(b, inline, false) }
+
+func loadKV(b []byte, inline int, strict bool) (*KV, error) {
 	d := &dec{b: b}
-	if d.str() != "KV2" {
+	f := d.str()
+	if f != "KV2" && f != "KV3" {
 		return nil, ErrBadSnapshot
 	}
 	l := NewKVInline(inline)
-	if d.u64() != uint64(l.inline) {
+	if d.u64() != uint64(l.inline) && strict {
 		return nil, ErrBadSnapshot
 	}
 	n := d.u64()
@@ -195,6 +221,9 @@ func LoadKV(b []byte, inline int) (*KV, error) {
 			v := Version{LSN: d.u64()}
 			ol, os := d.u64(), d.u64()
 			v.Off, v.Len, v.Op, v.Sum = uint32(ol>>32), uint32(ol), uint32(os>>32), uint32(os)
+			if f == "KV3" {
+				v.Chunk = uint32(d.u64())
+			}
 			v.Val, v.Subject, v.Del = d.bytes(), d.str(), d.bool()
 			vs = append(vs, v)
 		}
@@ -208,3 +237,20 @@ func LoadKV(b []byte, inline int) (*KV, error) {
 
 // Inline returns the lens' inline-value limit.
 func (l *KV) Inline() int { return l.inline }
+
+// Latest calls fn for every key, in key order, with the version visible
+// at the newest LSN (deleted and redacted keys included; fn checks Del).
+func (l *KV) Latest(fn func(space, key string, v Version) error) error {
+	for _, k := range sortedKeys(l.m) {
+		vs := l.m[k]
+		i := strings.IndexByte(k, 0)
+		if err := fn(k[:i], k[i+1:], vs[len(vs)-1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetLatest makes v the only version of (space,key). For building
+// compaction bases.
+func (l *KV) SetLatest(space, key string, v Version) { l.m[ck(space, key)] = []Version{v} }

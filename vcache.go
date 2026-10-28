@@ -191,11 +191,14 @@ func (c *valueCache) close() {
 // segment seq of log x, via the cache, verifying the lens' checksum. The
 // result is a private copy the caller may modify.
 func (db *DB) readValue(x *logState, seq uint64, ver lens.Version) ([]byte, error) {
-	k := vcKey{x.meta.ID, seq, ver.Off}
+	k, obj := vcKey{x.meta.ID, seq, ver.Off}, segKey(x.meta.ID, seq)
+	if ver.Chunk != 0 { // in a compaction base's value chunk (x is the based log)
+		k, obj = vcKey{x.meta.Base.Key, 1<<63 | uint64(ver.Chunk), ver.Off}, chunkKey(x.meta.Base.Key, int(ver.Chunk-1))
+	}
 	if b, ok := db.vcache.get(k); ok {
 		return b, nil
 	}
-	b, err := store.GetRange(context.Background(), db.st, segKey(x.meta.ID, seq), int64(ver.Off), int64(ver.Len))
+	b, err := store.GetRange(context.Background(), db.st, obj, int64(ver.Off), int64(ver.Len))
 	if err != nil {
 		return nil, fmt.Errorf("freshdb: reading value at LSN %d: %w", ver.LSN, err)
 	}

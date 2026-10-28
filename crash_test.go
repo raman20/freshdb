@@ -31,6 +31,17 @@ func crashChild(loc string) {
 	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+	if os.Getenv("FRESHDB_CRASH_COMPACT") != "" {
+		go func() { // compaction racing the commits: SIGKILL lands mid-compaction too
+			for {
+				time.Sleep(5 * time.Millisecond)
+				if _, err := db.Compact(ctx, CompactOptions{}); err != nil {
+					fmt.Println("ERR compact", err)
+					os.Exit(5)
+				}
+			}
+		}()
+	}
 	for g := 0; g < crashG; g++ {
 		wg.Add(1)
 		go func(g int) {
@@ -80,9 +91,17 @@ func TestCrashKill9PrefixConsistent(t *testing.T) { crashKill9(t, "fs://"+t.Temp
 // The journal store keeps every segment in one file; same invariants.
 func TestCrashKill9Journal(t *testing.T) { crashKill9(t, "journal://"+t.TempDir()) }
 
+// Same, with the child compacting (grace 0) in a loop while it commits.
+func TestCrashKill9Compact(t *testing.T) {
+	crashKill9(t, "fs://"+t.TempDir(), "FRESHDB_CRASH_COMPACT=1")
+}
+func TestCrashKill9CompactJournal(t *testing.T) {
+	crashKill9(t, "journal://"+t.TempDir(), "FRESHDB_CRASH_COMPACT=1")
+}
+
 // crashKill9 repeatedly SIGKILLs a committing child process on the store at
 // loc (a store URL or bare path) and checks the recovered state.
-func crashKill9(t *testing.T, dir string) {
+func crashKill9(t *testing.T, dir string, env ...string) {
 	if testing.Short() {
 		t.Skip("short")
 	}
@@ -91,10 +110,11 @@ func crashKill9(t *testing.T, dir string) {
 		iters, _ = strconv.Atoi(s)
 	}
 	acked := make([]int, crashG)
+	based := 0 // recoveries that started from a compaction base
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for it := 0; it < iters; it++ {
 		cmd := exec.Command(os.Args[0], "-test.run=^$")
-		cmd.Env = append(os.Environ(), "FRESHDB_CRASH_CHILD="+dir)
+		cmd.Env = append(append(os.Environ(), env...), "FRESHDB_CRASH_CHILD="+dir)
 		out, _ := cmd.StdoutPipe()
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
@@ -165,12 +185,20 @@ func crashKill9(t *testing.T, dir string) {
 		if err != nil || !r.OK {
 			t.Fatalf("iter %d verify: %+v %v", it, r, err)
 		}
+		for _, lm := range db.Manifest().Logs {
+			if lm.Base != nil {
+				based++
+			}
+		}
 		d1, _, _ := db.LensDigests("main")
 		d2, _ := db.RebuildDigests("main")
 		if fmt.Sprint(d1) != fmt.Sprint(d2) {
 			t.Fatalf("iter %d: lens != fold(log)", it)
 		}
 		db.Close()
+	}
+	if len(env) > 0 && based == 0 {
+		t.Fatal("no recovery started from a compaction base")
 	}
 	total := 0
 	for _, a := range acked {

@@ -26,6 +26,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/raman20/freshdb"
 	"github.com/raman20/freshdb/format"
@@ -58,6 +59,7 @@ func Handler(db *freshdb.DB) http.Handler {
 	m.HandleFunc("POST /v1/shred/{subject}", s.shred)
 	m.HandleFunc("GET /v1/verify", s.verify)
 	m.HandleFunc("POST /v1/indexes", s.index)
+	m.HandleFunc("POST /v1/compact", s.compact)
 	return m
 }
 
@@ -75,7 +77,7 @@ func fail(w http.ResponseWriter, err error) {
 		code = http.StatusNotFound
 	case errors.Is(err, freshdb.ErrConflict), errors.Is(err, freshdb.ErrBranchExists), errors.Is(err, freshdb.ErrNotFastForward):
 		code = http.StatusConflict
-	case errors.Is(err, freshdb.ErrShredded):
+	case errors.Is(err, freshdb.ErrShredded), errors.Is(err, freshdb.ErrCompacted):
 		code = http.StatusGone
 	case errors.Is(err, freshdb.ErrBadLSN), errors.Is(err, errBad):
 		code = http.StatusBadRequest
@@ -576,6 +578,26 @@ func (s *Server) shred(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, map[string]any{"certificate": c, "valid_signature": freshdb.VerifyCertificate(c)})
+}
+
+// compact runs a compaction; ?grace=DURATION (default 5m) delays deleting
+// replaced objects for readers of older manifests.
+func (s *Server) compact(w http.ResponseWriter, r *http.Request) {
+	o := freshdb.CompactOptions{Grace: 5 * time.Minute}
+	if g := r.URL.Query().Get("grace"); g != "" {
+		d, err := time.ParseDuration(g)
+		if err != nil || d < 0 {
+			fail(w, fmt.Errorf("%w: grace %q", errBad, g))
+			return
+		}
+		o.Grace = d
+	}
+	st, err := s.DB.Compact(r.Context(), o)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, st)
 }
 
 func (s *Server) verify(w http.ResponseWriter, r *http.Request) {
