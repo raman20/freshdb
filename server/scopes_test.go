@@ -10,21 +10,25 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/raman20/freshdb"
 )
 
+var memSeq atomic.Int64
+
 func memDB(t *testing.T) *freshdb.DB {
 	t.Helper()
-	db, err := freshdb.Open(context.Background(), "mem://"+t.Name(), freshdb.WithLogf(func(string, ...any) {}))
+	db, err := freshdb.Open(context.Background(), fmt.Sprintf("mem://%s-%d", t.Name(), memSeq.Add(1)), freshdb.WithLogf(func(string, ...any) {}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,8 +199,18 @@ func TestTokenRotation(t *testing.T) {
 
 func TestStreamAndWaiterLimits(t *testing.T) {
 	db := memDB(t)
-	srv := httptest.NewServer(New(db, Options{MaxStreams: 1, MaxWaiters: 1}))
+	s := newServer(db, Options{MaxStreams: 1, MaxWaiters: 1})
+	srv := httptest.NewServer(s.routes())
 	defer srv.Close()
+	until := func(what string, ok func() bool) {
+		t.Helper()
+		for i := 0; i < 500 && !ok(); i++ {
+			time.Sleep(10 * time.Millisecond)
+		}
+		if !ok() {
+			t.Fatal(what)
+		}
+	}
 	resp, err := http.Get(srv.URL + "/v1/topics/t/stream")
 	if err != nil || resp.StatusCode != 200 {
 		t.Fatal(resp, err)
@@ -210,49 +224,30 @@ func TestStreamAndWaiterLimits(t *testing.T) {
 		t.Fatalf("second stream: %d", r2.StatusCode)
 	}
 	resp.Body.Close() // frees the slot once the handler sees it
-	ok := false
-	for i := 0; i < 100 && !ok; i++ {
-		r3, err := http.Get(srv.URL + "/v1/topics/t/stream")
-		if err != nil {
-			t.Fatal(err)
-		}
-		ok = r3.StatusCode == 200
-		r3.Body.Close()
-		if !ok {
-			time.Sleep(50 * time.Millisecond)
-		}
-	}
-	if !ok {
-		t.Fatal("stream slot not released")
-	}
+	until("stream slot not released", func() bool { return len(s.streams) == 0 })
 	// long-polls: one waits, the next is refused, a plain read is not
-	started := make(chan struct{})
+	done := make(chan struct{})
 	go func() {
-		close(started)
+		defer close(done)
 		r, err := http.Get(srv.URL + "/v1/topics/q?wait=3s")
 		if err == nil {
 			r.Body.Close()
 		}
 	}()
-	<-started
-	var code int
-	for i := 0; i < 100; i++ {
-		r, err := http.Get(srv.URL + "/v1/topics/q?wait=3s")
-		if err != nil {
-			t.Fatal(err)
-		}
-		r.Body.Close()
-		if code = r.StatusCode; code == 503 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
+	until("long-poll not waiting", func() bool { return len(s.waiters) == 1 })
+	r, err := http.Get(srv.URL + "/v1/topics/q?wait=3s")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if code != 503 {
-		t.Fatalf("second long-poll: %d", code)
+	r.Body.Close()
+	if r.StatusCode != 503 {
+		t.Fatalf("second long-poll: %d", r.StatusCode)
 	}
 	if r, err := http.Get(srv.URL + "/v1/topics/q"); err != nil || r.StatusCode != 200 {
 		t.Fatal("plain read refused", err)
 	}
+	<-done
+	until("waiter slot not released", func() bool { return len(s.waiters) == 0 })
 }
 
 func writePair(t *testing.T, dir string, serial int64) (string, string) {
