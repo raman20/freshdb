@@ -1,0 +1,97 @@
+{
+  "suite": "msg",
+  "env": {
+    "time": "2026-10-28T17:13:37+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "282c3a6",
+    "command": "./bin/freshdb-bench msg -system freshdb -rates 1000 -groups 1 -group-rate 1000 -duration 10s -idle sleep:500ms -out results/2026-10-28-push/sleep500ms-run2",
+    "loadavg_at_start": "2.64 2.61 1.99"
+  },
+  "params": {
+    "consume_batch": 100,
+    "disk_after_run": "1.1G",
+    "drain_limit": "30s",
+    "duration": "10s",
+    "e2e": "consumer-side time after the durable ack minus the producer's intended send time (open-loop schedule)",
+    "fsync": true,
+    "max_producers": 64,
+    "payload_bytes": 1024,
+    "peak_rss": "2203348 kB",
+    "producers": 8,
+    "system": "freshdb"
+  },
+  "runs": [
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit; journal layout)",
+      "idle": "sleep:500ms",
+      "kind": "fixed-rate",
+      "target_rate": 1000,
+      "producers": 8,
+      "groups": 1,
+      "published": 10000,
+      "publish_per_sec": 1000.1,
+      "delivered_per_group_min": 10000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 10000,
+        "mean_us": 1030.14,
+        "p50_us": 87.04,
+        "p99_us": 31637.5,
+        "p999_us": 50135.04,
+        "max_us": 59310.08
+      },
+      "end_to_end_latency": {
+        "count": 10000,
+        "mean_us": 250580.54,
+        "p50_us": 250609.66,
+        "p99_us": 495452.16,
+        "p999_us": 499908.61,
+        "max_us": 500432.9
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit; journal layout)",
+      "idle": "sleep:500ms",
+      "kind": "max-throughput",
+      "producers": 64,
+      "groups": 1,
+      "published": 1051484,
+      "publish_per_sec": 105145.2,
+      "delivered_per_group_min": 1051484,
+      "consume_per_sec_per_group": 101808.9,
+      "backlog_at_end": 33395,
+      "publish_latency": {
+        "count": 1051484,
+        "mean_us": 608.13,
+        "p50_us": 380.67,
+        "p99_us": 4022.27,
+        "p999_us": 19218.43,
+        "max_us": 113901.57
+      },
+      "end_to_end_latency": {
+        "count": 0,
+        "mean_us": 0,
+        "p50_us": 0,
+        "p99_us": 0,
+        "p999_us": 0,
+        "max_us": 0
+      },
+      "errors": 0
+    }
+  ],
+  "notes": [
+    "freshDB consumer on an empty fetch, -idle=sleep:500ms: spin sleeps 200us; sleep:\u003cd\u003e polls every d; wait blocks in DB.WaitHead (push) until the head moves."
+  ]
+}

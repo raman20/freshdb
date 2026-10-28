@@ -105,7 +105,9 @@ $ freshdb get result/t0
 
 `freshdb sub --group G` on its own fetches *and* acks, so it is at-most-once
 for the client. `tx` ops: `put`, `del`, `pub`, `ack`, `doc`, `vec`.
-`sub --follow` keeps polling for new messages.
+`sub --follow` long-polls (`?wait=30s`), so new messages arrive as soon as
+they commit. Over HTTP, `GET /v1/topics/{t}/stream` is a Server-Sent Events
+stream.
 
 ## Forget a subject
 

@@ -14,6 +14,11 @@ bug reports). Everything must respect the [design principles](docs/design-princi
 - [x] TLA+ specs + TLC in CI; deterministic simulator; property tests; fuzzing
 - [x] Journal layout (one append-only file per local DB) as the default on
   Unix, with `freshdb migrate` for v0.1.0 directories (unreleased)
+- [x] Compaction: base images, garbage with a grace period (unreleased)
+- [x] Opt-in HNSW vector index, exact search stays the default (unreleased)
+- [x] Bearer-token auth and TLS for `serve`; refuse open binds without a
+  token (unreleased)
+- [x] Push consumers: `WaitHead`, HTTP long-poll and SSE (unreleased)
 - [ ] Test on AWS S3 and Cloudflare R2 (only MinIO is tested today)
 - [x] `--kek-file` / `FRESHDB_KEK` and a `KeyProvider` interface (unreleased)
 - [ ] Prebuilt binaries for every release, and checksums

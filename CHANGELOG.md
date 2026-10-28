@@ -46,6 +46,17 @@ in its "Changes since v0.1.0" section.
   base64). Open writes `keys/_kekcheck` and returns `ErrWrongKEK` for a
   wrong key, even on a database with no DEKs. Dev-key mode (no key
   supplied) is unchanged but now logs a warning once per process. No rekey.
+- **Push consumers.** `(*DB).WaitHead(ctx, branch, seen)` blocks until a
+  branch head moves (commit, rewind or promote), and `(*DB).Head(branch)`
+  returns the current head. HTTP: `?wait=30s` (max 60 s) long-polls
+  `GET /v1/topics/{t}` and `POST /v1/topics/{t}/groups/{g}/next`, and
+  `GET /v1/topics/{t}/stream?from=` is a Server-Sent Events stream
+  (`id:` = offset, resumes from `Last-Event-ID`, `: ping` every 15 s).
+  `freshdb sub --follow` long-polls instead of sleeping 500 ms. TLA+ model
+  `FreshNotify` checks there is no lost wake-up. At 1k msgs/s, e2e p99 is
+  1–15 ms with `WaitHead` vs 99 ms when polling every 100 ms and 495 ms
+  for the old 500 ms `--follow` sleep; p50 0.13 ms vs 0.24 ms for a
+  200 µs spin.
 - `ErrCompacted` (HTTP 410) for reads, branches and rewinds below a
   compacted log's base. Time travel below the base is gone by design.
 - Manifest format 2 (written after the first compaction; v0.1.0 binaries

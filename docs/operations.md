@@ -130,6 +130,13 @@ export FRESHDB_ADDR=http://127.0.0.1:7070            # point CLI calls at it
   embedded CLI calls. A wrong key fails at open with "wrong key-encryption
   key". A database first opened without a key stays in dev-key mode
   (no rekey yet).
+- Consumers can long-poll (`?wait=30s`, max 60 s) or hold an SSE stream
+  (`GET /v1/topics/{t}/stream`, a `: ping` comment every 15 s). Each one
+  holds a connection and a goroutine and there is no per-server limit yet,
+  so cap connections at a proxy if clients are untrusted. Proxies must not
+  buffer `text/event-stream` responses (nginx: `proxy_buffering off`).
+  Streams end when the server shuts down; clients resume with
+  `Last-Event-ID`.
 - To scale, shard by database (one per tenant or agent).
 
 ## Backups and restore

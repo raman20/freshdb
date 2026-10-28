@@ -29,6 +29,7 @@ suites (same VM, same commands and seeds, fsync on), all on unreleased
 - YCSB and streaming with the **default URL** (a bare path, which now means the journal layout on Unix): [`2026-10-28-default-journal/`](../bench/results/2026-10-28-default-journal/), commit `6e7b172`, plus a back-to-back default-vs-`journal://` A/B at 1k msgs/s in [`ab-1k/`](../bench/results/2026-10-28-default-journal/ab-1k/).
 - YCSB with the default URL after the read-path work (item 2): [`2026-10-28-read-path/`](../bench/results/2026-10-28-read-path/), commit `e12e909`, same command as `2026-10-28-default-journal`.
 - Compaction (item 3), storage and open time before/after `Compact`: [`2026-10-28-compaction/`](../bench/results/2026-10-28-compaction/), commit `09773ea` (`freshdb-bench compact`).
+- Push consumers (item 6), message latency at 1k msgs/s by consumer idle mode: [`2026-10-28-push/`](../bench/results/2026-10-28-push/), commit `282c3a6` (`freshdb-bench msg -idle ...`).
 - Vectors: [`2026-10-27-after-vector/`](../bench/results/2026-10-27-after-vector/), commit `f539629`. The vector code has not changed since.
 - Intermediate runs: [`after-memory`](../bench/results/2026-10-27-after-memory/) and [`after-occ`](../bench/results/2026-10-27-after-occ/).
 
@@ -163,8 +164,31 @@ OCC transfers, fsync on (commits/s; ops that gave up after 16 retries):
   - freshDB adds a smaller stall of its own: the journal grows in 8 MiB
     zero-filled chunks with a full `fsync` while holding the write lock
     (~15-40 ms about every 6 s at 1k × 1.3 KB/s). Not fixed yet.
-  - p50 is 0.2 ms in every journal run (files layout: 0.8 ms). Consumers
-    still poll; there is no push yet.
+  - p50 is 0.2 ms in every journal run (files layout: 0.8 ms). Push
+    consumers (next bullet) do not remove these disk stalls.
+- **Push consumers: an idle consumer no longer has to poll.**
+  `DB.WaitHead`, HTTP long-poll (`?wait=`) and an SSE stream. Same box,
+  default URL, fsync on, 1k msgs/s for 10 s, 8 producers, 1 group, batch
+  100; only what the consumer does after an empty fetch changes
+  (`freshdb-bench msg -idle`):
+
+  | idle mode | runs | e2e p50 | e2e p99 | e2e p99.9 |
+  |---|---|---|---|---|
+  | `sleep:500ms` (old `sub --follow`) | 2 | 251 ms | 495 / 495 ms | 500 ms |
+  | `sleep:100ms` (a typical poller) | 2 | 50 ms | 99.4 / 99.4 ms | 100 ms |
+  | `spin` (200 µs sleep, the harness's old mode) | 3 | 0.24–0.25 ms | 3.6 / 5.1 / 15.7 ms | 18–34 ms |
+  | `wait` (`WaitHead`, push) | 3 | 0.13–0.14 ms | 10.7 / 1.0 / 14.5 ms | 9–43 ms |
+
+  - Against real polling clients, p99 drops from 99–495 ms to 1–15 ms.
+  - Against the 200 µs spin, p50 halves (0.24 → 0.13 ms) and the
+    consumer does not wake when there is nothing to read. The p99 range is
+    the same as spin's: it is set by the `fdatasync` and journal-growth
+    stalls above, not by the consumer.
+  - Max-throughput publish (64 closed-loop producers, same runs):
+    105–115k msgs/s in every mode, so waking waiters costs no visible
+    throughput.
+  - Not measured: delivery over HTTP (long-poll/SSE add a round trip and
+    JSON), and many concurrent waiters.
 - **Vectors: fixed without an index.**
   - At 100k × 128-d, exact search does 1,051 QPS on 1 client (v0.1.0: 19).
     The flat loop does 165, so freshDB is faster because the flat loop is
@@ -260,7 +284,7 @@ OCC transfers, fsync on (commits/s; ops that gave up after 16 retries):
 - **Disk.** The append-only log uses 3.3 GB after the fsync-on run, against
   1.3–1.7 GB for the LSM and B-tree engines.
 - **Low-rate streaming latency.** Consumers poll and sleep 200 µs on an empty
-  fetch; there is no push yet. Each durable publish also pays the commit path
+  fetch (push was added after v0.1.0). Each durable publish also pays the commit path
   above. So e2e p99 at 1k msgs/s is 23 ms, against NATS's 1.9 ms.
 - **Vectors.** Search is exact brute force over the lens. It is about 7.5×
   slower than a plain float32 loop, and QPS falls linearly with N. There is
@@ -640,7 +664,8 @@ filtered.
 - freshDB:
   - Publish is one durable transaction.
   - Consume is `Fetch` + `Ack` in one transaction.
-  - Consumers poll, sleeping 200 µs on an empty fetch; there is no push yet.
+  - Consumers poll, sleeping 200 µs on an empty fetch (v0.1.0 had no push;
+    `-idle wait` on `main` uses `DB.WaitHead`).
 - NATS JetStream:
   - Embedded server, file storage, `SyncAlways` when fsync=true.
   - Publish waits for the PubAck.

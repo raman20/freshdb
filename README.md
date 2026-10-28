@@ -73,7 +73,7 @@ agents. That is the same bet SQLite made. Read the
 | | What you get | Notes |
 |---|---|---|
 | **KV** | get/put/delete, prefix scan, MVCC history | values over 64 B are read from the log through an off-heap cache (`WithValueCacheBytes`, default 256 MiB) |
-| **Topics** | publish, consumer groups, exactly-once consume+write+ack | consumers poll; no push yet |
+| **Topics** | publish, consumer groups, exactly-once consume+write+ack; push via `WaitHead`, HTTP long-poll (`?wait=`) and SSE | no topic retention; no limit on concurrent waiters/streams |
 | **Documents** | JSON documents, secondary indexes added at any time (built by replaying the log) | equality lookups only |
 | **Vectors** | cosine search, exact (recall 1.0, parallel scan) or opt-in HNSW (`vec ann`) | the HNSW graph is in RAM and rebuilt on every open |
 | **Transactions** | serializable OCC across all lenses; hot keys cannot starve | single writer per database |
@@ -264,7 +264,9 @@ verify: ok=true
 |---|---|
 | `GET/PUT/DELETE /v1/kv/{key}`, `GET /v1/kv?prefix=` | KV |
 | `POST /v1/tx` | atomic batch of `put`, `del`, `pub`, `ack`, `doc`, `vec` ops |
-| `POST /v1/topics/{t}`, `GET /v1/topics/{t}?from=&max=`, `POST /v1/topics/{t}/groups/{g}/next` | topics, consumer groups |
+| `POST /v1/topics/{t}`, `GET /v1/topics/{t}?from=&max=&wait=30s`, `POST /v1/topics/{t}/groups/{g}/next?wait=30s` | topics, consumer groups (`wait`: long-poll, max 60 s) |
+| `GET /v1/topics/{t}/stream?from=` | Server-Sent Events: one `message` event per message, `id` = offset, resumes from `Last-Event-ID` |
+| `GET /healthz` | liveness; never needs the token |
 | `PUT/GET /v1/docs/{c}/{id}`, `GET /v1/docs/{c}?field=&value=`, `POST /v1/indexes` | documents, secondary indexes |
 | `PUT/DELETE /v1/vectors/{c}/{id}`, `POST /v1/vectors/{c}/search` | vectors |
 | `GET/POST /v1/branches`, `POST /v1/branches/{b}/rewind`, `POST /v1/branches/{b}/promote` | branches |
@@ -560,6 +562,13 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
 - Concurrent escalated transactions share a group commit (writer batching).
 - Storage no longer only grows: `compact` writes a base image per log and
   deletes replaced segments after a grace period (first version).
+- Opt-in HNSW vector index (`vec ann`): recall@10 0.988 at 3.3k QPS on
+  100k clustered vectors (exact: 910 QPS); exact search stays the default.
+- `serve` has bearer-token auth and TLS, and refuses a non-loopback bind
+  without a token; keys come from `--kek-file` / `FRESHDB_KEK` / a
+  `KeyProvider`, and a wrong key fails at open.
+- Push consumers: `WaitHead`, HTTP long-poll and SSE replace polling
+  (`sub --follow` no longer sleeps 500 ms between fetches).
 - The Windows build works again.
 - A v0.1.0 bug where returned or passed value slices aliased internal state.
 
@@ -569,13 +578,17 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
   every topic message (no retention).
   Snapshots are off by default and don't speed up open yet.
 - The HNSW vector index is opt-in, lives only in RAM and is rebuilt from the
-  lens on every open; it is not persisted.
+  lens on every open (about 17 min at 1M vectors); it is not persisted, and
+  at 1M clustered vectors recall@10 is 0.80 at ef 64 (0.92 at ef 128).
+- Push consumers have no limit on concurrent long-polls or SSE streams, and
+  SSE has no consumer-group mode.
 - One writer per database, with no HA and no replicas.
 - Server auth is a single shared bearer token; there is no rekey from the
   dev key to a real KEK, and no built-in KMS client.
 - Only MinIO is tested; AWS S3 and R2 are not.
 - The journal layout is new and has less mileage than the files layout; its
-  file grows in 8 MiB chunks with a stall on the commit path.
+  file grows in 8 MiB chunks with a stall on the commit path, and the file
+  never shrinks (compaction punches holes instead).
 - In-flight commits that race a `rewind` land on the retired log. That log
   stays reachable via the reflog.
 - A DEK create that lands after a shred leaves an orphan key until the next

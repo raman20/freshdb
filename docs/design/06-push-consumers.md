@@ -68,3 +68,19 @@ before taking the channel) must violate it.
   `Last-Event-ID`.
 - Benchmark: delivery latency publish → consumer receipt, long-poll vs the
   previous 100 ms-sleep polling.
+
+## Outcome (commit 282c3a6)
+
+- TLC: `FreshNotify.cfg` (2 waiters, MaxHead 2, MaxSteps 5) 87,149 states,
+  29,427 distinct, no error; `FreshNotifyBug.cfg` (head read before taking
+  the channel) violates `NoLostWakeup`. The same mutation also makes
+  `TestWaitHeadNoLostWakeup` fail within 200 runs.
+- `freshdb-bench msg -idle`, 1k msgs/s, default URL, fsync on: e2e p99
+  495 ms (500 ms sleep, old `--follow`), 99 ms (100 ms sleep),
+  3.6–15.7 ms (200 µs spin), 1.0–14.5 ms (`WaitHead`); p50 0.24 ms (spin)
+  → 0.13 ms (`WaitHead`). The p99 floor is the disk stalls described in
+  `docs/benchmarks.md`. Max publish rate is unchanged (105–115k msgs/s in
+  every mode). Results: `bench/results/2026-10-28-push/`.
+- Not done: no limit on concurrent waiters or SSE streams per server; HTTP
+  delivery latency and many-waiter fan-out are not benchmarked; SSE has no
+  consumer-group mode (use long-poll `next`).

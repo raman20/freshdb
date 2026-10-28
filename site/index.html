@@ -28,7 +28,7 @@
     <p class="eyebrow">Open source · Apache-2.0 · Go · pre-1.0 prototype</p>
     <h1>One log. One binary.<br><span class="grad">One API.</span></h1>
     <p class="lede">KV, streams, documents, vectors and transactions are <strong>lenses over a single append-only log</strong> on object storage or a local disk. Branch it, rewind it, and provably forget a user, from one Go binary with no other services.</p>
-    <p class="banner"><b>Pre-1.0 prototype — not for production.</b> The core is model-checked and simulation-tested. Compaction is new and unbenchmarked; larger-than-RAM state, auth/TLS and KMS keys are not done yet. Latest release: v0.1.0; this page describes unreleased <code>main</code>.</p>
+    <p class="banner"><b>Pre-1.0 prototype — not for production.</b> The core is model-checked and simulation-tested. Compaction, the HNSW index, auth/TLS and push consumers are new; larger-than-RAM state, a persisted ANN index and KMS clients are not done yet. Latest release: v0.1.0; this page describes unreleased <code>main</code>.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/raman20/freshdb">★ View on GitHub</a>
       <a class="btn" href="#install">Install</a>
@@ -129,8 +129,8 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
     <tr><td>Peak RSS, whole run</td><td class="n">2.12 GiB</td><td class="n">7.1 GiB</td><td class="n">0.7 GiB</td><td class="n">1.7 GiB</td><td class="n">3.5 GiB</td></tr>
   </table></div>
   <div class="split" style="margin-top:22px">
-    <div class="card"><span class="tag ok">Better since v0.1.0</span><p>Durable single-client writes 12× faster (journal storage is now the default). Memory down from 7.1 to 2.12 GiB. No read-modify-write gives up any more. Exact vector search at 100k × 128-d: 19 → 1,051 QPS, recall 1.0. Durable publish: 119k msgs/s (NATS JetStream with <code>SyncAlways</code>: 8.5k).</p></div>
-    <div class="card"><span class="tag bad">Where it still loses</span><p>Memory vs Pebble (2.12 vs 0.7 GiB). Point reads are below v0.1.0 (values now come from the log through a cache). Streaming p99 at 1k msgs/s is 3–43 ms across runs vs 1.9 ms for NATS. Badger commits more on one very hot key. Vectors are exact only, no ANN index.</p></div>
+    <div class="card"><span class="tag ok">Better since v0.1.0</span><p>Durable single-client writes 12× faster (journal storage is now the default). Memory down from 7.1 to 2.12 GiB. No read-modify-write gives up any more. Exact vector search at 100k × 128-d: 19 → 1,051 QPS, recall 1.0. Durable publish: 119k msgs/s (NATS JetStream with <code>SyncAlways</code>: 8.5k). Opt-in HNSW: recall@10 0.988 at 3.3k QPS on 100k vectors (exact: 910). Push consumers: p99 at 1k msgs/s 1–15 ms vs 99 ms for a 100 ms poller.</p></div>
+    <div class="card"><span class="tag bad">Where it still loses</span><p>Memory vs Pebble (2.12 vs 0.7 GiB). Point reads are below v0.1.0 (values now come from the log through a cache). Streaming p99 at 1k msgs/s is 3–43 ms across runs vs 1.9 ms for NATS. Badger commits more on one very hot key. HNSW at 1M vectors: recall@10 0.80 at ef 64, and the graph is rebuilt on every open.</p></div>
   </div>
 </section>
 
@@ -182,7 +182,7 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
     <p class="sub">A pre-1.0 prototype. Please don't put real personal data in it yet.</p>
     <div class="split">
       <ul class="lim">
-        <li>Keys, KV history, topics, documents and vectors live in RAM. Old versions are only dropped by <code>freshdb compact</code>, which is new, has no benchmarks yet, keeps every topic message, and removes time travel below each branch head.</li>
+        <li>Keys, KV history, topics, documents and vectors live in RAM. Old versions are only dropped by <code>freshdb compact</code>, which is new, keeps every topic message, and removes time travel below each branch head.</li>
         <li>The opt-in HNSW vector index is rebuilt on every open (about 17 min at 1M vectors).</li>
         <li>One writer per database, with no HA and no read replicas yet.</li>
         <li>Only MinIO is tested. AWS S3 and R2 support the needed conditional writes but are untested.</li>
@@ -206,8 +206,8 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
     <div><b>Retention + TTL</b><br>on top of compaction (now on main)</div>
     <div><b>Persisted lens snapshots</b><br>open in O(tail), not O(history)</div>
     <div><b>Disk-backed lenses</b><br>datasets larger than RAM</div>
-    <div><b>ANN vector index</b><br>as a lens, still fold-equivalent</div>
-    <div><b>KMS keys + auth/TLS</b><br>KEK out of the bucket</div>
+    <div><b>Persisted ANN index</b><br>HNSW is on main; save it with snapshots</div>
+    <div><b>KMS clients + rekey</b><br>token auth, TLS, KeyProvider on main</div>
     <div><b>Read replicas, no Raft</b><br>tail the log from S3</div>
     <div><b>SQL layer</b><br>outside the core</div>
     <div><b>Lakehouse export</b><br>Iceberg / Parquet by LSN range</div>

@@ -1,0 +1,97 @@
+{
+  "suite": "msg",
+  "env": {
+    "time": "2026-10-28T17:12:56+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "282c3a6",
+    "command": "./bin/freshdb-bench msg -system freshdb -rates 1000 -groups 1 -group-rate 1000 -duration 10s -idle spin -out results/2026-10-28-push/spin-run2",
+    "loadavg_at_start": "2.61 2.60 1.95"
+  },
+  "params": {
+    "consume_batch": 100,
+    "disk_after_run": "1.2G",
+    "drain_limit": "30s",
+    "duration": "10s",
+    "e2e": "consumer-side time after the durable ack minus the producer's intended send time (open-loop schedule)",
+    "fsync": true,
+    "max_producers": 64,
+    "payload_bytes": 1024,
+    "peak_rss": "2199392 kB",
+    "producers": 8,
+    "system": "freshdb"
+  },
+  "runs": [
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit; journal layout)",
+      "idle": "spin",
+      "kind": "fixed-rate",
+      "target_rate": 1000,
+      "producers": 8,
+      "groups": 1,
+      "published": 10000,
+      "publish_per_sec": 1000.1,
+      "delivered_per_group_min": 10000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 10000,
+        "mean_us": 236.9,
+        "p50_us": 67.07,
+        "p99_us": 4308.99,
+        "p999_us": 20955.14,
+        "max_us": 30441.47
+      },
+      "end_to_end_latency": {
+        "count": 10000,
+        "mean_us": 445.88,
+        "p50_us": 242.56,
+        "p99_us": 5050.37,
+        "p999_us": 22970.37,
+        "max_us": 30769.15
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit; journal layout)",
+      "idle": "spin",
+      "kind": "max-throughput",
+      "producers": 64,
+      "groups": 1,
+      "published": 1088497,
+      "publish_per_sec": 108845.6,
+      "delivered_per_group_min": 1088497,
+      "consume_per_sec_per_group": 108849.7,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 1088497,
+        "mean_us": 587.54,
+        "p50_us": 366.08,
+        "p99_us": 4456.45,
+        "p999_us": 16334.85,
+        "max_us": 119275.52
+      },
+      "end_to_end_latency": {
+        "count": 0,
+        "mean_us": 0,
+        "p50_us": 0,
+        "p99_us": 0,
+        "p999_us": 0,
+        "max_us": 0
+      },
+      "errors": 0
+    }
+  ],
+  "notes": [
+    "freshDB consumer on an empty fetch, -idle=spin: spin sleeps 200us; sleep:\u003cd\u003e polls every d; wait blocks in DB.WaitHead (push) until the head moves."
+  ]
+}

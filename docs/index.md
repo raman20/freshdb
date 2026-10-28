@@ -31,6 +31,9 @@ otherwise; the latest release is
 | [design/01-journal-default.md](design/01-journal-default.md) | design: journal as the default local layout, migration |
 | [design/02-read-path.md](design/02-read-path.md) | design: point reads, the off-heap value cache |
 | [design/03-compaction.md](design/03-compaction.md) | design: compaction base images, garbage with a grace period |
+| [design/04-hnsw.md](design/04-hnsw.md) | design: the opt-in HNSW vector index |
+| [design/05-auth-tls-keys.md](design/05-auth-tls-keys.md) | design: bearer-token auth, TLS, key providers |
+| [design/06-push-consumers.md](design/06-push-consumers.md) | design: `WaitHead`, long-poll and SSE for topic consumers |
 
 ## Evidence and numbers
 
