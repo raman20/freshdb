@@ -39,6 +39,7 @@ import (
 // system supports it). Several processes may open the same directory.
 type Journal struct {
 	dir    string
+	lk     *os.File // journal.lock, shared flock for the Journal's lifetime (nil inside ShrinkJournal)
 	f      *os.File // data + writer flock
 	rf     *os.File // second descriptor: reader (shared) flock
 	salt   [16]byte
@@ -75,8 +76,14 @@ var jcrc = crc32.MakeTable(crc32.Castagnoli)
 // SetUnsafeNoSync disables every sync (benchmarks only, as for FS).
 func (j *Journal) SetUnsafeNoSync(on bool) { j.noSync = on }
 
-// NewJournal opens or creates the journal store in dir.
+// NewJournal opens or creates the journal store in dir. It holds a shared
+// lock on dir/journal.lock until Close, so ShrinkJournal cannot run
+// underneath it (and it waits for a running shrink to finish).
 func NewJournal(dir string) (*Journal, error) {
+	return newJournal(dir, true)
+}
+
+func newJournal(dir string, lock bool) (*Journal, error) {
 	if dir == "" {
 		return nil, errors.New("store: empty path")
 	}
@@ -88,23 +95,48 @@ func NewJournal(dir string) (*Journal, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
+	var lk *os.File
+	if lock {
+		var err error
+		if lk, err = os.OpenFile(filepath.Join(dir, jrnLock), os.O_RDWR|os.O_CREATE, 0o644); err != nil {
+			return nil, err
+		}
+		if err := flock(lk, syscall.LOCK_SH); err != nil {
+			lk.Close()
+			return nil, err
+		}
+		// no shrink can be running now: a leftover copy is from a crash
+		if err := os.Remove(filepath.Join(dir, jrnShrink)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			lk.Close()
+			return nil, err
+		}
+	}
 	p := filepath.Join(dir, jrnFile)
 	f, err := os.OpenFile(p, os.O_RDWR|os.O_CREATE, 0o644)
 	if err != nil {
+		closeLock(lk)
 		return nil, err
 	}
 	rf, err := os.Open(p)
 	if err != nil {
 		f.Close()
+		closeLock(lk)
 		return nil, err
 	}
-	j := &Journal{dir: dir, f: f, rf: rf, idx: map[string]jent{}}
+	j := &Journal{dir: dir, lk: lk, f: f, rf: rf, idx: map[string]jent{}}
 	if err := j.open(); err != nil {
 		f.Close()
 		rf.Close()
+		closeLock(lk)
 		return nil, err
 	}
 	return j, nil
+}
+
+func closeLock(lk *os.File) {
+	if lk != nil {
+		lk.Close() // releases the flock
+	}
 }
 
 func (j *Journal) open() error {
@@ -313,6 +345,7 @@ func (j *Journal) Close() error {
 	defer j.rfmu.Unlock()
 	defer j.wmu.Unlock()
 	e1, e2 := j.f.Close(), j.rf.Close()
+	closeLock(j.lk)
 	if e1 != nil {
 		return e1
 	}

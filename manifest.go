@@ -72,6 +72,7 @@ type RefChange struct {
 	To   string `json:"to"`
 	At   uint64 `json:"at"`
 	Why  string `json:"why"`
+	TS   int64  `json:"ts,omitempty"` // unix nanoseconds (0 in manifests written before GC existed)
 }
 
 // ANNDecl opts a vector collection into an HNSW graph (EnableANN).
@@ -174,8 +175,30 @@ func loadLatestManifest(ctx context.Context, st store.Store) (*Manifest, error) 
 }
 
 // putManifest creates manifest m.ID. ErrExists means we lost the race.
+//
+// The create-only put alone fences a stale writer only while every older
+// manifest slot stays occupied. GC deletes old manifests, so a writer
+// holding manifest k could create a deleted slot k+1 below the latest.
+// So after the put we list manifest/: a higher id means we lost (our
+// manifest is a stray no reader loads, since readers take the highest
+// id; we delete it). GC never deletes the newest manifests, so a free
+// slot below the latest always comes with a higher id
+// (spec/FreshGC.tla, NoZombie; the mutant without this check loses data).
 func putManifest(ctx context.Context, st store.Store, m *Manifest) error {
-	return putExactlyOnce(ctx, st, manifestKey(m.ID), encodeManifest(m))
+	if err := putExactlyOnce(ctx, st, manifestKey(m.ID), encodeManifest(m)); err != nil {
+		return err
+	}
+	keys, err := st.List(ctx, "manifest/")
+	if err != nil {
+		return err
+	}
+	for _, k := range keys {
+		if n, ok := parseNum(k, "manifest/", ".mf"); ok && n > m.ID {
+			_ = st.Delete(ctx, manifestKey(m.ID))
+			return store.ErrExists
+		}
+	}
+	return nil
 }
 
 // putExactlyOnce creates key with data, retrying transient errors. Because

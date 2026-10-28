@@ -49,7 +49,7 @@ func (db *DB) CreateBranch(ctx context.Context, name, from string, at uint64) er
 		m.NextLog++
 		m.Logs[newID] = &LogMeta{ID: newID, Parent: fromID, ParentLSN: at}
 		m.Refs[name] = newID
-		m.Reflog = append(m.Reflog, RefChange{Name: name, To: newID, At: at, Why: "branch from " + from})
+		m.Reflog = append(m.Reflog, RefChange{Name: name, To: newID, At: at, Why: "branch from " + from, TS: db.opts.Clock()})
 		return nil
 	}); err != nil {
 		return err
@@ -81,13 +81,42 @@ func (db *DB) Rewind(ctx context.Context, name string, at uint64) error {
 		m.NextLog++
 		m.Logs[newID] = &LogMeta{ID: newID, Parent: oldID, ParentLSN: at}
 		m.Refs[name] = newID
-		m.Reflog = append(m.Reflog, RefChange{Name: name, From: oldID, To: newID, At: at, Why: "rewind"})
+		m.Reflog = append(m.Reflog, RefChange{Name: name, From: oldID, To: newID, At: at, Why: "rewind", TS: db.opts.Clock()})
 		return nil
 	})
 	if err == nil {
 		_, err = db.openWritable(ctx, newID)
 	}
 	retired := db.retireUnreferenced(oldID)
+	db.mu.Unlock()
+	if retired != nil {
+		retired.stop()
+	}
+	return err
+}
+
+// DeleteBranch removes branch name. Its log stays readable through the
+// reflog (ViewLog) until GC prunes that reflog entry and drops the log.
+// Branch main cannot be deleted.
+func (db *DB) DeleteBranch(ctx context.Context, name string) error {
+	if name == "main" {
+		return ErrMainBranch
+	}
+	db.lockIdle()
+	id, ok := db.man.Refs[name]
+	if !ok {
+		db.mu.Unlock()
+		return fmt.Errorf("%w: %q", ErrNoBranch, name)
+	}
+	err := db.commitManifest(ctx, func(m *Manifest) error {
+		delete(m.Refs, name)
+		m.Reflog = append(m.Reflog, RefChange{Name: name, From: id, At: db.headOf(id), Why: "delete", TS: db.opts.Clock()})
+		return nil
+	})
+	var retired *writer
+	if err == nil {
+		retired = db.retireUnreferenced(id)
+	}
 	db.mu.Unlock()
 	if retired != nil {
 		retired.stop()
@@ -126,7 +155,7 @@ func (db *DB) Promote(ctx context.Context, src, dst string) error {
 	}
 	err := db.commitManifest(ctx, func(m *Manifest) error {
 		m.Refs[dst] = srcID
-		m.Reflog = append(m.Reflog, RefChange{Name: dst, From: dstID, To: srcID, At: db.headOf(srcID), Why: "promote " + src})
+		m.Reflog = append(m.Reflog, RefChange{Name: dst, From: dstID, To: srcID, At: db.headOf(srcID), Why: "promote " + src, TS: db.opts.Clock()})
 		return nil
 	})
 	var retired *writer
@@ -173,8 +202,12 @@ func (db *DB) retireUnreferenced(id string) *writer {
 // head from Manifest().Reflog) at LSN at (0 = its head).
 func (db *DB) ViewLog(ctx context.Context, logID string, at uint64, fn func(*Tx) error) error {
 	db.mu.Lock()
+	_, known := db.man.Logs[logID]
 	l, err := db.loadLog(ctx, logID, false)
 	idx := append([]IndexDecl{}, db.man.Indexes...)
+	if !known {
+		err = fmt.Errorf("%w: log %s is not in the manifest (unknown, or garbage-collected)", ErrNotFound, logID)
+	}
 	db.mu.Unlock()
 	if err != nil {
 		return err

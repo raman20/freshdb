@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -53,6 +54,11 @@ type CompactStats struct {
 	BaseBytes int64 `json:"base_bytes"` // bytes written (images + value chunks)
 	Deleted   int   `json:"deleted"`    // objects deleted by sweeps
 	Pending   int   `json:"pending"`    // garbage items still waiting for their grace period
+
+	// GC only
+	LogsDropped      int `json:"logs_dropped,omitempty"`      // unreachable logs removed from the manifest
+	ReflogPruned     int `json:"reflog_pruned,omitempty"`     // reflog entries dropped
+	ManifestsDeleted int `json:"manifests_deleted,omitempty"` // old manifests deleted
 }
 
 func baseObj(key string) string         { return key + ".base" }
@@ -68,7 +74,11 @@ func baseMsgAAD(log, space string, m lens.Msg) []byte {
 // Compact compacts every log (see above). Commits wait while it runs;
 // reads continue. It is a no-op for logs unchanged since their base.
 func (db *DB) Compact(ctx context.Context, o CompactOptions) (CompactStats, error) {
-	var stats CompactStats
+	return db.runCompaction(ctx, GCOptions{Grace: o.Grace}, false)
+}
+
+// runCompaction is Compact (gc false) or GC (gc true).
+func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats CompactStats, err error) {
 	db.mu.Lock()
 	switch {
 	case db.closed:
@@ -103,7 +113,10 @@ func (db *DB) Compact(ctx context.Context, o CompactOptions) (CompactStats, erro
 	if db.closed {
 		return stats, ErrClosed
 	}
-	committed, err := db.compactLocked(ctx, o, &stats)
+	committed, err := db.compactLocked(ctx, o, gc, &stats)
+	if gc && err == nil {
+		defer func() { db.deleteOldManifests(ctx, o.KeepManifests, &stats) }()
+	}
 	if !committed {
 		// nothing changed: resume on the same logs and views
 		for _, w := range ws {
@@ -139,42 +152,98 @@ func (db *DB) Compact(ctx context.Context, o CompactOptions) (CompactStats, erro
 
 // compactLocked builds bases and commits them. Caller holds db.mu with
 // all writers stopped. committed reports whether the manifest changed.
-func (db *DB) compactLocked(ctx context.Context, o CompactOptions, stats *CompactStats) (committed bool, err error) {
+// Compact bases every log at its head; GC follows gcPlan (retention cuts,
+// reflog pruning, unreachable logs dropped).
+func (db *DB) compactLocked(ctx context.Context, o GCOptions, gc bool, stats *CompactStats) (committed bool, err error) {
 	if err := db.sweepLocked(ctx, stats); err != nil {
 		return false, err
 	}
 	type built struct {
 		id   string
 		base *BaseMeta
+		head uint64 // log head at the cut: snapshots up to it are replaced
+	}
+	plan := map[string]cutInfo{}
+	var drop []string
+	reflog := db.man.Reflog
+	if gc {
+		if plan, drop, reflog, err = db.gcPlan(ctx, o); err != nil {
+			return false, err
+		}
+	} else {
+		for id := range db.man.Logs {
+			plan[id] = cutInfo{head: true}
+		}
 	}
 	var bs []built
-	for _, id := range sortedMapKeys(db.man.Logs) {
+	for _, id := range sortedMapKeys(plan) {
+		c := plan[id]
 		l, err := db.loadLog(ctx, id, false)
 		if err != nil {
 			return false, err
 		}
-		head := l.head()
-		if l.meta.Base != nil && l.meta.Base.LSN == head {
-			continue
-		}
-		v := db.views[id]
-		if v == nil || v.head != head {
-			if v, err = db.buildView(ctx, l, head, db.man.Indexes, db.loadSnapshot(ctx, l)); err != nil {
+		var bm *BaseMeta
+		if c.head {
+			head := l.head()
+			if l.meta.Base != nil && l.meta.Base.LSN == head {
+				continue
+			}
+			v := db.views[id]
+			if v == nil || v.head != head {
+				if v, err = db.buildView(ctx, l, head, db.man.Indexes, db.loadSnapshot(ctx, l)); err != nil {
+					return false, err
+				}
+			}
+			bm, err = db.writeBase(ctx, l, v, head, nil, stats)
+		} else {
+			var v *view
+			if v, err = db.buildView(ctx, l, c.k, db.man.Indexes, nil); err != nil {
 				return false, err
 			}
+			bm, err = db.writeBase(ctx, l, v, c.k, &c, stats)
 		}
-		bm, err := db.writeBase(ctx, l, v, head, stats)
 		if err != nil {
 			return false, err
 		}
-		bs = append(bs, built{id, bm})
+		bs = append(bs, built{id, bm, l.head()})
 	}
-	if len(bs) == 0 {
+	if len(bs) == 0 && len(drop) == 0 && len(reflog) == len(db.man.Reflog) {
 		return false, nil
 	}
+	// An unbased branch reading through a rebased ancestor has snapshots
+	// whose versions point into that ancestor's replaced segments: they go
+	// too (Compact rebases every log, so this is GC only).
+	rebased := map[string]bool{}
+	for _, b := range bs {
+		rebased[b.id] = true
+	}
+	stale := map[string]uint64{} // log -> head
+	for id, lm := range db.man.Logs {
+		if lm.Base != nil || rebased[id] || lm.SnapKey == "" {
+			continue
+		}
+		for x := db.man.Logs[lm.Parent]; x != nil && lm.Parent != ""; x = db.man.Logs[x.Parent] {
+			if rebased[x.ID] {
+				l, err := db.loadLog(ctx, id, false)
+				if err != nil {
+					return false, err
+				}
+				stale[id] = l.head()
+				break
+			}
+			if x.Base != nil || x.Parent == "" {
+				break
+			}
+		}
+	}
+	pruned := len(db.man.Reflog) - len(reflog)
 	after := db.opts.Clock() + int64(o.Grace)
 	err = db.commitManifest(ctx, func(m *Manifest) error {
 		m.Format = manifestFormatBase
+		for id, head := range stale {
+			m.Logs[id].SnapLSN, m.Logs[id].SnapKey = 0, ""
+			m.Garbage = append(m.Garbage, Garbage{Kind: "snaps", Log: id, Below: head + 1, After: after})
+		}
 		for _, b := range bs {
 			lm := m.Logs[b.id]
 			if old := lm.Base; old != nil {
@@ -182,10 +251,24 @@ func (db *DB) compactLocked(ctx context.Context, o CompactOptions, stats *Compac
 			}
 			m.Garbage = append(m.Garbage,
 				Garbage{Kind: "segs", Log: b.id, Below: b.base.Seq, After: after},
-				Garbage{Kind: "snaps", Log: b.id, Below: b.base.LSN + 1, After: after})
+				// a snapshot's versions point into segments the base
+				// replaces, so every snapshot so far goes (writers are
+				// stopped: none is newer than the head)
+				Garbage{Kind: "snaps", Log: b.id, Below: b.head + 1, After: after})
 			lm.Base = b.base
 			lm.SnapLSN, lm.SnapKey = 0, ""
 		}
+		for _, id := range drop {
+			lm := m.Logs[id]
+			if lm.Base != nil {
+				m.Garbage = append(m.Garbage, Garbage{Kind: "base", Log: id, Key: lm.Base.Key, Chunks: lm.Base.Chunks, After: after})
+			}
+			m.Garbage = append(m.Garbage,
+				Garbage{Kind: "segs", Log: id, Below: math.MaxUint64, After: after},
+				Garbage{Kind: "snaps", Log: id, Below: math.MaxUint64, After: after})
+			delete(m.Logs, id)
+		}
+		m.Reflog = reflog
 		return nil
 	})
 	if err != nil {
@@ -193,12 +276,14 @@ func (db *DB) compactLocked(ctx context.Context, o CompactOptions, stats *Compac
 		// them (we cannot: the put of the manifest may yet be visible).
 		return false, err
 	}
-	stats.Logs = len(bs)
+	stats.Logs, stats.LogsDropped, stats.ReflogPruned = len(bs), len(drop), pruned
 	return true, nil
 }
 
 // writeBase writes the base of log l at head from its view v.
-func (db *DB) writeBase(ctx context.Context, l *logState, v *view, head uint64, stats *CompactStats) (*BaseMeta, error) {
+// at is nil for a base at the log's head; for a retention cut below the
+// head it gives the segment after the cut and the cut frame's time.
+func (db *DB) writeBase(ctx context.Context, l *logState, v *view, head uint64, at *cutInfo, stats *CompactStats) (*BaseMeta, error) {
 	nonce, err := db.keys.randBytes(4)
 	if err != nil {
 		return nil, err
@@ -293,15 +378,19 @@ func (db *DB) writeBase(ctx context.Context, l *logState, v *view, head uint64, 
 	l.mu.RLock()
 	ts, seq := l.lastTS, l.nextSeq
 	l.mu.RUnlock()
-	// every segment that exists now is covered (a read-only load may stop
-	// before a torn tail)
-	keys, err := db.st.List(ctx, "log/"+id+"/")
-	if err != nil {
-		return nil, err
-	}
-	for _, k := range keys {
-		if s, ok := parseNum(k, "log/"+id+"/", ".seg"); ok && s >= seq {
-			seq = s + 1
+	if at != nil {
+		ts, seq = at.ts, at.seq
+	} else {
+		// every segment that exists now is covered (a read-only load may
+		// stop before a torn tail)
+		keys, err := db.st.List(ctx, "log/"+id+"/")
+		if err != nil {
+			return nil, err
+		}
+		for _, k := range keys {
+			if s, ok := parseNum(k, "log/"+id+"/", ".seg"); ok && s >= seq {
+				seq = s + 1
+			}
 		}
 	}
 	img := encodeBase(head, kv.Snapshot(), tp.Snapshot())
@@ -540,7 +629,14 @@ func (db *DB) sweepOrphans(ctx context.Context) (int, error) {
 		}
 	}
 	n := 0
-	for _, id := range sortedMapKeys(db.man.Logs) {
+	ids := map[string]bool{}
+	for id := range db.man.Logs {
+		ids[id] = true
+	}
+	for _, g := range db.man.Garbage {
+		ids[g.Log] = true // dropped by GC: its orphans too
+	}
+	for _, id := range sortedMapKeys(ids) {
 		keys, err := db.st.List(ctx, "base/"+id+"/")
 		if err != nil {
 			return n, err

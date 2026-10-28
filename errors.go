@@ -23,6 +23,7 @@ var (
 	ErrNoBranch       = errors.New("freshdb: no such branch")
 	ErrNotFastForward = errors.New("freshdb: promote is not a fast-forward")
 	ErrBadLSN         = errors.New("freshdb: LSN out of range")
+	ErrMainBranch     = errors.New("freshdb: branch main cannot be deleted")
 	// ErrCompacted: the requested history (time travel, branch point,
 	// rewind target) is older than the log's compaction base.
 	ErrCompacted = errors.New("freshdb: history before the compaction base was compacted away")

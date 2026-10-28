@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Model-check specs (default: all). Needs Java 11+ and tla2tools.jar.
-#   JAVA=java TLA_JAR=/path/tla2tools.jar spec/run_tlc.sh [FreshLog FreshTxn FreshBranch FreshShred FreshMigrate FreshCompact FreshNotify]
+#   JAVA=java TLA_JAR=/path/tla2tools.jar spec/run_tlc.sh [FreshLog FreshTxn FreshBranch FreshShred FreshMigrate FreshCompact FreshNotify FreshGC]
 # Exits non-zero if TLC reports any violation or error.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -8,7 +8,7 @@ JAVA=${JAVA:-java}
 TLA_JAR=${TLA_JAR:-tla2tools.jar}
 XMX=${TLC_XMX:-6g}
 specs=("$@")
-[ ${#specs[@]} -eq 0 ] && specs=(FreshLog FreshTxn FreshBranch FreshShred FreshMigrate FreshCompact FreshNotify)
+[ ${#specs[@]} -eq 0 ] && specs=(FreshLog FreshTxn FreshBranch FreshShred FreshMigrate FreshCompact FreshNotify FreshGC)
 for m in "${specs[@]}"; do
   echo "== $m"
   start=$(date +%s)

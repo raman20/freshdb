@@ -11,8 +11,14 @@ import (
 	"strings"
 )
 
-// jrnFile is the journal layout's single data file.
-const jrnFile = "journal.fj"
+// jrnFile is the journal layout's single data file; jrnLock is the lock
+// file every open journal holds shared (ShrinkJournal takes it
+// exclusively); jrnShrink is ShrinkJournal's temporary copy.
+const (
+	jrnFile   = "journal.fj"
+	jrnLock   = "journal.lock"
+	jrnShrink = "journal.fj.shrink"
+)
 
 // Layout names an on-disk format for a local directory.
 type Layout string
@@ -52,6 +58,9 @@ func DetectLayout(dir string) (Layout, error) {
 		return LayoutNone, err
 	}
 	for _, e := range ents {
+		if e.Name() == jrnLock || e.Name() == jrnShrink {
+			continue // a journal crashed before creating journal.fj
+		}
 		if e.Name() == tmpDir && e.IsDir() {
 			sub, err := os.ReadDir(filepath.Join(dir, tmpDir))
 			if err != nil || len(sub) > 0 {

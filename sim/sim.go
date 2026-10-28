@@ -53,6 +53,7 @@ type Result struct {
 	Shreds    int
 	Rewinds   int
 	Compacts  int
+	GCs       int
 	Faults    int
 	TraceHash [32]byte
 }
@@ -427,10 +428,21 @@ func (s *sim) compact() error {
 	}
 	m := s.db.Manifest()
 	s.prefix[fmt.Sprintf("%s@%d", m.Refs["main"], head)] = txPrefix{ids, s.lsns}
-	_, err = s.db.Compact(s.ctx, freshdb.CompactOptions{})
-	s.log("compact @%d=%v", head, err)
+	op := "compact"
+	if s.rng.Intn(2) == 0 {
+		// GC at the head: same floor, plus reflog, retired-log and
+		// old-manifest deletion under crash injection.
+		op = "gc"
+		_, err = s.db.GC(s.ctx, freshdb.GCOptions{KeepReflog: 1, KeepManifests: 1 + s.rng.Intn(3)})
+	} else {
+		_, err = s.db.Compact(s.ctx, freshdb.CompactOptions{})
+	}
+	s.log("%s @%d=%v", op, head, err)
 	if err == nil {
 		s.res.Compacts++
+		if op == "gc" {
+			s.res.GCs++
+		}
 		return s.check()
 	}
 	return s.crash(true)

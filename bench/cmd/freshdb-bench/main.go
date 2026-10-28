@@ -18,6 +18,7 @@ suites:
   vector   recall@10 and QPS on synthetic clustered vectors (exact search)
   s3       commit latency, batching, requests/commit and cold open on S3/MinIO
   compact  storage, open time and heap before/after compaction (overwrite-heavy)
+  gc       disk size per cycle under overwrite + branch + rewind churn: compact vs gc vs gc+shrink
   calib    harness + VM noise floor (no-op latency)
   report   render results/*.json as markdown
 
@@ -44,6 +45,8 @@ func main() {
 		cmdS3(args)
 	case "compact":
 		cmdCompact(args)
+	case "gc":
+		cmdGC(args)
 	case "calib":
 		cmdCalib(args)
 	case "report":

@@ -470,7 +470,7 @@ func TestPropCompactEqualsUncompacted(t *testing.T) {
 			k := rapid.IntRange(0, 3).Draw(t, "k")
 			size := rapid.SampledFrom([]int{1, 10, 100}).Draw(t, "size")
 			val := []byte(fmt.Sprint(i, strings.Repeat("x", size)))
-			switch rapid.IntRange(0, 11).Draw(t, "op") {
+			switch rapid.IntRange(0, 12).Draw(t, "op") {
 			case 0, 1, 2:
 				both(func(db *DB) error {
 					return db.Branch(br).Update(ctx, func(tx *Tx) error { return tx.Put(fmt.Sprint("k", k), val, o...) })
@@ -531,6 +531,31 @@ func TestPropCompactEqualsUncompacted(t *testing.T) {
 			case 11:
 				a.Close()
 				a = mk(stA)
+			case 12:
+				// GC with a retention window: every branch stays readable
+				// (and equal to the reference) at head-keep and above
+				keep := uint64(rapid.IntRange(0, 6).Draw(t, "keep"))
+				o := GCOptions{KeepCommits: keep, KeepReflog: rapid.IntRange(1, 3).Draw(t, "keepReflog"),
+					KeepManifests: rapid.IntRange(1, 3).Draw(t, "keepMans")}
+				floors := map[string]uint64{}
+				a.mu.Lock()
+				for _, br := range branches {
+					floors[br] = a.floorOf(a.man.Refs[br])
+				}
+				a.mu.Unlock()
+				if _, err := a.GC(ctx, o); err != nil {
+					t.Fatal(err)
+				}
+				for _, br := range branches {
+					h, _ := a.Branch(br).Head()
+					if h < keep {
+						continue
+					}
+					at := max(h-keep, floors[br])
+					if da, db := dump(t, a, br, at), dump(t, b, br, at); da != db {
+						t.Fatalf("after gc keep %d: branch %s @%d differs\ngc:\n%s\nreference:\n%s", keep, br, at, da, db)
+					}
+				}
 			}
 		}
 		for _, br := range branches {
@@ -561,9 +586,8 @@ func TestPropCompactEqualsUncompacted(t *testing.T) {
 
 // TestCompactBoundsStorage: with a fixed live set, repeated overwrite +
 // compact cycles keep data objects and bytes flat instead of growing with
-// history. Manifests are not collected yet (deleting them needs a fencing
-// argument, see docs/design/03-compaction.md); they grow by at most two
-// small objects per compaction.
+// history. Compact keeps every manifest (two small objects per run); GC
+// deletes old ones too, see TestGCBoundsStorage.
 func TestCompactBoundsStorage(t *testing.T) {
 	st := store.NewMem()
 	db := mustOpen(t, st)

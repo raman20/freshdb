@@ -26,6 +26,7 @@ the first run reported 32 with identical state counts.
 | FreshMigrate | offline layout migration (files ↔ journal): copy, verify, fsync, rename to `.migrated`, move original to backup, rename into place; volatile vs durable directory state; up to 4 crashes at any step with resume | 149 | 88 | 17 | no error (incl. liveness) |
 | FreshCompact | compaction/GC of a log: base image write, create-only manifest commit with garbage list, garbage + orphan sweeps, 2 processes with crashes and reopen (≤3 epochs), a fenced compactor, a reader holding an old manifest; grace modelled as "readers that started before an object was listed finish first". CI config MaxLSN=2; MaxLSN=3 checked locally: 63,131,325 / 11,134,091 states, depth 32, no error | 1,557,725 | 315,903 | 25 | no error |
 | FreshNotify | consumer change notification: a writer moves the head (commit or rewind) then closes and replaces the channel; 2 waiters run take-channel / read-head / block; MaxHead=2, MaxSteps=5 | 87,149 | 29,427 | 19 | no error |
+| FreshGC | GC with retention (item 8): two logs (main's log and a rewind child forked at P=1, kept by the reflog), retention window W=1 commits, a base at the cut capped by the dependent child's branch point, reflog pruning, dropping unreachable logs, sweeping, deleting old manifests (Keep=1), 2 processes with crashes, ≤2 epochs, a fenced writer that keeps running (incl. committing into a deleted manifest slot), create-only manifest put + post-create List check; MaxLSN=3, MaxMan=6, process symmetry | 6,582,415 | 1,598,697 | 28 | no error |
 | FreshShred | DEK per subject, marker → delete → audit entry + certificate; crash between steps; DEK create landing late; sweep; hash chain | 25,570 | 6,481 | 16 | no error (incl. liveness) |
 
 ## Properties checked
@@ -88,6 +89,13 @@ the first run reported 32 with identical state counts.
    sweep would delete it. Fix before any code was written: a log with no
    frame since its base is skipped, and base keys carry a random nonce.
 
+- **FreshGC**: `NoLoss` (everything the latest manifest needs exists: bases,
+  segments above each base, a dependent branch's parent prefix), `Retained`
+  (every kept log keeps W commits above its base), `NoZombie` (no manifest
+  from a fenced epoch is ever the latest; a writer of the newest epoch
+  always holds the latest manifest), `GarbageFinal` (no present manifest
+  lists anything the latest needs as garbage).
+
 ## Mutation checks (are the properties strong enough?)
 
 | Mutation | Result |
@@ -97,6 +105,9 @@ the first run reported 32 with identical state counts.
 | FreshCompact without the grace guard on sweeps | `ReaderOK` violated |
 | FreshNotify with the head read before taking the channel (`FreshNotifyBug.cfg`) | `NoLostWakeup` violated |
 | FreshCompact with the manifest commit not create-only (no fencing) | `EpochMonotone` violated |
+| FreshGC without the post-create manifest List (`FreshGC_nopost.cfg`) | `GarbageFinal` violated in 10 steps: a fenced writer commits its stale GC manifest into a deleted slot below the latest, listing a segment the live child branch needs as garbage |
+| FreshGC with the parent's cut ignoring a dependent branch (`FreshGC_nodeps.cfg`) | `GarbageFinal` violated |
+| FreshGC deleting the manifest it holds (`Keep = 0`, `FreshGC_keep0.cfg`) | `TypeOK` violated (no manifest left) |
 | FreshShred with `Sweep` disabled | `KeyEventuallyGone` violated |
 | FreshShred with reads ignoring the shred marker | `ShreddedNeverRevealed` violated |
 

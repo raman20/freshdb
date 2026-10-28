@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/raman20/freshdb/format"
@@ -136,6 +137,24 @@ func (db *DB) Verify(ctx context.Context) (*VerifyReport, error) {
 	keys, err := db.st.List(ctx, "manifest/")
 	if err != nil {
 		return nil, err
+	}
+	// GC deletes old manifests and a fenced writer may leave a stray one
+	// below the latest (putManifest), so only the dense run of ids ending
+	// at the latest is checked.
+	var ids []uint64
+	for _, k := range keys {
+		if n, ok := parseNum(k, "manifest/", ".mf"); ok {
+			ids = append(ids, n)
+		}
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	start := len(ids) - 1
+	for start > 0 && ids[start-1] == ids[start]-1 {
+		start--
+	}
+	keys = keys[:0]
+	for _, n := range ids[max(start, 0):] {
+		keys = append(keys, manifestKey(n))
 	}
 	var prevEpoch, prevID uint64
 	var last *Manifest

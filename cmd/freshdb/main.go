@@ -42,6 +42,7 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
 
   freshdb serve [--listen :7070]              run the HTTP API
         [--compact-every 1h] [--compact-grace 5m]   optional background compaction
+        [--gc-every 1h] [--keep-for 24h] [--keep-commits N] ...   or background GC (see gc)
         [--token T | --token-file F]          require "Authorization: Bearer T" (or FRESHDB_TOKEN)
         [--tls-cert F --tls-key F]            serve HTTPS (or FRESHDB_TLS_CERT/_KEY)
         [--insecure-no-auth]                  allow a non-loopback --listen without a token
@@ -55,7 +56,7 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
   freshdb vec put COLL ID 0.1,0.2,... | vec del COLL ID | vec search COLL 0.1,0.2,... [-k N] [--exact] [--ef N]
   freshdb vec ann COLL [--m 16] [--ef-construction 100] [--ef-search 64]   (opt-in HNSW index)
   freshdb tx '[{"op":"put","key":"k","value":"v"},{"op":"pub","topic":"t","value":"m"}]'
-  freshdb branch [list] | branch create NAME [--from B] [--at LSN] | branch promote SRC DST
+  freshdb branch [list] | branch create NAME [--from B] [--at LSN] | branch promote SRC DST | branch delete NAME
   freshdb rewind BRANCH LSN                   move a branch back (old head kept in reflog)
   freshdb log [--from LSN]                    show the raw log
   freshdb shred SUBJECT                       crypto-shred a subject everywhere; prints certificate
@@ -63,6 +64,11 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
   freshdb compact [--grace 0s]                drop overwritten/deleted/shredded data and the
                                               history below each branch head (no time travel
                                               below it afterwards); --grace delays deletion
+  freshdb gc [--keep-for 24h] [--keep-commits N] [--keep-reflog 64] [--keep-manifests 16] [--grace 0s] [--shrink]
+                                              compact keeping a history window, drop logs no branch
+                                              or kept reflog entry reaches, prune the reflog, delete
+                                              old manifests; --shrink (local journal, no server)
+                                              then rewrites journal.fj with only live objects
   freshdb migrate [--to journal|files]         convert a stopped local DB's on-disk layout
   freshdb version
 
@@ -83,7 +89,7 @@ type cli struct {
 func parse(argv []string) ([]string, map[string]string) {
 	var args []string
 	flags := map[string]string{}
-	bools := map[string]bool{"follow": true, "help": true, "h": true, "exact": true, "insecure-no-auth": true}
+	bools := map[string]bool{"follow": true, "help": true, "h": true, "exact": true, "insecure-no-auth": true, "shrink": true}
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
 		if strings.HasPrefix(a, "-") && len(a) > 1 && !isNumberish(a) {
@@ -168,8 +174,14 @@ func main() {
 		}
 		c.close = func() { db.Close() }
 	}
+	if args[0] == "gc" && flags["shrink"] != "" && addr != "" {
+		log.Fatalf("freshdb gc --shrink: works on a local directory only (drop --addr, stop the server)")
+	}
 	code := c.run()
 	c.close()
+	if code == 0 && args[0] == "gc" && flags["shrink"] != "" {
+		code = shrink(dbURL)
+	}
 	os.Exit(code)
 }
 
@@ -243,6 +255,9 @@ func serve(dbURL string, flags map[string]string) {
 	}()
 	if every := flags["compact-every"]; every != "" {
 		startCompactor(db, every, flags["compact-grace"])
+	}
+	if every := flags["gc-every"]; every != "" {
+		startGC(db, every, flags)
 	}
 	scheme := "http"
 	if cert != "" {
@@ -328,6 +343,56 @@ func startCompactor(db *freshdb.DB, every, grace string) {
 				st.Logs, st.Keys, st.Messages, st.BaseBytes, st.Deleted, st.Pending)
 		}
 	}()
+}
+
+// startGC runs GC every interval in the background with the gc flags
+// (--keep-for, --keep-commits, --keep-reflog, --keep-manifests,
+// --compact-grace for the grace period).
+func startGC(db *freshdb.DB, every string, flags map[string]string) {
+	d, err := time.ParseDuration(every)
+	if err != nil || d <= 0 {
+		log.Fatalf("freshdb: --gc-every %q: want a positive duration like 1h", every)
+	}
+	o, err := server.ParseGCOptions(func(k string) string {
+		if k == "grace" {
+			k = "compact-grace"
+		}
+		return flags[k]
+	}, 5*time.Minute)
+	if err != nil {
+		log.Fatalf("freshdb: %v", err)
+	}
+	go func() {
+		for range time.Tick(d) {
+			st, err := db.GC(context.Background(), o)
+			if errors.Is(err, freshdb.ErrClosed) {
+				return
+			}
+			if err != nil {
+				log.Printf("freshdb: gc: %v", err)
+				continue
+			}
+			log.Printf("freshdb: gc: based %d logs, dropped %d, pruned %d reflog entries, deleted %d manifests and %d objects (%d garbage items pending)",
+				st.Logs, st.LogsDropped, st.ReflogPruned, st.ManifestsDeleted, st.Deleted, st.Pending)
+		}
+	}()
+}
+
+// shrink rewrites a stopped local journal (freshdb gc --shrink).
+func shrink(dbURL string) int {
+	dir := strings.TrimPrefix(strings.TrimPrefix(dbURL, "file://"), "journal://")
+	if strings.Contains(dir, "://") {
+		log.Printf("freshdb gc --shrink: %s is not a local directory", dbURL)
+		return 2
+	}
+	st, err := store.ShrinkJournal(dir)
+	if err != nil {
+		log.Printf("freshdb gc --shrink: %v", err)
+		return 1
+	}
+	b, _ := json.Marshal(st)
+	fmt.Println(string(b))
+	return 0
 }
 
 // ---- commands ----
@@ -477,6 +542,8 @@ func (c *cli) run() int {
 				from = "main"
 			}
 			st, _ = c.call("POST", "/v1/branches", []byte(fmt.Sprintf(`{"name":%q,"from":%q,"at":%s}`, c.arg(2, "NAME"), from, at)), false)
+		case "delete":
+			st, _ = c.call("DELETE", "/v1/branches/"+esc(c.arg(2, "NAME")), nil, false)
 		case "promote":
 			st, _ = c.call("POST", "/v1/branches/"+esc(c.arg(2, "SRC"))+"/promote", []byte(fmt.Sprintf(`{"to":%q}`, c.arg(3, "DST"))), false)
 		default:
@@ -494,6 +561,15 @@ func (c *cli) run() int {
 			g = "0s"
 		}
 		st, _ = c.call("POST", "/v1/compact?grace="+url.QueryEscape(g), nil, false)
+	case "gc":
+		q := url.Values{}
+		q.Set("grace", "0s")
+		for _, k := range []string{"grace", "keep-for", "keep-commits", "keep-reflog", "keep-manifests"} {
+			if v := c.flags[k]; v != "" {
+				q.Set(k, v)
+			}
+		}
+		st, _ = c.call("POST", "/v1/gc?"+q.Encode(), nil, false)
 	case "verify":
 		var b []byte
 		st, b = c.call("GET", "/v1/verify", nil, false)

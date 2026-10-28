@@ -15,6 +15,7 @@
 //	PUT    /v1/vectors/{coll}/{id} (body [f,...])  POST /v1/vectors/{coll}/search {"vector":[..],"k":5}
 //	GET    /v1/branches   POST /v1/branches {"name","from","at"}
 //	POST   /v1/branches/{b}/rewind {"lsn"}   POST /v1/branches/{b}/promote {"to"}
+//	DELETE /v1/branches/{b}
 //	GET    /v1/log?branch=&from=          POST /v1/shred/{subject}    GET /v1/verify
 package server
 
@@ -58,12 +59,14 @@ func Handler(db *freshdb.DB) http.Handler {
 	m.HandleFunc("POST /v1/branches", s.branchCreate)
 	m.HandleFunc("POST /v1/branches/{b}/rewind", s.rewind)
 	m.HandleFunc("POST /v1/branches/{b}/promote", s.promote)
+	m.HandleFunc("DELETE /v1/branches/{b}", s.branchDelete)
 	m.HandleFunc("GET /v1/log", s.log)
 	m.HandleFunc("POST /v1/shred/{subject}", s.shred)
 	m.HandleFunc("GET /v1/verify", s.verify)
 	m.HandleFunc("POST /v1/indexes", s.index)
 	m.HandleFunc("POST /v1/vectors/{c}/ann", s.vecANN)
 	m.HandleFunc("POST /v1/compact", s.compact)
+	m.HandleFunc("POST /v1/gc", s.gc)
 	return m
 }
 
@@ -79,7 +82,7 @@ func fail(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, freshdb.ErrNotFound), errors.Is(err, freshdb.ErrNoBranch):
 		code = http.StatusNotFound
-	case errors.Is(err, freshdb.ErrConflict), errors.Is(err, freshdb.ErrBranchExists), errors.Is(err, freshdb.ErrNotFastForward):
+	case errors.Is(err, freshdb.ErrConflict), errors.Is(err, freshdb.ErrBranchExists), errors.Is(err, freshdb.ErrNotFastForward), errors.Is(err, freshdb.ErrMainBranch):
 		code = http.StatusConflict
 	case errors.Is(err, freshdb.ErrShredded), errors.Is(err, freshdb.ErrCompacted):
 		code = http.StatusGone
@@ -696,6 +699,14 @@ func (s *Server) rewind(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]any{"ok": true, "heads": s.DB.Branches()})
 }
 
+func (s *Server) branchDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.DB.DeleteBranch(r.Context(), r.PathValue("b")); err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]any{"ok": true, "heads": s.DB.Branches()})
+}
+
 func (s *Server) promote(w http.ResponseWriter, r *http.Request) {
 	var q struct{ To string }
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
@@ -789,6 +800,57 @@ func (s *Server) compact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, st)
+}
+
+// gc runs GC with retention: ?grace= (default 5m), keep-for=DURATION,
+// keep-commits=N, keep-reflog=N, keep-manifests=N (see freshdb.GCOptions).
+func (s *Server) gc(w http.ResponseWriter, r *http.Request) {
+	o, err := ParseGCOptions(r.URL.Query().Get, 5*time.Minute)
+	if err != nil {
+		fail(w, fmt.Errorf("%w: %v", errBad, err))
+		return
+	}
+	st, err := s.DB.GC(r.Context(), o)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, st)
+}
+
+// ParseGCOptions reads GC options named grace, keep-for, keep-commits,
+// keep-reflog and keep-manifests through get ("" = default).
+func ParseGCOptions(get func(string) string, grace time.Duration) (freshdb.GCOptions, error) {
+	o := freshdb.GCOptions{Grace: grace}
+	dur := func(name string, d *time.Duration) error {
+		if v := get(name); v != "" {
+			x, err := time.ParseDuration(v)
+			if err != nil || x < 0 {
+				return fmt.Errorf("%s %q: want a duration like 24h", name, v)
+			}
+			*d = x
+		}
+		return nil
+	}
+	num := func(name string, n *uint64) error {
+		if v := get(name); v != "" {
+			x, err := strconv.ParseUint(v, 10, 63)
+			if err != nil {
+				return fmt.Errorf("%s %q: want a number", name, v)
+			}
+			*n = x
+		}
+		return nil
+	}
+	var reflog, mans uint64
+	for _, err := range []error{dur("grace", &o.Grace), dur("keep-for", &o.KeepFor), num("keep-commits", &o.KeepCommits),
+		num("keep-reflog", &reflog), num("keep-manifests", &mans)} {
+		if err != nil {
+			return o, err
+		}
+	}
+	o.KeepReflog, o.KeepManifests = int(min(reflog, 1<<30)), int(min(mans, 1<<30))
+	return o, nil
 }
 
 func (s *Server) verify(w http.ResponseWriter, r *http.Request) {
