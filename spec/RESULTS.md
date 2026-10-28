@@ -15,6 +15,7 @@ the first run reported 32 with identical state counts.
 | FreshTxn | OCC serializable txns; consume-message + write-KV + ack-cursor in one txn; 3 concurrent consumers + blind writer; durable-prefix crash | 21,685,744 | 2,421,454 | 20 | no error |
 | FreshBranch | append-only logs with parents; create branch, rewind (fork + ref swap + reflog), time travel | 3,430,206 | 1,845,287 | 16 | no error |
 | FreshMigrate | offline layout migration (files ↔ journal): copy, verify, fsync, rename to `.migrated`, move original to backup, rename into place; volatile vs durable directory state; up to 4 crashes at any step with resume | 149 | 88 | 17 | no error (incl. liveness) |
+| FreshCompact | compaction/GC of a log: base image write, create-only manifest commit with garbage list, garbage + orphan sweeps, 2 processes with crashes and reopen (≤3 epochs), a fenced compactor, a reader holding an old manifest; grace modelled as "readers that started before an object was listed finish first". CI config MaxLSN=2; MaxLSN=3 checked locally: 63,131,325 / 11,134,091 states, depth 32, no error | 1,557,725 | 315,903 | 25 | no error |
 | FreshShred | DEK per subject, marker → delete → audit entry + certificate; crash between steps; DEK create landing late; sweep; hash chain | 25,570 | 6,481 | 16 | no error (incl. liveness) |
 
 ## Properties checked
@@ -37,6 +38,11 @@ the first run reported 32 with identical state counts.
   holds an incomplete copy), `DoneCorrect`; temporal `Finishes` (resuming
   always completes). Sanity check: removing the data fsync before the first
   rename makes TLC report a `NoPartialVisible` violation.
+- **FreshCompact** (2026-10-28): `NoLoss` (every object the latest
+  manifest needs exists), `EpochMonotone` (no fenced compactor commits),
+  `GarbageFinal` (nothing listed as garbage is referenced by the same or a
+  later manifest), `ReaderOK` (under the grace assumption a reader of an
+  older manifest never misses an object).
 - **FreshShred**: `ShreddedNeverRevealed`, `NoWritesAfterShred`, `ChainVerifiable`,
   `CertsVerify`; temporal `AppendOnly`, `KeyEventuallyGone` (under weak fairness
   of sweep/land: `<>[](shredded ⇒ no DEK)`).
@@ -63,12 +69,20 @@ the first run reported 32 with identical state counts.
    (`ShreddedNeverRevealed`), and the sweep at open/Verify gives
    `KeyEventuallyGone`.
 
+4. **Real design bug — FreshCompact, `GarbageFinal` violated** on the
+   first run (7 steps): compacting a log twice at the same head in the same
+   epoch wrote the same base key and listed the live base as garbage, so a
+   sweep would delete it. Fix before any code was written: a log with no
+   frame since its base is skipped, and base keys carry a random nonce.
+
 ## Mutation checks (are the properties strong enough?)
 
 | Mutation | Result |
 |---|---|
 | FreshLog without the `Superseded` check | `EpochMonotone` violated (bug #1 above) |
 | FreshTxn with OCC validation removed | `ExactlyOnce` violated (911 states) |
+| FreshCompact without the grace guard on sweeps | `ReaderOK` violated |
+| FreshCompact with the manifest commit not create-only (no fencing) | `EpochMonotone` violated |
 | FreshShred with `Sweep` disabled | `KeyEventuallyGone` violated |
 | FreshShred with reads ignoring the shred marker | `ShreddedNeverRevealed` violated |
 
