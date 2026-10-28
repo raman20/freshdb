@@ -2,11 +2,11 @@
   <img src="docs/assets/logo.svg" alt="freshDB" width="330">
 </p>
 
-<h3 align="center">One log. Every data model.</h3>
+<h3 align="center">One log. One binary. One API.</h3>
 
 <p align="center">
-KV, streams, documents, vectors and transactions as lenses over a single object-storage-native log,<br>
-with branching, rewind and provable deletion. One Go binary. One URL.
+KV, streams, documents, vectors and transactions as lenses over a single append-only log<br>
+on object storage or a local disk, with branching, rewind and provable deletion.
 </p>
 
 <p align="center">
@@ -19,20 +19,22 @@ with branching, rewind and provable deletion. One Go binary. One URL.
 
 <p align="center">
   <a href="https://raman20.github.io/freshdb/">Website</a> ·
+  <a href="docs/index.md">Docs</a> ·
   <a href="#5-minute-quickstart">Quickstart</a> ·
   <a href="#api-tour">API tour</a> ·
-  <a href="docs/architecture.md">Architecture</a> ·
-  <a href="#correctness-evidence">Correctness</a> ·
+  <a href="#benchmarks">Benchmarks</a> ·
+  <a href="#status-and-limitations">Status</a> ·
   <a href="ROADMAP.md">Roadmap</a>
 </p>
 
 > [!WARNING]
-> **Status: pre-1.0 prototype (v0.1.0). Do not use it in production.**
-> The correctness core is model-checked and simulation-tested. Several things
-> are still missing: compaction, disk-backed lenses, auth/TLS, KMS keys, and
-> testing on AWS S3 or R2 (only MinIO is tested). The on-storage format may
-> change before 1.0. See [Guarantees](#guarantees-and-non-guarantees) and
-> [Limitations](#limitations).
+> **Status: pre-1.0 prototype. Do not use it in production.** The latest
+> release is v0.1.0; `main` has unreleased changes (journal storage by
+> default, values read from the log, faster vectors, no OCC give-ups). The
+> correctness core is model-checked and simulation-tested. Still missing:
+> compaction, larger-than-RAM lens state, auth/TLS, KMS keys, and testing on
+> AWS S3 or R2 (only MinIO is tested). The on-storage format may change
+> before 1.0. See [Status and limitations](#status-and-limitations).
 
 ---
 
@@ -44,10 +46,9 @@ and a vector database holds memory. An outbox table keeps them consistent, and
 scripts handle backups and "delete this user". Each one has its own failure
 modes, its own backup story and its own deletion story.
 
-In freshDB, **all of that is one append-only log** on object storage. The KV
-store, topics, documents and vectors are not separate engines. They are
-**lenses**: deterministic views folded from the same log. Because there is
-only one log:
+In freshDB, **all of that is one append-only log**. The KV store, topics,
+documents and vectors are not separate engines. They are **lenses**:
+deterministic views folded from the same log. Because there is only one log:
 
 - **One transaction covers everything.** Consume a message, write the result
   and ack, all atomically. You don't need an outbox.
@@ -67,23 +68,43 @@ to be *the simplest thing that is good enough* for small and medium apps and
 agents. That is the same bet SQLite made. Read the
 [design principles](docs/design-principles.md), including what we refuse to build.
 
-## Install (30 seconds)
+## Features
+
+| | What you get | Notes |
+|---|---|---|
+| **KV** | get/put/delete, prefix scan, MVCC history | values over 64 B are read from the log through an off-heap cache (`WithValueCacheBytes`, default 256 MiB) |
+| **Topics** | publish, consumer groups, exactly-once consume+write+ack | consumers poll; no push yet |
+| **Documents** | JSON documents, secondary indexes added at any time (built by replaying the log) | equality lookups only |
+| **Vectors** | cosine search, exact (recall 1.0), parallel scan | no ANN index yet |
+| **Transactions** | serializable OCC across all lenses; hot keys cannot starve | single writer per database |
+| **History** | time travel to any LSN, zero-copy branches, rewind, promote, reflog | |
+| **Deletion** | per-subject crypto-shred, signed certificate, `verify` | covers subject-tagged values only |
+| **Storage** | local directory (journal layout on Linux/macOS/BSD), S3-compatible stores, in-memory | only MinIO is tested among object stores |
+| **Interfaces** | Go library, JSON/HTTP server, CLI — one binary | no auth/TLS on the server yet |
+
+## Install
+
+The latest release is **v0.1.0**. Everything this README describes (journal
+default, `freshdb migrate`, the new numbers) is on unreleased `main`, so
+install from `main` or build from source:
 
 ```sh
-go install github.com/raman20/freshdb/cmd/freshdb@latest
+go install github.com/raman20/freshdb/cmd/freshdb@main     # Go 1.27+
 freshdb version
 ```
 
-Or download a binary from [Releases](https://github.com/raman20/freshdb/releases)
-(Linux and macOS on amd64/arm64, Windows on amd64), or build from source:
+Or build from source:
 `git clone https://github.com/raman20/freshdb && cd freshdb && go build ./cmd/freshdb`.
 
-As a Go library: `go get github.com/raman20/freshdb`.
+v0.1.0 binaries (Linux and macOS on amd64/arm64, Windows on amd64) are on
+[Releases](https://github.com/raman20/freshdb/releases); `@latest` also
+resolves to v0.1.0. As a Go library: `go get github.com/raman20/freshdb@main`.
 
 ## 5-minute quickstart
 
 Everything below is copy-paste. It uses a local directory (`./freshdb-data` by
-default). The outputs are from a real run.
+default; on Linux/macOS a new directory gets the one-file journal layout).
+The outputs are from a real run of `main`.
 
 ```console
 $ freshdb put greeting "hello"
@@ -122,12 +143,12 @@ $ freshdb shred alice                            # forget alice, provably
 {
   "certificate": {
     "branch": "main",
-    "chain_head": "2d4edd51e8c8f550b7df72370bf0ecfc02ea9b89e32029547bd2b9ceb5969315",
+    "chain_head": "54fc01cc560a412220302230adce4476bb189af4214ad8ad15520ab9e78de356",
     "dek_deleted": true,
     "lenses_purged": [ "kv", "topic", "vector" ],
     …                                            (manifest id, public key, timestamp trimmed)
     "shred_lsn": 3,
-    "signature": "13a55730fb96987b5c5747190073189b…",
+    "signature": "c38cd13433e48e56e3f011203a9b3d3f…",
     "subject_hash": "f60a506188e786cb4ecac2187a408666",
   },
   "valid_signature": true
@@ -137,18 +158,20 @@ error (404): freshdb: not found
 $ freshdb verify                                 # CRCs, hash chains, fencing, shred proofs
 {
   "chain_heads": {
-    "exp": "6:9114c22c04dc6b20",
-    "main": "3:2d4edd51e8c8f550"
+    "exp": "6:e5e12e0b9a56ad8e",
+    "main": "3:54fc01cc560a4122"
   },
   "encrypted_values": 1,
   "entries": 8,
   "logs": 3,
-  "manifests": 20,
+  "manifests": 19,
   "ok": true,
-  "segments": 38,
+  "segments": 36,
   "unreadable_shredded_values": 1
 }
 ```
+
+Hashes and signatures differ on every run.
 
 **Use S3 instead of a local directory.** Same commands, different URL:
 
@@ -170,6 +193,10 @@ curl -s localhost:7070/v1/kv/k                     # v
 > Opening a database takes the write lease and **fences every other writer**.
 > When a server is running, point the CLI at it with `--addr` / `FRESHDB_ADDR`
 > rather than opening the same URL directly.
+
+More: [docs/getting-started.md](docs/getting-started.md) (documents, vectors,
+transactions from the CLI) and [docs/operations.md](docs/operations.md)
+(storage URLs, migration, cache sizing, backups).
 
 ## API tour
 
@@ -325,7 +352,7 @@ Read more in [docs/architecture.md](docs/architecture.md) and
 
 | | Guarantee |
 |---|---|
-| Durability | A transaction is acknowledged only after its segment is durable: S3 PUT returned success, or a local file was fsync'd and atomically linked. Acked transactions survive crashes and restarts. |
+| Durability | A transaction is acknowledged only after its segment is durable: S3 PUT returned success, or (locally) the journal record was written and `fdatasync`'d, or, in the files layout, the segment file was fsync'd and atomically linked. Acked transactions survive crashes and restarts. |
 | Atomicity | A transaction's ops all appear or none do, across every lens. |
 | Isolation | Transactions on a branch are **serializable**. There is a single writer per database with OCC read-set validation on KV, topic and cursor reads. |
 | Exactly-once processing | Fetch + write + ack in one transaction processes each message at most once, and each ack is atomic with its writes. |
@@ -356,7 +383,7 @@ Read more in [docs/architecture.md](docs/architecture.md) and
 
 ## Correctness evidence
 
-Results are from this repo at v0.1.0. CI reruns the TLC checks, 2,000
+Results are from this repo (v0.1.0, plus FreshMigrate on `main`). CI reruns the TLC checks, 2,000
 simulator seeds, fuzzing and the MinIO tests on every push.
 
 | Method | What | Result |
@@ -365,6 +392,7 @@ simulator seeds, fuzzing and the MinIO tests on every push.
 | | FreshTxn (serializable OCC, exactly-once consume+ack) | 21,685,744 states (2,421,454 distinct), no error |
 | | FreshBranch (branch, rewind, time travel) | 3,430,206 states (1,845,287 distinct), no error |
 | | FreshShred (shred steps, crashes, late DEKs; incl. liveness) | 25,570 states (6,481 distinct), no error |
+| | FreshMigrate (files ↔ journal migration, up to 4 crashes with resume; incl. liveness) | 149 states (88 distinct), no error |
 | **Deterministic simulation** ([sim/](sim)) | seeded workload + fault-injecting store; checks against a reference model after every step | 50,000 seeds before the final fixes and 10,000 on the final code, all OK. The 10k run covered 137,293 acked txns, 75,537 crashes, 29,979 writer takeovers and 114,926 injected faults. |
 | **Property tests** ([rapid](https://pgregory.net/rapid)) | `lens == fold(log)`, snapshot+tail == fold, `DropSubject == fold(redacted)`, lenses refine reference models | 5,000 checks per lens property, 500 engine programs |
 | **Crash test** | 4 concurrent writers, kill -9 at random points | 200 rounds, 20,166 recovered txns, all checks OK |
@@ -414,7 +442,7 @@ more mature than freshDB. Corrections are welcome.
 **When not to use freshDB:**
 - You need high write throughput on a single dataset.
 - You need multi-writer or high availability today.
-- Your dataset doesn't fit in RAM.
+- Your keys, history, topics, documents or vectors don't fit in RAM.
 - You need ad-hoc SQL.
 - You need production maturity.
 
@@ -422,135 +450,136 @@ For those, use the systems above.
 
 ## Benchmarks
 
-> **One run on a shared 8-vCPU VM, embedded Go engines, S3 = local MinIO.
-> This is not a performance claim.** The full tables, method, commands and
-> caveats are in [docs/benchmarks.md](docs/benchmarks.md); the raw JSON is in
-> [bench/results](bench/results/2026-10-27/).
+> **Single runs on a shared, noisy 8-vCPU VM; embedded Go engines; S3 = local
+> MinIO. This is not a performance claim.** Full tables, method, commands and
+> caveats are in [docs/benchmarks.md](docs/benchmarks.md); raw JSON is in
+> [bench/results](bench/results/).
 
-YCSB, 1M × 1 KiB records, zipfian, fsync on. Throughput is closed-loop
-successful ops/s:
+YCSB, 1M × 1 KiB records, zipfian, fsync on, closed-loop successful ops/s.
+"main" is unreleased `main` at `e12e909` with the default URL (journal
+layout), from [`2026-10-28-read-path/`](bench/results/2026-10-28-read-path/).
+The other engines were run once, in the v0.1.0 run
+([`2026-10-27/`](bench/results/2026-10-27/)), and not rerun.
 
-| | freshDB | Badger | Pebble | bbolt | SQLite |
-|---|---:|---:|---:|---:|---:|
-| C (read-only), 8 clients | **2.82M** | 261k | 197k | 752k | 37k |
-| B (95% read), 64 clients | **697k** | 159k | 194k | 242k | 34k |
-| A (50% update), 1 client | 3.7k | 19k | **32k** | 22k | 9.3k |
-| A (50% update), 64 clients | 81k | 25k | **119k** | 24k | 13k |
-| F (read-modify-write), 64 clients | 67k ¹ | 28k ¹ | **81k** | 22k | 8.9k |
-| Peak RSS | 7.1 GiB | 3.5 GiB | **0.7 GiB** | 1.7 GiB | 0.3 GiB |
+| | freshDB main | freshDB v0.1.0 | Badger | Pebble | bbolt | SQLite |
+|---|---:|---:|---:|---:|---:|---:|
+| C (read-only), 8 clients | 1.83M | **2.82M** | 261k | 197k | 752k | 37k |
+| B (95% read), 64 clients | **1.15M** | 697k | 159k | 194k | 242k | 34k |
+| A (50% update), 1 client | **46k** | 3.7k | 19k | 32k | 22k | 9.3k |
+| A (50% update), 64 clients | **231k** | 81k | 25k | 119k | 24k | 13k |
+| F (read-modify-write), 64 clients | **131k** | 67k ¹ | 28k ¹ | 81k | 22k | 8.9k |
+| Peak RSS, whole run | 2.12 GiB | 7.1 GiB | 3.5 GiB | 0.7 GiB | 1.7 GiB | **0.3 GiB** |
 
 ¹ Plus RMWs that gave up after 16 OCC conflict retries: 9,660 for freshDB
-and 1,045 for Badger.
+v0.1.0 and 1,045 for Badger. freshDB `main` had none.
 
-> The table above is v0.1.0. Unreleased `main` has since:
-> - cut peak RSS to 0.99 GiB;
-> - removed the OCC give-ups;
-> - made 100k-vector search 1,051 QPS;
-> - made a journal layout the default for new local directories on Unix
->   (existing directories keep their layout; `freshdb migrate` converts).
->   With the default URL, A with 1 client does 43.6k ops/s.
->
-> Reads got slower (C at 64 clients: 1.5M ops/s with the default journal,
-> 1.2M with the files layout). The 1k msgs/s streaming p99 is noisy on
-> this VM (3.1 ms to 43 ms across runs; the disk itself stalls).
-> Peak RSS with the journal default is 1.95 GiB.
-> See "Changes since v0.1.0" in [docs/benchmarks.md](docs/benchmarks.md).
+Other suites, freshDB `main` vs v0.1.0 (same VM, same commands):
+
+| | main | v0.1.0 | reference |
+|---|---:|---:|---|
+| Vector search, 100k × 128-d, 1 client, exact (recall@10 = 1.0) | 1,051 QPS | 19 QPS | flat Go loop 165 QPS |
+| Durable publish, 64 producers (default URL) | 119k msgs/s | 42k msgs/s | NATS JetStream `SyncAlways` 8.5k |
+| Streaming e2e p99 at 1k msgs/s (default URL) | 22.5 ms; 3.1–43 ms across journal runs | 23.4 ms | NATS 1.9 ms |
+| OCC transfers, 1 hot key, 64 clients (files layout) | 3.1k commits/s, 0 gave up | 2.1k, 49k gave up | Badger 14.1k, 57.5k gave up |
 
 **Where freshDB loses:**
-- Single-client durable writes (each commit does its own fsyncs).
-- Hot-key contention (OCC aborts instead of queueing).
-- Memory (lens state lives in RAM).
-- Low-rate streaming tail latency: e2e p99 at 1k msgs/s is 23 ms, vs 1.9 ms
-  for NATS JetStream.
-- Vector search: exact only, 19 QPS at 100k × 128-d, vs 145 for a plain Go
-  loop.
+- **Memory.** 2.12 GiB peak RSS vs 0.7 for Pebble. Keys, MVCC history,
+  topics, documents and vectors are still in RAM; history is never trimmed.
+- **Point reads are below v0.1.0** (C at 64 clients: 2.24M vs 2.92M),
+  because values now come from the log through a cache instead of RAM.
+- **Low-rate streaming tail latency** (p99 3.1–43 ms at 1k msgs/s across runs vs 1.9 ms
+  for NATS). Part is this VM's disk; part is freshDB's 8 MiB journal growth
+  stall, which is not fixed yet.
+- **One very hot key.** Nothing gives up any more, but Badger commits more per
+  second.
+- **Vectors** are exact; QPS falls linearly with N. No ANN index.
+- **Old-layout directories** (v0.1.0, `fs://`, Windows) still pay two fsyncs
+  per commit: A at 1 client is 5.2k ops/s. Run `freshdb migrate`.
 
-**Where it is strong:**
-- Reads.
-- Many concurrent writers through group commit.
-- Durable streaming throughput: 42k msgs/s, vs 8.5k for NATS with
-  `SyncAlways`.
-- Exactly-once consume→write→publish transactions: 62k msgs/s, and the check
-  passes in every run.
+On S3 (MinIO, v0.1.0 run), a commit costs 1 PUT at 1 writer, ≈ $5 per 1M
+commits at AWS list price (*estimate*), and 0.03 PUTs at 64 writers thanks to
+group commit.
 
-On S3, a commit costs 1 PUT at 1 writer, ≈ $5 per 1M commits at AWS list
-price (*estimate*). It costs 0.03 PUTs at 64 writers thanks to group commit.
-
-Reproduce with `cd bench && scripts/run-all.sh`. Engine micro-benchmarks are
-still available with `go test -run '^$' -bench . -benchmem .`.
+Reproduce with `cd bench && scripts/run-all.sh`.
 
 ## Deployment notes
 
-- **URL forms.**
-  - `./dir` or `file:///abs/path`: local directory. A new directory gets
-    the journal layout on Linux/macOS/BSD: one append-only `journal.fj`, so
-    a commit is one write plus one `fdatasync`. On Windows it gets the files
-    layout: one file per segment. An existing directory keeps the layout it
-    has. That includes v0.1.0 directories, which use the files layout.
-    Convert a stopped database with `freshdb migrate --db DIR`; it keeps a
-    `DIR.bak-files` backup. `journal:///p` or `fs:///p` forces a layout,
-    and each refuses a directory that holds the other one.
-  - `s3://bucket/prefix?endpoint=host:port&insecure=1&create=1`: any
-    S3-compatible store. `insecure` means plain HTTP and `create` creates the
-    bucket.
-  - `mem://name`: in-memory, for tests.
-  - Credentials are read from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
-- **Object stores.**
-  - The store must support create-only conditional writes (`If-None-Match: *`).
-  - **MinIO is tested in CI.**
-  - AWS S3 and Cloudflare R2
-    ([docs](https://developers.cloudflare.com/r2/reference/consistency/))
-    document this support but are **not tested yet**.
-- **Single writer.** Run one writer per database. Shard by database (for
-  example one per tenant or agent) to scale. Don't point two servers at the
-  same URL: the newer one fences the older one, which is safe but not useful.
-- **Backup.** Copying the bucket prefix is a complete backup. Objects are
-  immutable, except that `keys/dek/*` are deleted on shred. A backup made
-  before a shred can still decrypt that subject. Expire noncurrent versions of
-  `keys/` if you rely on shred.
-- **Growth.** There is no compaction yet. Object count grows by one per group
-  commit, plus a manifest and a fence for every open, and every CLI call in
-  embedded mode is an open. Prefer `freshdb serve` for long-running use.
-- **Memory.** All lens state lives in RAM.
+Short version; the full guide is [docs/operations.md](docs/operations.md).
+
+- **URLs.** `./dir` or `file:///abs/path` (local; a new directory gets the
+  journal layout on Linux/macOS/BSD and the files layout on Windows; an
+  existing directory keeps its layout), `journal:///p` or `fs:///p` (force a
+  layout), `s3://bucket/prefix?endpoint=host:port&insecure=1&create=1`,
+  `mem://name` (tests). S3 credentials come from `AWS_ACCESS_KEY_ID` /
+  `AWS_SECRET_ACCESS_KEY`.
+- **v0.1.0 directories** keep working. Convert a stopped one with
+  `freshdb migrate --db DIR` (keeps `DIR.bak-files`).
+- **Object stores** must support create-only writes (`If-None-Match: *`).
+  MinIO is tested in CI; AWS S3 and Cloudflare R2 document support but are
+  **not tested yet**.
+- **Single writer.** One writer per database; shard by database to scale.
+- **Backups.** Copy the directory or bucket prefix of a stopped database. A
+  backup made before a shred can still decrypt that subject.
+- **Growth.** No compaction yet: storage only grows. Prefer `freshdb serve`
+  for long-running use (every embedded CLI call is an open, which writes a
+  manifest and a fence).
 
 ## Security
 
-Please report vulnerabilities privately; see [SECURITY.md](SECURITY.md). Short version:
+Please report vulnerabilities privately; see [SECURITY.md](SECURITY.md) and
+[docs/security.md](docs/security.md). Short version:
 
 - The HTTP server has **no auth or TLS**. It binds to `127.0.0.1` by default.
 - In dev mode, the KEK and the signing key are stored in the bucket. The Go
-  API accepts `WithKEK`.
+  API accepts `WithKEK`; the CLI has no `--kek` flag yet.
 - Only subject-tagged values are encrypted.
 
-## Limitations
+## Status and limitations
 
-- All lens state is in RAM. There is no compaction. Snapshots are off by
-  default: they are written synchronously in the commit path and don't speed
-  up open yet.
+**Fixed on `main` since v0.1.0** (details in [CHANGELOG.md](CHANGELOG.md)
+and [docs/benchmarks.md](docs/benchmarks.md)):
+- Single-client durable writes: journal layout by default for new local
+  directories on Unix (one `write` + `fdatasync` per commit).
+- Memory: large KV values stay in the log (7.1 → ~1 GiB on the files layout;
+  2.12 GiB with the journal default and the 256 MiB value cache).
+- Hot-key read-modify-write no longer gives up after 16 retries.
+- Vector search is ~55× faster at 100k vectors (still exact).
+- Concurrent escalated transactions share a group commit (writer batching).
+- The Windows build works again.
+- A v0.1.0 bug where returned or passed value slices aliased internal state.
+
+**Still true:**
+- Keys, KV version history, topics, documents and vectors live in RAM, and
+  history is never trimmed. There is no compaction. Snapshots are off by
+  default and don't speed up open yet.
 - Vector search is exact brute force; there is no ANN index.
-- There is one writer per database, with no HA and no replicas.
+- One writer per database, with no HA and no replicas.
+- The HTTP server has no auth or TLS; the CLI has no `--kek` flag.
+- Only MinIO is tested; AWS S3 and R2 are not.
+- The journal layout is new and has less mileage than the files layout; its
+  file grows in 8 MiB chunks with a stall on the commit path.
 - In-flight commits that race a `rewind` land on the retired log. That log
   stays reachable via the reflog.
 - A DEK create that lands after a shred leaves an orphan key until the next
   open or `verify` sweeps it. No plaintext is served in that window.
-- The CLI has no `--kek` flag yet.
 - The on-storage format may change before 1.0.
 
 ## Project
 
+- [docs/index.md](docs/index.md): map of all documentation
 - [ROADMAP.md](ROADMAP.md): what's next, including good first issues
 - [CONTRIBUTING.md](CONTRIBUTING.md): dev setup and the correctness bar for changes
-- [docs/](docs): [architecture](docs/architecture.md), [formats](docs/formats.md), [lens authoring](docs/lens-authoring.md), [design principles](docs/design-principles.md), [FAQ](docs/faq.md)
 - [CHANGELOG.md](CHANGELOG.md) · [GOVERNANCE.md](GOVERNANCE.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md)
 
 ```
-*.go         engine: open/fencing, writer + group commit, transactions, branches, shred/verify, keyring
+*.go         engine: open/fencing, writer + group commit, transactions, branches, shred/verify, keyring, value cache
 format/      segment + payload encoding (CRC32C, hash chain), fuzz targets
 lens/        pure folds: KV (MVCC), topics, docs + indexes, vectors; property tests
-store/       Store interface: fs, s3, mem, faulty (fault injection)
+store/       Store interface: journal, fs, s3, mem, faulty (fault injection); layout detection + migrate
 sim/         deterministic simulator
 server/      HTTP API          cmd/freshdb/  the single binary
 spec/        TLA+ specs + TLC results          examples/  agent demo, API tour
+bench/       freshdb-bench suite (separate module) + results
 ```
 
 *History: freshDB began as a rewrite of an earlier prototype called goli.*
