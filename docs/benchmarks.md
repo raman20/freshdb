@@ -27,6 +27,7 @@ suites (same VM, same commands and seeds, fsync on), all on unreleased
 `main`:
 - YCSB, streaming and OCC, explicit layouts: [`2026-10-27-after-journal/`](../bench/results/2026-10-27-after-journal/), commit `60068f3`. Two of its files say `60068f3-dirty` because CHANGELOG/docs were being edited during the run; the code was `60068f3`.
 - YCSB and streaming with the **default URL** (a bare path, which now means the journal layout on Unix): [`2026-10-28-default-journal/`](../bench/results/2026-10-28-default-journal/), commit `6e7b172`, plus a back-to-back default-vs-`journal://` A/B at 1k msgs/s in [`ab-1k/`](../bench/results/2026-10-28-default-journal/ab-1k/).
+- YCSB with the default URL after the read-path work (item 2): [`2026-10-28-read-path/`](../bench/results/2026-10-28-read-path/), commit `e12e909`, same command as `2026-10-28-default-journal`.
 - Vectors: [`2026-10-27-after-vector/`](../bench/results/2026-10-27-after-vector/), commit `f539629`. The vector code has not changed since.
 - Intermediate runs: [`after-memory`](../bench/results/2026-10-27-after-memory/) and [`after-occ`](../bench/results/2026-10-27-after-occ/).
 
@@ -41,7 +42,8 @@ directories use.
 
 **What changed:**
 1. **Memory.** Values over 64 B now stay in the log as positions and are read
-   through a 64 MiB LRU cache (`WithValueCacheBytes`).
+   through a value cache (`WithValueCacheBytes`): a 64 MiB on-heap LRU
+   until `e12e909`, now a 256 MiB off-heap ring (see 5).
 2. **Hot keys.** Retried transactions go first in a group commit and back
    off with jitter. After 3 lost conflicts the transaction body runs on the
    writer, so it cannot starve.
@@ -53,30 +55,35 @@ directories use.
    layout (auto-detected); `freshdb migrate` converts between layouts.
    Windows keeps the files layout. See
    [design/01-journal-default.md](design/01-journal-default.md).
+5. **Read path.** Values are copied in and out (fixes an aliasing bug
+   from v0.1.0); the value cache moved off the Go heap (one `mmap` arena,
+   FIFO ring with second chance) and its default went 64 → 256 MiB;
+   reads no longer take the DB lock exclusively; read-only transactions
+   allocate no maps. See [design/02-read-path.md](design/02-read-path.md).
 
-| | v0.1.0 | files layout | journal (explicit) | default URL (journal) | Pebble (v0.1.0 run) |
-|---|---|---|---|---|---|
-| peak RSS, whole YCSB run | 7.12 GiB | 0.99 GiB | 1.81 GiB | 1.95 GiB | 0.73 GiB |
+| | v0.1.0 | files layout | journal (explicit) | default URL (journal) | default URL, read path | Pebble (v0.1.0 run) |
+|---|---|---|---|---|---|---|
+| peak RSS, whole YCSB run | 7.12 GiB | 0.99 GiB | 1.81 GiB | 1.95 GiB | 2.12 GiB | 0.73 GiB |
 
 YCSB, fsync on, successful closed-loop ops/s (F: + RMWs that gave up after 16 retries):
 
-| cell | v0.1.0 | files layout | journal (explicit) | default URL (journal) | Pebble (v0.1.0 run) |
-|---|---|---|---|---|---|
-| A c=1 | 3746 | 5153 | 42465 | 43602 | 31505 |
-| A c=8 | 17193 | 16216 | 92478 | 108748 | 92661 |
-| A c=64 | 81149 | 55710 | 202801 | 231280 | 119055 |
-| B c=1 | 38202 | 31260 | 161442 | 178849 | 68120 |
-| B c=8 | 125655 | 161485 | 431945 | 481549 | 148333 |
-| B c=64 | 696955 | 476912 | 881940 | 1001880 | 193850 |
-| C c=1 | 859866 | 271190 | 299360 | 301728 | 99788 |
-| C c=8 | 2823085 | 950231 | 1464873 | 1533678 | 197171 |
-| C c=64 | 2916144 | 1209292 | 1499386 | 1505775 | 281134 |
-| F c=1 | 4209 (0 gave up) | 4401 (0 gave up) | 40304 (0 gave up) | 40396 (0 gave up) | 30755 (0 gave up) |
-| F c=8 | 15402 (0 gave up) | 17683 (0 gave up) | 86631 (0 gave up) | 95882 (0 gave up) | 68431 (0 gave up) |
-| F c=64 | 67066 (9660 gave up) | 49536 (0 gave up) | 79843 (0 gave up) | 129360 (0 gave up) | 80798 (0 gave up) |
-| D c=1 | 37339 | 40109 | 159873 | 197747 | 63253 |
-| D c=8 | 164646 | 159714 | 392929 | 463763 | 194231 |
-| D c=64 | 768190 | 536294 | 787213 | 1054211 | 343705 |
+| cell | v0.1.0 | files layout | journal (explicit) | default URL (journal) | default URL, read path | Pebble (v0.1.0 run) |
+|---|---|---|---|---|---|---|
+| A c=1 | 3746 | 5153 | 42465 | 43602 | 46058 | 31505 |
+| A c=8 | 17193 | 16216 | 92478 | 108748 | 112567 | 92661 |
+| A c=64 | 81149 | 55710 | 202801 | 231280 | 230796 | 119055 |
+| B c=1 | 38202 | 31260 | 161442 | 178849 | 200766 | 68120 |
+| B c=8 | 125655 | 161485 | 431945 | 481549 | 516065 | 148333 |
+| B c=64 | 696955 | 476912 | 881940 | 1001880 | 1152103 | 193850 |
+| C c=1 | 859866 | 271190 | 299360 | 301728 | 425514 | 99788 |
+| C c=8 | 2823085 | 950231 | 1464873 | 1533678 | 1831323 | 197171 |
+| C c=64 | 2916144 | 1209292 | 1499386 | 1505775 | 2235371 | 281134 |
+| F c=1 | 4209 (0 gave up) | 4401 (0 gave up) | 40304 (0 gave up) | 40396 (0 gave up) | 44791 (0 gave up) | 30755 (0 gave up) |
+| F c=8 | 15402 (0 gave up) | 17683 (0 gave up) | 86631 (0 gave up) | 95882 (0 gave up) | 104133 (0 gave up) | 68431 (0 gave up) |
+| F c=64 | 67066 (9660 gave up) | 49536 (0 gave up) | 79843 (0 gave up) | 129360 (0 gave up) | 130604 (0 gave up) | 80798 (0 gave up) |
+| D c=1 | 37339 | 40109 | 159873 | 197747 | 197354 | 63253 |
+| D c=8 | 164646 | 159714 | 392929 | 463763 | 512996 | 194231 |
+| D c=64 | 768190 | 536294 | 787213 | 1054211 | 1064990 | 343705 |
 
 Streaming, fsync on, 8 producers, end-to-end latency (ms):
 
@@ -119,10 +126,15 @@ OCC transfers, fsync on (commits/s; ops that gave up after 16 retries):
     writes in the same timed phases (2.99M vs 1.06M), so it built more
     history. Bounding this needs history retention / compaction (planned),
     not a store change.
-- **Reads got slower.** Point reads that miss the value cache pay a `pread`
-  and a CRC check. YCSB C at 64 clients fell from 2.92M to 1.21M ops/s
-  (files layout) and 1.51M (default journal), still 4.3× and 5.4×
-  Pebble's 281k. A larger `WithValueCacheBytes` buys back speed with memory.
+- **Reads got slower, then partly recovered.** Point reads that miss the
+  value cache pay a `pread` and a CRC check. YCSB C at 64 clients fell
+  from 2.92M to 1.21M ops/s (files layout) and 1.51M (default journal).
+  After the read-path work it is 2.24M (c=1: 426k vs 302k before, v0.1.0
+  860k), with peak RSS 2.12 GiB vs 1.95 GiB: the extra 192 MiB of cache
+  costs about its own size because it is off the Go heap. Still below
+  v0.1.0, which held every value in RAM (7.12 GiB). Remaining costs at
+  c=64 (CPU profile): RWMutex reader counts ~14%, `pread` ~12-15%, GC
+  ~14%, of which part is the per-read copy.
 - **Durable write latency: fixed for new directories (default URL).**
   - Default URL: A at 1 client is 43.6k ops/s (v0.1.0: 3.7k; Pebble: 32k)
     and 231k at 64 clients (Pebble: 119k). This matches or beats the

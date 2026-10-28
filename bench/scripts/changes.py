@@ -11,6 +11,7 @@ BASE = "2026-10-27"
 NEW = "2026-10-27-after-journal"
 VEC = "2026-10-27-after-vector"
 DEF = "2026-10-28-default-journal"  # `-system freshdb` after the default became the journal
+RP = "2026-10-28-read-path"  # default URL after the read-path work (item 2)
 
 
 def load(d, f):
@@ -37,20 +38,22 @@ def main():
     n = load(NEW, "ycsb-freshdb-fsync-true.json")
     j = load(NEW, "ycsb-freshdb-journal-fsync-true.json")
     dflt = load(DEF, "ycsb-freshdb-fsync-true.json")
+    rp = load(RP, "ycsb-freshdb-fsync-true.json")
     pb = ycsb_cells(load(BASE, "ycsb-pebble-fsync-true.json"))
-    B, N, J, D = ycsb_cells(b), ycsb_cells(n), ycsb_cells(j), ycsb_cells(dflt)
-    out.append("| | v0.1.0 | files layout | journal (explicit) | default URL (journal) | Pebble (v0.1.0 run) |")
-    out.append("|---|---|---|---|---|---|")
-    out.append("| peak RSS, whole YCSB run | %s | %s | %s | %s | %s |" % (
+    B, N, J, D, P = ycsb_cells(b), ycsb_cells(n), ycsb_cells(j), ycsb_cells(dflt), ycsb_cells(rp)
+    out.append("| | v0.1.0 | files layout | journal (explicit) | default URL (journal) | default URL, read path | Pebble (v0.1.0 run) |")
+    out.append("|---|---|---|---|---|---|---|")
+    out.append("| peak RSS, whole YCSB run | %s | %s | %s | %s | %s | %s |" % (
         gib(b["params"]["peak_rss"]), gib(n["params"]["peak_rss"]),
         gib(j["params"]["peak_rss"]) if j else "-",
         gib(dflt["params"]["peak_rss"]) if dflt else "-",
+        gib(rp["params"]["peak_rss"]) if rp else "-",
         gib(load(BASE, "ycsb-pebble-fsync-true.json")["params"]["peak_rss"])))
     out.append("")
     out.append("YCSB, fsync on, successful closed-loop ops/s (F: + RMWs that gave up after 16 retries):")
     out.append("")
-    out.append("| cell | v0.1.0 | files layout | journal (explicit) | default URL (journal) | Pebble (v0.1.0 run) |")
-    out.append("|---|---|---|---|---|---|")
+    out.append("| cell | v0.1.0 | files layout | journal (explicit) | default URL (journal) | default URL, read path | Pebble (v0.1.0 run) |")
+    out.append("|---|---|---|---|---|---|---|")
     for w in "ABCFD":
         for c in (1, 8, 64):
             def f(m):
@@ -61,7 +64,7 @@ def main():
                 if w == "F":
                     s += " (%d gave up)" % r["closed_loop"]["errors"]
                 return s
-            out.append("| %s c=%d | %s | %s | %s | %s | %s |" % (w, c, f(B), f(N), f(J), f(D), f(pb)))
+            out.append("| %s c=%d | %s | %s | %s | %s | %s | %s |" % (w, c, f(B), f(N), f(J), f(D), f(P), f(pb)))
     out.append("")
     out.append("Streaming, fsync on, 8 producers, end-to-end latency (ms):")
     out.append("")

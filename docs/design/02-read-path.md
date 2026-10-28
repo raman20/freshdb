@@ -90,7 +90,9 @@ C-only probe (`-workloads C -clients 1,8,64 -duration 8s`, default URL,
 
 The copies cost ~16% on hits; the allocation cuts and the ring win it
 back at equal cache size; the extra 192 MiB of cache costs ~+266 MB RSS
-off-heap versus ~+550 MB on-heap. The success metric (full run) is in
-docs/benchmarks.md. Remaining on this path: RWMutex reader-count atomics
+off-heap versus ~+550 MB on-heap. Success metric, full A,B,C,F,D default-URL run
+(`bench/results/2026-10-28-read-path/`, same command as
+`2026-10-28-default-journal`): C c=64 1.51M → 2.24M ops/s, peak RSS
+1.95 → 2.12 GiB (+0.17 GiB for +192 MiB of cache): met. Remaining on this path: RWMutex reader-count atomics
 (~14% CPU at c=64), the second `pread` per miss, and GC from per-read
 copies.
