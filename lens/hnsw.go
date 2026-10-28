@@ -148,13 +148,17 @@ func (g *hnsw) insert(s int) {
 	for l := g.top; l > lv; l-- {
 		ep = g.greedy(q, ep, l)
 	}
+	eps := []int32{ep}
 	for l := min(lv, g.top); l >= 0; l-- {
-		w := g.search(q, []int32{ep}, g.p.EfConstruction, l)
+		w := g.search(q, eps, g.p.EfConstruction, l)
 		g.links[n][l] = g.selectNb(q, w, g.maxM(l))
 		for _, nb := range g.links[n][l] {
 			g.link(nb, n, l)
 		}
-		ep = w[0].n
+		eps = eps[:0]
+		for _, c := range w {
+			eps = append(eps, c.n)
+		}
 	}
 	if lv > g.top {
 		g.entry, g.top = n, lv
@@ -172,13 +176,10 @@ func (g *hnsw) link(nb, n int32, l int) {
 				c = append(c, cand{x, dot(v, g.vec(x))})
 			}
 		}
-		// keep the closest (no diversity heuristic here: re-running it on
-		// every overflow cost ~60% of build time)
+		// same diversity heuristic as for new nodes: keeping only the
+		// closest drops the long links between clusters and strands them
 		sortCands(c)
-		ls = ls[:0]
-		for _, x := range c[:min(len(c), g.maxM(l))] {
-			ls = append(ls, x.n)
-		}
+		ls = g.selectNb(v, c, g.maxM(l))
 	}
 	g.links[nb][l] = ls
 }
@@ -197,12 +198,11 @@ func sortCands(c []cand) {
 	})
 }
 
-// selectNb is the paper's heuristic (keep a candidate only if it is closer
-// to the base than to every kept one), topped up with the best pruned
-// candidates. c is sorted best first.
+// selectNb is the paper's heuristic: keep a candidate only if it is closer
+// to the base than to every kept one (no top-up with pruned candidates, as
+// in hnswlib). c is sorted best first.
 func (g *hnsw) selectNb(base []float32, c []cand, m int) []int32 {
 	out := make([]int32, 0, m)
-	var pruned []int32
 	for _, x := range c {
 		if len(out) == m {
 			break
@@ -216,15 +216,7 @@ func (g *hnsw) selectNb(base []float32, c []cand, m int) []int32 {
 		}
 		if ok {
 			out = append(out, x.n)
-		} else {
-			pruned = append(pruned, x.n)
 		}
-	}
-	for _, x := range pruned {
-		if len(out) == m {
-			break
-		}
-		out = append(out, x)
 	}
 	return out
 }
