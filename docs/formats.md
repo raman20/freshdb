@@ -26,6 +26,40 @@ payload's bytes canonical, which the hash chain relies on.
 `subjectHash` is a truncated SHA-256 of the subject id (`SubjectHash` in
 `keyring.go`). Raw subject ids never reach storage.
 
+## Local directory layouts (unreleased)
+
+A local directory stores the objects above in one of two layouts. The
+objects and their bytes are the same in both.
+- **files**: one file per object at its key path. This was the only
+  layout in v0.1.0, and it is the default on Windows.
+  - Writes go to `.tmp/`, are fsynced, renamed into place, and then the
+    directory is fsynced.
+- **journal** (`journal.fj`): the default for new directories on Unix.
+  - 32-byte header: magic `FRESHJ1\0`, a 16-byte random salt, and the
+    CRC-32C of the first 24 bytes.
+  - Then records. Each record has a 12-byte header: crc u32, kind u8
+    (1 put, 2 delete, 3 dead), a pad byte, klen u16 and dlen u32. The key
+    and data follow.
+  - The record CRC is CRC-32C over the salt, the record's own offset, the
+    header, the key and the data. A dead record's CRC covers only its
+    header and key.
+  - Scanning stops at the first invalid record, so a torn tail is never
+    read as data. The salt keeps bytes from an older file at the same
+    offset from passing the CRC.
+  - Deleting an object appends a delete record. The put record is then
+    marked dead and its data is hole-punched (or zeroed).
+  - The file grows in 8 MiB zero-filled, fsynced chunks.
+  - Writers take an exclusive `flock` and readers a shared one.
+
+`store.DetectLayout`:
+- a directory holding `journal.fj` is journal;
+- any other content (except an empty `.tmp/`) makes it files;
+- an empty or missing directory gets the platform default.
+
+`freshdb migrate` converts between the layouts offline, with a backup. It
+is crash-safe; see [design 01](design/01-journal-default.md) and
+`spec/FreshMigrate.tla`.
+
 ## Segment (`.seg`)
 
 ```

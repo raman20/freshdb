@@ -38,18 +38,38 @@ in its "Changes since v0.1.0" section.
 - The writer trims its conflict-history window in amortized steps instead
   of copying it on every commit.
 
+- **New local directories use the journal layout on Unix.** A bare path or
+  `file:///path` now opens an existing directory in the layout it already
+  has (`store.OpenLocal` / `store.DetectLayout`), so v0.1.0 directories are
+  unchanged. A new or empty directory gets the journal (`journal.fj`) on
+  Linux/macOS/BSD and the files layout on Windows. `fs:///path` forces the
+  files layout, and both explicit schemes refuse a directory holding the
+  other layout.
+- `DB.Close` now closes a store that `Open` created from a URL (journal
+  file handles, FS read-handle cache).
+
 ### Added
+- `freshdb migrate [--to journal|files]` (`store.Migrate`): offline,
+  crash-safe layout conversion. It copies, verifies byte-for-byte, fsyncs,
+  renames into place and keeps `DIR.bak-<layout>`. Running it again after
+  a crash finishes the job. The protocol is model-checked in
+  `spec/FreshMigrate.tla` and tested by injecting a stop after every step
+  and by SIGKILLing a migrating child process.
+- `store.Walker` / `store.Keys` (enumerate every object of FS, Journal,
+  Mem); `Journal.Sync`, `Journal.Close`, `FS.Close`.
+- `freshdb-bench`: `freshdb-files` system (the v0.1.0 layout); `freshdb`
+  now benchmarks the default layout.
 - `WithInlineMax`, `WithValueCacheBytes` options.
 - `store.RangeReader` / `store.GetRange` (ranged reads for FS, S3, Mem).
-- **Opt-in journal store** (`journal:///path`, `store.NewJournal`, Unix
+- **Journal store** (`journal:///path`, `store.NewJournal`, Unix
   only). Segments are records in one preallocated append-only file
   (`journal.fj`), so a durable commit is one `write` plus one `fdatasync`
   instead of file create + fsync + rename + directory fsync. Records carry
   a salted CRC-32C, which stops a torn tail or stale bytes from being read
   as data. Instances on one file coordinate with `flock`. Delete appends a
   tombstone and then punches a hole. It has its own conformance,
-  reopen/torn-tail and kill -9 crash tests. The default local store is
-  still one file per segment (`FS`); there is no migration between the two.
+  reopen/torn-tail and kill -9 crash tests. It is now the default for new
+  local directories on Unix (see Changed).
 - `freshdb-bench`: `freshdb-journal` system for `ycsb` and `msg`.
 
 ### Fixed

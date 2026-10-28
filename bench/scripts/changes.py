@@ -10,6 +10,7 @@ R = os.path.join(os.path.dirname(__file__), "..", "results")
 BASE = "2026-10-27"
 NEW = "2026-10-27-after-journal"
 VEC = "2026-10-27-after-vector"
+DEF = "2026-10-28-default-journal"  # `-system freshdb` after the default became the journal
 
 
 def load(d, f):
@@ -35,19 +36,21 @@ def main():
     b = load(BASE, "ycsb-freshdb-fsync-true.json")
     n = load(NEW, "ycsb-freshdb-fsync-true.json")
     j = load(NEW, "ycsb-freshdb-journal-fsync-true.json")
+    dflt = load(DEF, "ycsb-freshdb-fsync-true.json")
     pb = ycsb_cells(load(BASE, "ycsb-pebble-fsync-true.json"))
-    B, N, J = ycsb_cells(b), ycsb_cells(n), ycsb_cells(j)
-    out.append("| | v0.1.0 | now (FS store) | now (journal store) | Pebble (v0.1.0 run) |")
-    out.append("|---|---|---|---|---|")
-    out.append("| peak RSS, whole YCSB run | %s | %s | %s | %s |" % (
+    B, N, J, D = ycsb_cells(b), ycsb_cells(n), ycsb_cells(j), ycsb_cells(dflt)
+    out.append("| | v0.1.0 | files layout | journal (explicit) | default URL (journal) | Pebble (v0.1.0 run) |")
+    out.append("|---|---|---|---|---|---|")
+    out.append("| peak RSS, whole YCSB run | %s | %s | %s | %s | %s |" % (
         gib(b["params"]["peak_rss"]), gib(n["params"]["peak_rss"]),
         gib(j["params"]["peak_rss"]) if j else "-",
+        gib(dflt["params"]["peak_rss"]) if dflt else "-",
         gib(load(BASE, "ycsb-pebble-fsync-true.json")["params"]["peak_rss"])))
     out.append("")
     out.append("YCSB, fsync on, successful closed-loop ops/s (F: + RMWs that gave up after 16 retries):")
     out.append("")
-    out.append("| cell | v0.1.0 | now (FS) | now (journal) | Pebble (v0.1.0 run) |")
-    out.append("|---|---|---|---|---|")
+    out.append("| cell | v0.1.0 | files layout | journal (explicit) | default URL (journal) | Pebble (v0.1.0 run) |")
+    out.append("|---|---|---|---|---|---|")
     for w in "ABCFD":
         for c in (1, 8, 64):
             def f(m):
@@ -58,15 +61,16 @@ def main():
                 if w == "F":
                     s += " (%d gave up)" % r["closed_loop"]["errors"]
                 return s
-            out.append("| %s c=%d | %s | %s | %s | %s |" % (w, c, f(B), f(N), f(J), f(pb)))
+            out.append("| %s c=%d | %s | %s | %s | %s | %s |" % (w, c, f(B), f(N), f(J), f(D), f(pb)))
     out.append("")
     out.append("Streaming, fsync on, 8 producers, end-to-end latency (ms):")
     out.append("")
-    out.append("| cell | v0.1.0 p50 / p99 | now FS p50 / p99 | now journal p50 / p99 | NATS (v0.1.0 run) p50 / p99 |")
-    out.append("|---|---|---|---|---|")
+    out.append("| cell | v0.1.0 p50 / p99 | files p50 / p99 | journal (explicit) p50 / p99 | default URL p50 / p99 | NATS (v0.1.0 run) p50 / p99 |")
+    out.append("|---|---|---|---|---|---|")
     ms = {k: load(d, f) for k, d, f in [
         ("b", BASE, "msg-freshdb-fsync-true.json"), ("n", NEW, "msg-freshdb-fsync-true.json"),
-        ("j", NEW, "msg-freshdb-journal-fsync-true.json"), ("nats", BASE, "msg-nats-fsync-true.json")]}
+        ("j", NEW, "msg-freshdb-journal-fsync-true.json"), ("d", DEF, "msg-freshdb-fsync-true.json"),
+        ("nats", BASE, "msg-nats-fsync-true.json")]}
 
     def mcell(d, kind, rate, groups):
         if not d:
@@ -81,7 +85,7 @@ def main():
     for kind, rate, g in [("fixed-rate", 1000, 1), ("fixed-rate", 5000, 1), ("fixed-rate", 10000, 1),
                           ("fixed-rate", 5000, 4), ("max-throughput", 0, 1)]:
         lab = "max publish (64 producers)" if kind == "max-throughput" else "%dk/s, %d group(s)" % (rate // 1000, g)
-        out.append("| %s | %s | %s | %s | %s |" % (lab, *(mcell(ms[k], kind, rate, g) for k in ("b", "n", "j", "nats"))))
+        out.append("| %s | %s | %s | %s | %s | %s |" % (lab, *(mcell(ms[k], kind, rate, g) for k in ("b", "n", "j", "d", "nats"))))
     out.append("")
     out.append("Vectors, 128-d cosine, exact search (QPS; recall@10):")
     out.append("")

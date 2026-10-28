@@ -24,6 +24,16 @@ there. In CI the unit tests also run on macOS. Windows binaries build, but are
 untested: Windows can't fsync a directory, so the durability of a new file's
 directory entry after power loss is not verified there.
 
+**I have a v0.1.0 data directory. Do I need to do anything?**
+No. It keeps the files layout (one file per segment) and opens as before.
+To move it to the faster journal layout on Linux, macOS or BSD:
+1. Stop every process using it.
+2. Run `freshdb migrate --db DIR`.
+
+`migrate` copies and verifies every object and leaves the original as
+`DIR.bak-files`. If it is interrupted, run it again and it finishes the
+job. `freshdb migrate --to files` converts back.
+
 **Can two processes write to the same database?**
 Only one at a time. A new opener fences the old one, which then gets
 `ErrFenced`. For many writers, use many databases (for example one per tenant

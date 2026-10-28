@@ -1,0 +1,95 @@
+{
+  "suite": "msg",
+  "env": {
+    "time": "2026-10-28T14:04:33+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "6e7b172-dirty",
+    "command": "bin/freshdb-bench msg -system freshdb-journal -fsync=true -rates 1000 -producers 8 -groups 1 -duration 10s -dir /tmp/freshdb-bench/ab -out /tmp/ab-freshdb-journal-1",
+    "loadavg_at_start": "0.93 1.44 1.34"
+  },
+  "params": {
+    "consume_batch": 100,
+    "disk_after_run": "1.4G",
+    "drain_limit": "30s",
+    "duration": "10s",
+    "e2e": "consumer-side time after the durable ack minus the producer's intended send time (open-loop schedule)",
+    "fsync": true,
+    "max_producers": 64,
+    "payload_bytes": 1024,
+    "peak_rss": "2474140 kB",
+    "producers": 8,
+    "system": "freshdb-journal"
+  },
+  "runs": [
+    {
+      "system": "freshdb-journal",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit; journal layout)",
+      "kind": "fixed-rate",
+      "target_rate": 1000,
+      "producers": 8,
+      "groups": 1,
+      "published": 10000,
+      "publish_per_sec": 1000.1,
+      "delivered_per_group_min": 10000,
+      "consume_per_sec_per_group": 0,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 10000,
+        "mean_us": 1121.59,
+        "p50_us": 56.35,
+        "p99_us": 31768.58,
+        "p999_us": 46071.81,
+        "max_us": 71499.78
+      },
+      "end_to_end_latency": {
+        "count": 10000,
+        "mean_us": 1320.13,
+        "p50_us": 237.7,
+        "p99_us": 32374.78,
+        "p999_us": 47349.76,
+        "max_us": 72744.96
+      },
+      "errors": 0
+    },
+    {
+      "system": "freshdb-journal",
+      "fsync": true,
+      "durability": "publish and consume+ack are each a durable transaction (fsync'd group commit; journal layout)",
+      "kind": "max-throughput",
+      "producers": 64,
+      "groups": 1,
+      "published": 1314195,
+      "publish_per_sec": 131417,
+      "delivered_per_group_min": 1314195,
+      "consume_per_sec_per_group": 131419.5,
+      "backlog_at_end": 0,
+      "publish_latency": {
+        "count": 1314195,
+        "mean_us": 486.58,
+        "p50_us": 324.35,
+        "p99_us": 2392.06,
+        "p999_us": 14409.73,
+        "max_us": 81985.54
+      },
+      "end_to_end_latency": {
+        "count": 0,
+        "mean_us": 0,
+        "p50_us": 0,
+        "p99_us": 0,
+        "p999_us": 0,
+        "max_us": 0
+      },
+      "errors": 0
+    }
+  ],
+  "notes": [
+    "freshDB consumers poll: an empty fetch sleeps 200us before retrying (no push notification yet)."
+  ]
+}

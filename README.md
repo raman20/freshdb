@@ -446,10 +446,14 @@ and 1,045 for Badger.
 > - cut peak RSS to 0.99 GiB;
 > - removed the OCC give-ups;
 > - made 100k-vector search 1,051 QPS;
-> - added an opt-in `journal://` store that does 42k ops/s on A with
->   1 client and has a 3.1 ms streaming p99 at 1k msgs/s.
+> - made a journal layout the default for new local directories on Unix
+>   (existing directories keep their layout; `freshdb migrate` converts).
+>   With the default URL, A with 1 client does 43.6k ops/s.
 >
-> Reads on the default store got slower (C at 64 clients: 1.2M ops/s).
+> Reads got slower (C at 64 clients: 1.5M ops/s with the default journal,
+> 1.2M with the files layout). The 1k msgs/s streaming p99 is noisy on
+> this VM (3.1 ms to 43 ms across runs; the disk itself stalls).
+> Peak RSS with the journal default is 1.95 GiB.
 > See "Changes since v0.1.0" in [docs/benchmarks.md](docs/benchmarks.md).
 
 **Where freshDB loses:**
@@ -478,7 +482,14 @@ still available with `go test -run '^$' -bench . -benchmem .`.
 ## Deployment notes
 
 - **URL forms.**
-  - `./dir` or `file:///abs/path`: local directory.
+  - `./dir` or `file:///abs/path`: local directory. A new directory gets
+    the journal layout on Linux/macOS/BSD: one append-only `journal.fj`, so
+    a commit is one write plus one `fdatasync`. On Windows it gets the files
+    layout: one file per segment. An existing directory keeps the layout it
+    has. That includes v0.1.0 directories, which use the files layout.
+    Convert a stopped database with `freshdb migrate --db DIR`; it keeps a
+    `DIR.bak-files` backup. `journal:///p` or `fs:///p` forces a layout,
+    and each refuses a directory that holds the other one.
   - `s3://bucket/prefix?endpoint=host:port&insecure=1&create=1`: any
     S3-compatible store. `insecure` means plain HTTP and `create` creates the
     bucket.

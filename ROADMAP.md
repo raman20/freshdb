@@ -12,6 +12,8 @@ bug reports). Everything must respect the [design principles](docs/design-princi
 - [x] Branches, rewind, promote, time travel
 - [x] Crypto-shred with signed certificates; `verify`
 - [x] TLA+ specs + TLC in CI; deterministic simulator; property tests; fuzzing
+- [x] Journal layout (one append-only file per local DB) as the default on
+  Unix, with `freshdb migrate` for v0.1.0 directories (unreleased)
 - [ ] Test on AWS S3 and Cloudflare R2 (only MinIO is tested today)
 - [ ] `--kek` / `FRESHDB_KEK` for the CLI and server (the Go API has `WithKEK`)
 - [ ] Prebuilt binaries for every release, and checksums

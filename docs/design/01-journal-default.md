@@ -87,3 +87,18 @@ Invariants (model-checked in `spec/FreshMigrate.tla`):
 - TLC: `FreshMigrate`.
 - Benchmark: rerun YCSB A/B/C/F/D and msg with `-system freshdb`, now the
   default layout. Profile the journal run's peak RSS (1.81 GiB vs 0.99).
+
+## Outcome (2026-10-28)
+
+- YCSB with the default URL matches or beats the explicit `journal://` run
+  in every cell (A c=1 43.6k vs 42.5k ops/s; full table in
+  docs/benchmarks.md). Met.
+- Streaming p99 at 1k msgs/s: not met as a stable number. Default and
+  `journal://` back to back gave 43.1/25.2 ms vs 32.4/11.8 ms on the same
+  code; a raw fdatasync probe shows ~1 s-periodic 30–75 ms disk stalls on
+  this VM (`bench/results/2026-10-28-default-journal/ab-1k/`).
+- Peak RSS 1.95 GiB (files layout 0.99). Profiled: 217 vs 141 B of heap
+  per update, 64% in the KV lens's unbounded version history, and about
+  2.8× more writes done by the journal run. Left for compaction/retention.
+- Remaining: 8 MiB chunk growth (zero-fill + fsync under the write lock)
+  is a ~15–40 ms stall every ~6 s at 1 MB/s; move it off the commit path.

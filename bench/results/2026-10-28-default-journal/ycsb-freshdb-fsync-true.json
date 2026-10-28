@@ -1,0 +1,835 @@
+{
+  "suite": "ycsb",
+  "env": {
+    "time": "2026-10-28T13:53:52+05:30",
+    "go_version": "go1.27.3",
+    "os": "linux/amd64",
+    "kernel": "6.12.94+",
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cpus": 8,
+    "mem_total": "16386368 kB",
+    "disk": "/dev/vdb ext4 128G",
+    "freshdb_commit": "6e7b172",
+    "command": "bin/freshdb-bench ycsb -system freshdb -fsync=true -keys 1000000 -value 1024 -workloads A,B,C,F,D -clients 1,8,64 -warmup 2s -duration 5s -open-frac 0.5 -seed 42 -dir /tmp/freshdb-bench -out results/2026-10-28-default-journal",
+    "loadavg_at_start": "1.99 0.86 0.61"
+  },
+  "params": {
+    "system": "freshdb",
+    "fsync": true,
+    "keys": 1000000,
+    "value_bytes": 1024,
+    "workloads": "A,B,C,F,D",
+    "clients": [
+      1,
+      8,
+      64
+    ],
+    "warmup": "2s",
+    "duration": "5s",
+    "open_loop_fraction_of_max": 0.5,
+    "open_loop_cap_ops_per_sec": 200000,
+    "seed": 42,
+    "zipf_theta": 0.99,
+    "load_seconds": 7.8,
+    "load_keys_per_sec": 128227,
+    "disk_after_run": "5.8G",
+    "peak_rss": "2045616 kB"
+  },
+  "runs": [
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 218009,
+        "ops_per_sec": 43601.7,
+        "errors": 0,
+        "latency": {
+          "count": 218009,
+          "mean_us": 22.82,
+          "p50_us": 18.14,
+          "p99_us": 52.9,
+          "p999_us": 324.61,
+          "max_us": 76677.12
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 0.27,
+          "stw_pause_max_ms": 0.08,
+          "heap_inuse_end_mb": 437,
+          "gc_cpu_fraction_cumulative": 0.0198
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 109004,
+        "ops_per_sec": 21800.9,
+        "target_ops_per_sec": 21800.9,
+        "errors": 0,
+        "latency": {
+          "count": 109004,
+          "mean_us": 4048.92,
+          "p50_us": 35.26,
+          "p99_us": 56688.64,
+          "p999_us": 74121.22,
+          "max_us": 76808.19
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.09,
+          "stw_pause_max_ms": 0.09,
+          "heap_inuse_end_mb": 565,
+          "gc_cpu_fraction_cumulative": 0.0171
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 543739,
+        "ops_per_sec": 108747.4,
+        "errors": 0,
+        "latency": {
+          "count": 543739,
+          "mean_us": 73.34,
+          "p50_us": 57.95,
+          "p99_us": 237.18,
+          "p999_us": 1752.06,
+          "max_us": 48234.5
+        },
+        "go_gc": {
+          "cycles": 8,
+          "stw_pause_total_ms": 0.78,
+          "stw_pause_max_ms": 0.17,
+          "heap_inuse_end_mb": 689,
+          "gc_cpu_fraction_cumulative": 0.0149
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 271868,
+        "ops_per_sec": 54373.8,
+        "target_ops_per_sec": 54373.7,
+        "errors": 0,
+        "latency": {
+          "count": 271868,
+          "mean_us": 5664.62,
+          "p50_us": 54.75,
+          "p99_us": 67764.22,
+          "p999_us": 83427.33,
+          "max_us": 103874.56
+        },
+        "go_gc": {
+          "cycles": 3,
+          "stw_pause_total_ms": 0.36,
+          "stw_pause_max_ms": 0.14,
+          "heap_inuse_end_mb": 774,
+          "gc_cpu_fraction_cumulative": 0.0146
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "A",
+      "desc": "50% read / 50% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1156399,
+        "ops_per_sec": 231263.7,
+        "errors": 0,
+        "latency": {
+          "count": 1156399,
+          "mean_us": 276.4,
+          "p50_us": 38.72,
+          "p99_us": 1551.36,
+          "p999_us": 14450.69,
+          "max_us": 59146.24
+        },
+        "go_gc": {
+          "cycles": 16,
+          "stw_pause_total_ms": 1.92,
+          "stw_pause_max_ms": 0.25,
+          "heap_inuse_end_mb": 813,
+          "gc_cpu_fraction_cumulative": 0.0174
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 578159,
+        "ops_per_sec": 115629.8,
+        "target_ops_per_sec": 115631.9,
+        "errors": 0,
+        "latency": {
+          "count": 578159,
+          "mean_us": 6909.85,
+          "p50_us": 1242.11,
+          "p99_us": 70516.74,
+          "p999_us": 84344.83,
+          "max_us": 93978.62
+        },
+        "go_gc": {
+          "cycles": 6,
+          "stw_pause_total_ms": 0.67,
+          "stw_pause_max_ms": 0.13,
+          "heap_inuse_end_mb": 850,
+          "gc_cpu_fraction_cumulative": 0.0181
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 894243,
+        "ops_per_sec": 178848.2,
+        "errors": 0,
+        "latency": {
+          "count": 894243,
+          "mean_us": 5.49,
+          "p50_us": 2.25,
+          "p99_us": 39.1,
+          "p999_us": 209.79,
+          "max_us": 71434.24
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.25,
+          "stw_pause_max_ms": 0.13,
+          "heap_inuse_end_mb": 1017,
+          "gc_cpu_fraction_cumulative": 0.0168
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 447120,
+        "ops_per_sec": 89424,
+        "target_ops_per_sec": 89424.1,
+        "errors": 0,
+        "latency": {
+          "count": 447120,
+          "mean_us": 939.34,
+          "p50_us": 8.54,
+          "p99_us": 21168.13,
+          "p999_us": 27607.04,
+          "max_us": 28639.23
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.12,
+          "stw_pause_max_ms": 0.06,
+          "heap_inuse_end_mb": 759,
+          "gc_cpu_fraction_cumulative": 0.0151
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 2407747,
+        "ops_per_sec": 481546.7,
+        "errors": 0,
+        "latency": {
+          "count": 2407747,
+          "mean_us": 16.44,
+          "p50_us": 2.88,
+          "p99_us": 153.09,
+          "p999_us": 512.26,
+          "max_us": 55410.69
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 0.52,
+          "stw_pause_max_ms": 0.17,
+          "heap_inuse_end_mb": 977,
+          "gc_cpu_fraction_cumulative": 0.0147
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199999.9,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 3042.76,
+          "p50_us": 8.96,
+          "p99_us": 53248,
+          "p999_us": 63635.46,
+          "max_us": 72810.5
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.24,
+          "stw_pause_max_ms": 0.13,
+          "heap_inuse_end_mb": 949,
+          "gc_cpu_fraction_cumulative": 0.0147
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "B",
+      "desc": "95% read / 5% update",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 5009398,
+        "ops_per_sec": 1001856.9,
+        "errors": 0,
+        "latency": {
+          "count": 5009398,
+          "mean_us": 63.65,
+          "p50_us": 3.13,
+          "p99_us": 757.76,
+          "p999_us": 3866.62,
+          "max_us": 68812.8
+        },
+        "go_gc": {
+          "cycles": 10,
+          "stw_pause_total_ms": 1.48,
+          "stw_pause_max_ms": 0.18,
+          "heap_inuse_end_mb": 1169,
+          "gc_cpu_fraction_cumulative": 0.0162
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199998.6,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 1740.88,
+          "p50_us": 21.73,
+          "p99_us": 42270.72,
+          "p999_us": 70451.2,
+          "max_us": 79101.95
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.12,
+          "stw_pause_max_ms": 0.12,
+          "heap_inuse_end_mb": 1178,
+          "gc_cpu_fraction_cumulative": 0.0161
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 1508640,
+        "ops_per_sec": 301723.5,
+        "errors": 0,
+        "latency": {
+          "count": 1508640,
+          "mean_us": 3.21,
+          "p50_us": 1.98,
+          "p99_us": 18.96,
+          "p999_us": 52.26,
+          "max_us": 396.54
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.14,
+          "stw_pause_max_ms": 0.08,
+          "heap_inuse_end_mb": 936,
+          "gc_cpu_fraction_cumulative": 0.0151
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 754308,
+        "ops_per_sec": 150861.5,
+        "target_ops_per_sec": 150861.8,
+        "errors": 0,
+        "latency": {
+          "count": 754308,
+          "mean_us": 32177.67,
+          "p50_us": 6.79,
+          "p99_us": 297795.58,
+          "p999_us": 306970.62,
+          "max_us": 307494.91
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.12,
+          "stw_pause_max_ms": 0.12,
+          "heap_inuse_end_mb": 906,
+          "gc_cpu_fraction_cumulative": 0.0143
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 7668388,
+        "ops_per_sec": 1533674.8,
+        "errors": 0,
+        "latency": {
+          "count": 7668388,
+          "mean_us": 5.05,
+          "p50_us": 2.8,
+          "p99_us": 22.78,
+          "p999_us": 188.03,
+          "max_us": 136970.24
+        },
+        "go_gc": {
+          "cycles": 8,
+          "stw_pause_total_ms": 1.53,
+          "stw_pause_max_ms": 0.23,
+          "heap_inuse_end_mb": 1180,
+          "gc_cpu_fraction_cumulative": 0.0161
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199999.8,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 974.34,
+          "p50_us": 7.04,
+          "p99_us": 30130.18,
+          "p999_us": 102432.77,
+          "max_us": 128581.63
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.17,
+          "stw_pause_max_ms": 0.17,
+          "heap_inuse_end_mb": 1165,
+          "gc_cpu_fraction_cumulative": 0.0163
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "C",
+      "desc": "100% read",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5.03,
+        "ops": 7574046,
+        "ops_per_sec": 1505761.8,
+        "errors": 0,
+        "latency": {
+          "count": 7574046,
+          "mean_us": 42.03,
+          "p50_us": 2.85,
+          "p99_us": 1200.13,
+          "p999_us": 4052.99,
+          "max_us": 137232.38
+        },
+        "go_gc": {
+          "cycles": 7,
+          "stw_pause_total_ms": 28.47,
+          "stw_pause_max_ms": 27.04,
+          "heap_inuse_end_mb": 1159,
+          "gc_cpu_fraction_cumulative": 0.0183
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199998.2,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 256.6,
+          "p50_us": 19.44,
+          "p99_us": 4214.78,
+          "p999_us": 38240.26,
+          "max_us": 107675.65
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.17,
+          "stw_pause_max_ms": 0.17,
+          "heap_inuse_end_mb": 1062,
+          "gc_cpu_fraction_cumulative": 0.0183
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 201980,
+        "ops_per_sec": 40394,
+        "errors": 0,
+        "latency": {
+          "count": 201980,
+          "mean_us": 24.63,
+          "p50_us": 22.98,
+          "p99_us": 78.91,
+          "p999_us": 318.46,
+          "max_us": 39747.58
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.15,
+          "stw_pause_max_ms": 0.08,
+          "heap_inuse_end_mb": 905,
+          "gc_cpu_fraction_cumulative": 0.0174
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 100985,
+        "ops_per_sec": 20197,
+        "target_ops_per_sec": 20197,
+        "errors": 0,
+        "latency": {
+          "count": 100985,
+          "mean_us": 1268.18,
+          "p50_us": 37.86,
+          "p99_us": 25165.82,
+          "p999_us": 36274.18,
+          "max_us": 38600.7
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.09,
+          "stw_pause_max_ms": 0.09,
+          "heap_inuse_end_mb": 898,
+          "gc_cpu_fraction_cumulative": 0.0168
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 479411,
+        "ops_per_sec": 95880.9,
+        "errors": 0,
+        "latency": {
+          "count": 479411,
+          "mean_us": 83.19,
+          "p50_us": 64.26,
+          "p99_us": 357.89,
+          "p999_us": 3700.74,
+          "max_us": 28016.64
+        },
+        "go_gc": {
+          "cycles": 4,
+          "stw_pause_total_ms": 0.72,
+          "stw_pause_max_ms": 0.31,
+          "heap_inuse_end_mb": 1174,
+          "gc_cpu_fraction_cumulative": 0.0166
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 239702,
+        "ops_per_sec": 47940.6,
+        "target_ops_per_sec": 47940.5,
+        "errors": 0,
+        "latency": {
+          "count": 239702,
+          "mean_us": 4966.59,
+          "p50_us": 64.93,
+          "p99_us": 55640.06,
+          "p999_us": 70778.88,
+          "max_us": 75366.4
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.31,
+          "stw_pause_max_ms": 0.16,
+          "heap_inuse_end_mb": 1077,
+          "gc_cpu_fraction_cumulative": 0.0164
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "F",
+      "desc": "50% read / 50% read-modify-write",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 646800,
+        "ops_per_sec": 129316.5,
+        "errors": 0,
+        "latency": {
+          "count": 646800,
+          "mean_us": 494.39,
+          "p50_us": 39.36,
+          "p99_us": 6696.96,
+          "p999_us": 23773.18,
+          "max_us": 95617.02
+        },
+        "go_gc": {
+          "cycles": 6,
+          "stw_pause_total_ms": 0.59,
+          "stw_pause_max_ms": 0.13,
+          "heap_inuse_end_mb": 1481,
+          "gc_cpu_fraction_cumulative": 0.0165
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 323291,
+        "ops_per_sec": 64657.8,
+        "target_ops_per_sec": 64658.3,
+        "errors": 0,
+        "latency": {
+          "count": 323291,
+          "mean_us": 2590.27,
+          "p50_us": 118.85,
+          "p99_us": 40402.94,
+          "p999_us": 69206.02,
+          "max_us": 74645.5
+        },
+        "go_gc": {
+          "cycles": 2,
+          "stw_pause_total_ms": 0.27,
+          "stw_pause_max_ms": 0.16,
+          "heap_inuse_end_mb": 1550,
+          "gc_cpu_fraction_cumulative": 0.0166
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 1,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 988733,
+        "ops_per_sec": 197745.4,
+        "errors": 0,
+        "latency": {
+          "count": 988733,
+          "mean_us": 4.96,
+          "p50_us": 2.11,
+          "p99_us": 36.93,
+          "p999_us": 166.66,
+          "max_us": 14032.9
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.08,
+          "stw_pause_max_ms": 0.08,
+          "heap_inuse_end_mb": 1323,
+          "gc_cpu_fraction_cumulative": 0.0161
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 494363,
+        "ops_per_sec": 98872.7,
+        "target_ops_per_sec": 98872.7,
+        "errors": 0,
+        "latency": {
+          "count": 494363,
+          "mean_us": 1575.92,
+          "p50_us": 19.22,
+          "p99_us": 36634.62,
+          "p999_us": 41156.61,
+          "max_us": 42172.42
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.08,
+          "stw_pause_max_ms": 0.08,
+          "heap_inuse_end_mb": 1119,
+          "gc_cpu_fraction_cumulative": 0.0156
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 8,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 2318817,
+        "ops_per_sec": 463753.9,
+        "errors": 0,
+        "latency": {
+          "count": 2318817,
+          "mean_us": 17.08,
+          "p50_us": 2.87,
+          "p99_us": 165.76,
+          "p999_us": 687.62,
+          "max_us": 83558.4
+        },
+        "go_gc": {
+          "cycles": 3,
+          "stw_pause_total_ms": 0.55,
+          "stw_pause_max_ms": 0.23,
+          "heap_inuse_end_mb": 1195,
+          "gc_cpu_fraction_cumulative": 0.0153
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5.04,
+        "ops": 1000000,
+        "ops_per_sec": 198351.6,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 657.42,
+          "p50_us": 8.73,
+          "p99_us": 16154.62,
+          "p999_us": 46202.88,
+          "max_us": 74645.5
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.4,
+          "stw_pause_max_ms": 0.4,
+          "heap_inuse_end_mb": 1346,
+          "gc_cpu_fraction_cumulative": 0.0152
+        }
+      }
+    },
+    {
+      "system": "freshdb",
+      "fsync": true,
+      "durability": "group commit; journal store: ack after the segment record is appended to one preallocated file + fdatasync",
+      "workload": "D",
+      "desc": "95% read latest / 5% insert",
+      "clients": 64,
+      "closed_loop": {
+        "mode": "closed",
+        "seconds": 5,
+        "ops": 5271057,
+        "ops_per_sec": 1054180.3,
+        "errors": 0,
+        "latency": {
+          "count": 5271057,
+          "mean_us": 60.49,
+          "p50_us": 3.16,
+          "p99_us": 775.17,
+          "p999_us": 2824.19,
+          "max_us": 25640.96
+        },
+        "go_gc": {
+          "cycles": 7,
+          "stw_pause_total_ms": 1.19,
+          "stw_pause_max_ms": 0.32,
+          "heap_inuse_end_mb": 1339,
+          "gc_cpu_fraction_cumulative": 0.0157
+        }
+      },
+      "open_loop": {
+        "mode": "open",
+        "seconds": 5,
+        "ops": 1000000,
+        "ops_per_sec": 199997.6,
+        "target_ops_per_sec": 200000,
+        "errors": 0,
+        "latency": {
+          "count": 1000000,
+          "mean_us": 915.31,
+          "p50_us": 25.68,
+          "p99_us": 20037.63,
+          "p999_us": 37486.59,
+          "max_us": 65961.98
+        },
+        "go_gc": {
+          "cycles": 1,
+          "stw_pause_total_ms": 0.15,
+          "stw_pause_max_ms": 0.15,
+          "heap_inuse_end_mb": 1471,
+          "gc_cpu_fraction_cumulative": 0.0157
+        }
+      }
+    }
+  ]
+}
