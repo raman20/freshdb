@@ -75,7 +75,7 @@ agents. That is the same bet SQLite made. Read the
 | **KV** | get/put/delete, prefix scan, MVCC history | values over 64 B are read from the log through an off-heap cache (`WithValueCacheBytes`, default 256 MiB) |
 | **Topics** | publish, consumer groups, exactly-once consume+write+ack | consumers poll; no push yet |
 | **Documents** | JSON documents, secondary indexes added at any time (built by replaying the log) | equality lookups only |
-| **Vectors** | cosine search, exact (recall 1.0), parallel scan | no ANN index yet |
+| **Vectors** | cosine search, exact (recall 1.0, parallel scan) or opt-in HNSW (`vec ann`) | the HNSW graph is in RAM and rebuilt on every open |
 | **Transactions** | serializable OCC across all lenses; hot keys cannot starve | single writer per database |
 | **History** | time travel to any LSN, zero-copy branches, rewind, promote, reflog | after `compact`, history below each branch head is gone (`410`) |
 | **Compaction** | `freshdb compact` / `POST /v1/compact` / `serve --compact-every`: drops overwritten, deleted and shredded data | new on `main`; manual or on a timer, no retention policy yet |
@@ -495,7 +495,8 @@ Other suites, freshDB `main` vs v0.1.0 (same VM, same commands):
   stall, which is not fixed yet.
 - **One very hot key.** Nothing gives up any more, but Badger commits more per
   second.
-- **Vectors** are exact; QPS falls linearly with N. No ANN index.
+- **Vectors**: exact search falls linearly with N. The opt-in HNSW index
+  fixes that but is approximate and is rebuilt on every open (23 s at 100k × 128-d).
 - **Old-layout directories** (v0.1.0, `fs://`, Windows) still pay two fsyncs
   per commit: A at 1 client is 5.2k ops/s. Run `freshdb migrate`.
 
@@ -560,7 +561,8 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
   History is only trimmed when you run compaction, which is new and keeps
   every topic message (no retention).
   Snapshots are off by default and don't speed up open yet.
-- Vector search is exact brute force; there is no ANN index.
+- The HNSW vector index is opt-in, lives only in RAM and is rebuilt from the
+  lens on every open; it is not persisted.
 - One writer per database, with no HA and no replicas.
 - The HTTP server has no auth or TLS; the CLI has no `--kek` flag.
 - Only MinIO is tested; AWS S3 and R2 are not.

@@ -169,10 +169,33 @@ OCC transfers, fsync on (commits/s; ops that gave up after 16 retries):
   - At 100k × 128-d, exact search does 1,051 QPS on 1 client (v0.1.0: 19).
     The flat loop does 165, so freshDB is faster because the flat loop is
     not parallel.
-  - Recall@10 is still 1.0. There is still no ANN index; QPS still falls
-    linearly with N.
+  - Recall@10 is still 1.0. Exact QPS still falls linearly with N; the
+    opt-in HNSW index below is the answer for large collections.
   - One unit test ran during the 10k c=8 vector cell, so that cell may be
     slightly low.
+- **Vectors: opt-in HNSW index** (`vec ann`, `EnableANN`). Same harness
+  (128-d, 100 Gaussian clusters, σ 0.15, queries drawn from the mixture),
+  M 16, efConstruction 100. QPS on 1 / 8 clients; recall@10 against the
+  exact result. 100k: 200 queries; 1M: 100 queries, no flat loop.
+  Results: `bench/results/2026-10-28-hnsw/`.
+
+  | N | search | recall@10 | QPS c=1 | QPS c=8 |
+  |---|---|---|---|---|
+  | 100k | exact | 1.0 | 910 | 1,494 |
+  | 100k | HNSW ef 32 / 64 / 128 | 0.930 / 0.988 / 0.998 | 6,131 / 3,281 / 2,089 | 53,688 / 35,807 / 28,005 |
+  | 1M | exact | 1.0 | 64 | 85 |
+  | 1M | HNSW ef 32 / 64 / 128 | 0.669 / 0.804 / 0.919 | 2,062 / 1,109 / 676 | 29,881 / 16,025 / 8,467 |
+
+  - Build (single-threaded insert) and reopen (the graph is rebuilt from
+    the lens; it is not persisted) take 23 s at 100k and 992 / 1,037 s at
+    1M. Heap after reopen: 107 MiB at 100k, 1,088 MiB at 1M.
+  - At 1M these defaults are not enough: recall 0.92 needs ef 128, and
+    larger ef or efConstruction was not measured. Tune `--ef` per query.
+  - The first version kept only the closest neighbors when a list
+    overflowed; on this clustered data that stranded clusters (100k recall
+    0.72–0.74 at any ef). Pruning with the diversity heuristic fixed it.
+  - Below 4,096 vectors, and when the graph returns fewer than k hits,
+    search stays exact. Time travel is always exact.
 - The journal layout has its own conformance, torn-tail, reopen and kill -9
   crash tests, and migration has a TLC-checked model
   ([spec/FreshMigrate.tla](../spec/FreshMigrate.tla)) plus resume-after-crash

@@ -21,7 +21,20 @@ in its "Changes since v0.1.0" section.
   Commits pause for the duration. Modelled in `spec/FreshCompact.tla`.
   On the compaction bench (488 MiB written, 9.8 MiB live) disk fell from
   504 to 34 MiB and open from 1.6 s to 30 ms.
-- `ErrCompacted` (HTTP 410) for reads, branches and rewinds below a
+- **Opt-in HNSW vector index.** `(*DB).EnableANN(ctx, coll, ANNOptions)`,
+  `freshdb vec ann COLL [--m --ef-construction --ef-search]`,
+  `POST /v1/vectors/{c}/ann`. The declaration is stored in the manifest;
+  the graph lives in RAM, is built from the lens on open (live branches
+  only; time travel stays exact) and is excluded from the digest, so
+  `lens == fold(log)` still holds. Search uses it from 4,096 vectors up and
+  falls back to the exact scan if it returns fewer than k hits;
+  `SearchExact` / `?exact=true` / `--exact` force the exact scan and
+  `SearchANN` / `ef` set the beam. At 100k × 128-d (clustered) recall@10 is
+  0.93 / 0.988 / 0.998 at ef 32 / 64 / 128 with 6.1k / 3.3k / 2.1k QPS on
+  one client (exact: 910 QPS); build and reopen take ~23 s. At 1M recall
+  is 0.67 / 0.80 / 0.92 (exact: 64 QPS, HNSW ef 128: 676) and build or
+  reopen takes ~17 min, because the graph is not persisted.
+ for reads, branches and rewinds below a
   compacted log's base. Time travel below the base is gone by design.
 - Manifest format 2 (written after the first compaction; v0.1.0 binaries
   cannot open a compacted database). KV snapshots use `KV3` only when a

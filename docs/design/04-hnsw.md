@@ -10,8 +10,9 @@ stays the default, the fallback, and the reference for recall.
   proximity graphs, greedy descent from a top-level entry point, beam
   search (`ef`) at layer 0, a new node's neighbors chosen by the paper's
   heuristic (keeps diverse neighbors), max `M` links above layer 0 and
-  `2M` at 0. When an existing node's list overflows it keeps the closest
-  (re-running the heuristic there was ~60% of build time).
+  `2M` at 0. When an existing node's list overflows it is re-pruned with
+  the same heuristic (see the outcome: keeping only the closest was
+  faster but stranded clusters).
 - One graph per (collection, dimension) slab, inside the vector lens.
   Nodes point at slab slots (the slab's swap-delete updates the mapping),
   so vectors are not copied: memory is the links (~`2M`+ int32 per node).
@@ -66,3 +67,20 @@ under the view's existing lock. No model is added; the safety property
   reopen, compaction, shred.
 - Bench: recall@10 vs exact and QPS at 100k and 1M, plus build time and
   open time.
+
+## Outcome
+
+Measured 2026-10-28 (`bench/results/2026-10-28-hnsw/`, 128-d clustered,
+M 16, efConstruction 100): at 100k, recall@10 0.930 / 0.988 / 0.998 at ef
+32 / 64 / 128 with 6.1k / 3.3k / 2.1k QPS on one client vs 910 exact; at 1M,
+0.669 / 0.804 / 0.919 with 2.1k / 1.1k / 676 QPS vs 64 exact. Build and
+reopen: 23 s at 100k, ~17 min at 1M (heap 1.1 GiB).
+
+Overflow pruning changed during the work: keeping only the closest
+neighbors was 2.7× faster to build but stranded clusters (100k recall
+0.72–0.74 regardless of ef), so overflowing lists are now pruned with the
+same diversity heuristic, without top-up.
+
+Remaining: the graph is rebuilt on every open (persist it with snapshots);
+insert is single-threaded; 1M needs larger ef/efConstruction than the
+defaults for recall ≥ 0.95, not measured.

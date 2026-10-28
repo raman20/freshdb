@@ -30,8 +30,8 @@ bug reports). Everything must respect the [design principles](docs/design-princi
   proportional to the tail, not to history.
 - **Disk-backed / mmap lenses.** Lens state is entirely in RAM today, which caps
   database size at memory.
-- **ANN vector index** (e.g. HNSW or IVF) as a lens, while keeping the
-  `lens == fold(log)` property. Today's vector search is exact brute force.
+- **Persisted ANN index.** The opt-in HNSW index (unreleased `main`) is rebuilt
+  on every open; persisting it with snapshots would make open fast.
 - **KMS key support.** KEK held in AWS KMS / GCP KMS / Vault, never in the
   bucket, plus clear guidance on object versioning for `keys/`.
 - **Auth and TLS** for `freshdb serve` (token auth first).
