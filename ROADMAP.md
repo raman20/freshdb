@@ -19,6 +19,8 @@ bug reports). Everything must respect the [design principles](docs/design-princi
 - [x] Bearer-token auth and TLS for `serve`; refuse open binds without a
   token (unreleased)
 - [x] Push consumers: `WaitHead`, HTTP long-poll and SSE (unreleased)
+- [x] Scoped tokens (read/write/admin, per collection), token and
+  certificate reload without restart, stream/long-poll caps (unreleased)
 - [ ] Test on AWS S3 and Cloudflare R2 (only MinIO is tested today)
 - [x] `--kek-file` / `FRESHDB_KEK` and a `KeyProvider` interface (unreleased)
 - [ ] Prebuilt binaries for every release, and checksums
@@ -62,7 +64,7 @@ tests. Comment on (or open) an issue before starting, so work is not duplicated.
 
 1. **`freshdb version` in the HTTP API.** Add `GET /v1/version`, with a test in
    `server/server_test.go`.
-2. **`--token-file` reload on SIGHUP** for `freshdb serve`.
+2. **`GET /v1/whoami`** returning the calling token's name and scope.
 3. **`freshdb scan --keys-only`** and `--limit`.
 4. **Readiness endpoint** `GET /readyz` that also checks the store.
 5. **`freshdb log --follow`** that tails new entries, like `sub --follow`.

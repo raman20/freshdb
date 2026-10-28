@@ -11,6 +11,18 @@ Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
 ### Added
+- **Scoped tokens, rotation, certificate reload, connection caps.**
+  `freshdb serve --token-file F` takes lines `SCOPE TOKEN [name=N]
+  [kv:PREFIX*|topic:T|docs:C|vectors:C ...]` with scopes read, write and
+  admin (a bare `TOKEN` line is admin, as before); `/v1/tx` checks every
+  op. The token file is re-read within 2 s of a change and the TLS
+  certificate within 10 s, both on SIGHUP; a bad file keeps the old one,
+  and an SSE stream of a removed token ends. `--max-streams` (1024) and
+  `--max-waiters` (4096) cap SSE streams and long-polls (503 +
+  `Retry-After`). Unknown token: 401; not allowed: 403. Go API:
+  `server.Options{Auth, MaxStreams, MaxWaiters}`, `server.LoadTokenFile`,
+  `server.LoadCerts`. Tokens in `--token-file` must now be at least 8
+  characters.
 - **GC with retention.** `(*DB).GC(ctx, GCOptions{KeepFor, KeepCommits,
   KeepReflog, KeepManifests, Grace})`, `freshdb gc [--keep-for 24h]
   [--keep-commits N] [--keep-reflog 64] [--keep-manifests 16] [--shrink]`,

@@ -190,7 +190,7 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
         <li>The journal layout is new; its 8 MiB growth step stalls the commit path briefly.</li>
       </ul>
       <ul class="lim">
-        <li>The HTTP server has one shared bearer token and optional TLS; it binds to 127.0.0.1 by default.</li>
+        <li>The HTTP server has bearer tokens scoped read/write/admin (optionally per collection) and optional TLS, both reloaded without a restart; no mTLS or per-branch rights. It binds to 127.0.0.1 by default.</li>
         <li>In dev mode the KEK lives in the bucket. Backups taken before a shred can still decrypt that subject.</li>
         <li>Keys and values without a subject are plaintext and are not covered by shred.</li>
         <li>The on-storage format may change before 1.0.</li>

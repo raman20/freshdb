@@ -82,13 +82,22 @@ func BenchmarkAuthGet(b *testing.B) {
 	}
 	defer db.Close()
 	db.Update(context.Background(), func(tx *freshdb.Tx) error { return tx.Put("a", []byte("v")) })
-	for _, tok := range []string{"", "s3cret-token-of-typical-length-0123456789"} {
-		name := "noauth"
-		if tok != "" {
-			name = "token"
+	ts, err := ParseTokens([]byte("read s3cret-token-of-typical-length-0123456789 kv:a*\n"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	for _, name := range []string{"noauth", "token", "scoped"} {
+		tok, o := "", Options{}
+		switch name {
+		case "token":
+			tok = "s3cret-token-of-typical-length-0123456789"
+			o.Token = tok
+		case "scoped":
+			tok = "s3cret-token-of-typical-length-0123456789"
+			o.Auth = NewAuth(ts)
 		}
 		b.Run(name, func(b *testing.B) {
-			h := New(db, Options{Token: tok})
+			h := New(db, o)
 			r := httptest.NewRequest("GET", "/v1/kv/a", nil)
 			if tok != "" {
 				r.Header.Set("Authorization", "Bearer "+tok)

@@ -43,8 +43,12 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
   freshdb serve [--listen :7070]              run the HTTP API
         [--compact-every 1h] [--compact-grace 5m]   optional background compaction
         [--gc-every 1h] [--keep-for 24h] [--keep-commits N] ...   or background GC (see gc)
-        [--token T | --token-file F]          require "Authorization: Bearer T" (or FRESHDB_TOKEN)
-        [--tls-cert F --tls-key F]            serve HTTPS (or FRESHDB_TLS_CERT/_KEY)
+        [--token T]                           admin token: "Authorization: Bearer T" (or FRESHDB_TOKEN)
+        [--token-file F]                      scoped tokens, one per line: SCOPE TOKEN [name=N] [kv:PFX*|topic:T|docs:C|vectors:C ...]
+                                              (SCOPE read|write|admin; a bare TOKEN line is admin);
+                                              re-read when it changes (and on SIGHUP)
+        [--tls-cert F --tls-key F]            serve HTTPS (or FRESHDB_TLS_CERT/_KEY); reloaded when renewed
+        [--max-streams 1024] [--max-waiters 4096]   caps on SSE streams and long-polls (503 over it)
         [--insecure-no-auth]                  allow a non-loopback --listen without a token
   freshdb put KEY VALUE [--subject S]         write a key
   freshdb get KEY [--at LSN]                  read a key (time travel with --at)
@@ -222,7 +226,17 @@ func serve(dbURL string, flags map[string]string) {
 	if listen == "" {
 		listen = env("FRESHDB_LISTEN", "127.0.0.1:7070")
 	}
-	token := secret(flags, "token")
+	token := flags["token"]
+	if token == "" {
+		token = os.Getenv("FRESHDB_TOKEN")
+	}
+	var auth *server.Auth
+	if f := flags["token-file"]; f != "" {
+		var err error
+		if auth, err = server.LoadTokenFile(f); err != nil {
+			log.Fatalf("freshdb: --token-file: %v", err)
+		}
+	}
 	cert, key := flags["tls-cert"], flags["tls-key"]
 	if cert == "" {
 		cert = os.Getenv("FRESHDB_TLS_CERT")
@@ -233,7 +247,7 @@ func serve(dbURL string, flags map[string]string) {
 	if (cert == "") != (key == "") {
 		log.Fatal("freshdb: --tls-cert and --tls-key go together")
 	}
-	if token == "" && !isLoopback(listen) {
+	if token == "" && auth == nil && !isLoopback(listen) {
 		if flags["insecure-no-auth"] == "" {
 			log.Fatalf("freshdb: refusing to listen on %s (not loopback) without auth: set --token / FRESHDB_TOKEN, or pass --insecure-no-auth", listen)
 		}
@@ -243,8 +257,41 @@ func serve(dbURL string, flags map[string]string) {
 	if err != nil {
 		log.Fatalf("freshdb: open %s: %v", dbURL, err)
 	}
-	srv := &http.Server{Addr: listen, Handler: server.New(db, server.Options{Token: token}), ReadHeaderTimeout: 10 * time.Second,
+	opts := server.Options{Token: token, Auth: auth, MaxStreams: intFlag(flags, "max-streams"), MaxWaiters: intFlag(flags, "max-waiters")}
+	srv := &http.Server{Addr: listen, Handler: server.New(db, opts), ReadHeaderTimeout: 10 * time.Second,
 		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}}
+	var certs *server.Certs
+	if cert != "" {
+		if certs, err = server.LoadCerts(cert, key); err != nil {
+			log.Fatalf("freshdb: TLS: %v", err)
+		}
+		srv.TLSConfig.GetCertificate = certs.GetCertificate
+	}
+	bg, stopWatch := context.WithCancel(context.Background())
+	defer stopWatch()
+	if auth != nil {
+		go auth.Watch(bg, 2*time.Second, log.Printf)
+	}
+	if certs != nil {
+		go certs.Watch(bg, 10*time.Second, log.Printf)
+	}
+	go func() { // SIGHUP: reload now
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGHUP)
+		for range ch {
+			if auth != nil {
+				if _, err := auth.Reload(); err != nil {
+					log.Printf("freshdb: SIGHUP: token file: %v (keeping the previous tokens)", err)
+				}
+			}
+			if certs != nil {
+				if _, err := certs.Reload(); err != nil {
+					log.Printf("freshdb: SIGHUP: TLS certificate: %v (keeping the previous one)", err)
+				}
+			}
+			log.Printf("freshdb: SIGHUP: reloaded")
+		}
+	}()
 	go func() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
@@ -263,9 +310,9 @@ func serve(dbURL string, flags map[string]string) {
 	if cert != "" {
 		scheme = "https"
 	}
-	log.Printf("freshdb: serving %s on %s://%s (epoch %d, auth %v)", dbURL, scheme, listen, db.Epoch(), token != "")
+	log.Printf("freshdb: serving %s on %s://%s (epoch %d, auth %v)", dbURL, scheme, listen, db.Epoch(), token != "" || auth != nil)
 	if cert != "" {
-		err = srv.ListenAndServeTLS(cert, key)
+		err = srv.ListenAndServeTLS("", "")
 	} else {
 		err = srv.ListenAndServe()
 	}
@@ -622,5 +669,18 @@ func (c *cli) sub() int {
 
 func atoiOr(s string) int {
 	n, _ := strconv.Atoi(s)
+	return n
+}
+
+// intFlag parses an integer flag (0 if unset).
+func intFlag(flags map[string]string, name string) int {
+	v := flags[name]
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		log.Fatalf("freshdb: --%s: %v", name, err)
+	}
 	return n
 }

@@ -58,12 +58,19 @@ bucket ([roadmap](../ROADMAP.md)).
 
 `freshdb serve` listens on `127.0.0.1:7070` by default.
 
-- **Token.** `--token`, `--token-file` or `FRESHDB_TOKEN` makes every request
-  except `GET /healthz` need `Authorization: Bearer <token>` (constant-time
-  compare; 401 otherwise). It is one shared token with full access: anyone
-  holding it can read, write, rewind, compact and shred every branch.
+- **Tokens.** `--token` or `FRESHDB_TOKEN` is one admin token;
+  `--token-file` holds scoped tokens (read / write / admin, optionally
+  limited to kv prefixes, topics, doc or vector collections; see
+  [operations.md](operations.md)). Every request except `GET /healthz`
+  needs `Authorization: Bearer <token>` (401 unknown, 403 not allowed).
+  Scopes apply to every branch: a write token can write any branch it can
+  name, and a limited token's resources are names, not branches.
+- **Rotation.** The token file and certificate files are re-read on change
+  (2 s / 10 s polling) and on SIGHUP; a bad file keeps the old set.
 - **TLS.** `--tls-cert` / `--tls-key` (or `FRESHDB_TLS_CERT` / `_KEY`)
-  serve HTTPS, TLS 1.2 minimum. No mTLS and no reload; restart to rotate.
+  serve HTTPS, TLS 1.2 minimum. No mTLS.
+- **Connection caps.** `--max-streams` / `--max-waiters` bound SSE streams
+  and long-polls (503 over the cap). There is no per-token rate limit.
 - **Open binds.** A non-loopback `--listen` (including `:7070`) without a
   token is refused unless you pass `--insecure-no-auth`. Over a network,
   use TLS too, or the token travels in clear text.

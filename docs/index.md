@@ -35,6 +35,10 @@ otherwise; the latest release is
 | [design/05-auth-tls-keys.md](design/05-auth-tls-keys.md) | design: bearer-token auth, TLS, key providers |
 | [design/06-push-consumers.md](design/06-push-consumers.md) | design: `WaitHead`, long-poll and SSE for topic consumers |
 | [design/07-memory.md](design/07-memory.md) | design: where RSS goes, packed versions, `GOMEMLIMIT` curve, fair Pebble comparison |
+| [design/08-gc-retention.md](design/08-gc-retention.md) | design: GC of old logs, manifests and fences with a retention window; journal shrink |
+| [design/09-journal-prealloc.md](design/09-journal-prealloc.md) | design: growing the journal file off the commit path |
+| [design/10-hnsw-persist.md](design/10-hnsw-persist.md) | design: persisting HNSW graphs, validated restore and catch-up |
+| [design/11-auth-scopes.md](design/11-auth-scopes.md) | design: scoped tokens, rotation, certificate reload, stream/long-poll caps |
 
 ## Evidence and numbers
 

@@ -135,12 +135,33 @@ export FRESHDB_ADDR=http://127.0.0.1:7070            # point CLI calls at it
   calls against a URL a server is using; use `--addr` instead.
 - Every embedded CLI call is an open (a manifest and a fence segment), so
   prefer a long-running server.
-- The server binds to `127.0.0.1` by default. To expose it, set a token
-  (`--token`, `--token-file` or `FRESHDB_TOKEN`) and TLS (`--tls-cert`,
-  `--tls-key`); `serve` refuses a non-loopback `--listen` without a token
-  unless you pass `--insecure-no-auth`. Clients send the token with
-  `--addr ... --token` or `FRESHDB_TOKEN`. `GET /healthz` needs no token.
-  Certificates are read at start; restart to rotate them.
+- The server binds to `127.0.0.1` by default. To expose it, set tokens
+  (`--token` / `FRESHDB_TOKEN` for one admin token, `--token-file` for
+  scoped tokens) and TLS (`--tls-cert`, `--tls-key`); `serve` refuses a
+  non-loopback `--listen` without a token unless you pass
+  `--insecure-no-auth`. Clients send the token with `--addr ... --token`
+  or `FRESHDB_TOKEN`. `GET /healthz` needs no token.
+- Token file, one per line (`#` comments; a bare `TOKEN` line is admin):
+
+      read   r-token-123  name=dashboards
+      write  w-token-456  name=orders-svc kv:orders/* topic:orders docs:orders
+      admin  a-token-789  name=ops
+
+  read: gets, scans, topic reads/streams, searches, log, verify; write:
+  adds puts, deletes, tx, publish, branch create; admin: adds rewind,
+  promote, branch delete, shred, indexes, ANN, compact, gc. Resources
+  (`kv:PREFIX*`, `topic:`, `docs:`, `vectors:`) limit a token to those
+  collections and exclude database-wide routes. 401 = unknown token,
+  403 = not allowed.
+- Rotation without restart: the token file is re-read within 2 s of a
+  change, the certificate files within 10 s, both at once on `SIGHUP`
+  (`kill -HUP <pid>`). A file that does not parse (or a cert/key pair that
+  does not match) is logged and the old one stays in use. Rotate a token
+  by adding the new one, moving clients, then removing the old one; open
+  SSE streams of a removed token end at their next event or ping (≤ 15 s).
+- `--max-streams` (default 1024) and `--max-waiters` (default 4096) cap
+  open SSE streams and long-polls (`wait>0`); over the cap: 503 with
+  `Retry-After: 1`. `-1` removes a cap.
 - Supply the KEK with `--kek-file` or `FRESHDB_KEK` (64 hex chars or
   base64 of 32 bytes) on every process that opens the database, including
   embedded CLI calls. A wrong key fails at open with "wrong key-encryption

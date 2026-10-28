@@ -34,10 +34,11 @@ Only the latest `main` and the latest `v0.x` release get fixes.
 These are documented gaps. Reports are still welcome if you find a worse
 consequence than the one described here.
 
-- **The HTTP server has one shared bearer token and no authorization.** It
-  binds to `127.0.0.1` by default and refuses other addresses without a
-  token unless `--insecure-no-auth` is given. Anyone with the token can read
-  and write every branch, shred and compact. Use TLS (`--tls-cert`,
+- **HTTP authorization is coarse.** Tokens have a scope (read, write or
+  admin) and optionally a list of collections, but no per-branch rights,
+  no mTLS and no rate limits. The server binds to `127.0.0.1` by default
+  and refuses other addresses without a token unless `--insecure-no-auth`
+  is given. An admin token can shred, compact and rewind everything. Use TLS (`--tls-cert`,
   `--tls-key`) whenever the token crosses a network.
 - **In dev mode, the key-encryption key (`keys/_kek`) and the certificate
   signing key (`keys/_sign`) are stored in the bucket.** Anyone with read

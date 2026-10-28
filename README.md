@@ -81,7 +81,7 @@ agents. That is the same bet SQLite made. Read the
 | **Compaction / GC** | `freshdb compact` drops overwritten, deleted and shredded data; `freshdb gc --keep-for 24h` keeps a history window and also deletes old manifests, retired logs and pruned reflog; `--shrink` rewrites the journal file | new on `main`; commits pause while it runs; shrink is offline; no topic retention |
 | **Deletion** | per-subject crypto-shred, signed certificate, `verify` | covers subject-tagged values only |
 | **Storage** | local directory (journal layout on Linux/macOS/BSD), S3-compatible stores, in-memory | only MinIO is tested among object stores |
-| **Interfaces** | Go library, JSON/HTTP server, CLI — one binary | `serve` has one shared bearer token and optional TLS; no users or scopes |
+| **Interfaces** | Go library, JSON/HTTP server, CLI — one binary | `serve` has bearer tokens scoped read/write/admin (optionally per collection), reloaded without restart, and optional TLS with cert reload |
 
 ## Install
 
@@ -545,9 +545,11 @@ Please report vulnerabilities privately; see [SECURITY.md](SECURITY.md) and
 [docs/security.md](docs/security.md). Short version:
 
 - `freshdb serve` binds to `127.0.0.1` by default. `--token` /
-  `FRESHDB_TOKEN` requires `Authorization: Bearer <token>` (one shared
-  token, no users or scopes; `GET /healthz` stays open), and
-  `--tls-cert` / `--tls-key` serve HTTPS. A non-loopback `--listen`
+  `FRESHDB_TOKEN` requires `Authorization: Bearer <token>`; `--token-file`
+  adds scoped tokens (read / write / admin, optionally limited to
+  collections), re-read on change or SIGHUP (`GET /healthz` stays open),
+  and `--tls-cert` / `--tls-key` serve HTTPS (certificates reloaded the
+  same way). A non-loopback `--listen`
   without a token is refused unless you pass `--insecure-no-auth`.
 - The KEK comes from `--kek-file`, `FRESHDB_KEK` (64 hex chars or base64),
   or a Go `KeyProvider` (wrap your KMS). Without one, the database runs in
@@ -589,11 +591,12 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
 - The HNSW vector index is opt-in, lives only in RAM and is rebuilt from the
   lens on every open (about 17 min at 1M vectors); it is not persisted, and
   at 1M clustered vectors recall@10 is 0.80 at ef 64 (0.92 at ef 128).
-- Push consumers have no limit on concurrent long-polls or SSE streams, and
-  SSE has no consumer-group mode.
+- SSE has no consumer-group mode. Long-polls and streams are capped
+  (`--max-waiters`, `--max-streams`) but not rate-limited per token.
 - One writer per database, with no HA and no replicas.
-- Server auth is a single shared bearer token; there is no rekey from the
-  dev key to a real KEK, and no built-in KMS client.
+- Server auth is bearer tokens with read/write/admin scopes (no mTLS, no
+  per-branch rights); there is no rekey from the dev key to a real KEK, and
+  no built-in KMS client.
 - Only MinIO is tested; AWS S3 and R2 are not.
 - The journal layout is new and has less mileage than the files layout; its
   file grows in 8 MiB chunks (zero-filled in the background), and it only

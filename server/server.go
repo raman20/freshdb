@@ -35,40 +35,98 @@ import (
 	"github.com/raman20/freshdb/lens"
 )
 
-type Server struct{ DB *freshdb.DB }
+type Server struct {
+	DB *freshdb.DB
 
-func Handler(db *freshdb.DB) http.Handler {
-	s := &Server{db}
+	streams, waiters chan struct{} // nil: no cap
+}
+
+func newServer(db *freshdb.DB, o Options) *Server {
+	s := &Server{DB: db}
+	mk := func(n, def int) chan struct{} {
+		if n == 0 {
+			n = def
+		}
+		if n < 0 {
+			return nil
+		}
+		return make(chan struct{}, n)
+	}
+	s.streams, s.waiters = mk(o.MaxStreams, 1024), mk(o.MaxWaiters, 4096)
+	return s
+}
+
+// Handler is the API without auth and with the default limits.
+func Handler(db *freshdb.DB) http.Handler { return newServer(db, Options{}).routes() }
+
+func (s *Server) routes() http.Handler {
 	m := http.NewServeMux()
-	m.HandleFunc("GET /v1/kv", s.scan)
-	m.HandleFunc("GET /v1/kv/{key...}", s.get)
-	m.HandleFunc("PUT /v1/kv/{key...}", s.put)
-	m.HandleFunc("DELETE /v1/kv/{key...}", s.del)
-	m.HandleFunc("POST /v1/tx", s.tx)
-	m.HandleFunc("POST /v1/topics/{t}", s.pub)
-	m.HandleFunc("GET /v1/topics/{t}", s.read)
-	m.HandleFunc("POST /v1/topics/{t}/groups/{g}/next", s.next)
-	m.HandleFunc("GET /v1/topics/{t}/stream", s.stream)
-	m.HandleFunc("PUT /v1/docs/{c}/{id}", s.docPut)
-	m.HandleFunc("GET /v1/docs/{c}/{id}", s.docGet)
-	m.HandleFunc("GET /v1/docs/{c}", s.docFind)
-	m.HandleFunc("PUT /v1/vectors/{c}/{id}", s.vecPut)
-	m.HandleFunc("DELETE /v1/vectors/{c}/{id}", s.vecDel)
-	m.HandleFunc("POST /v1/vectors/{c}/search", s.vecSearch)
-	m.HandleFunc("GET /v1/branches", s.branches)
-	m.HandleFunc("POST /v1/branches", s.branchCreate)
-	m.HandleFunc("POST /v1/branches/{b}/rewind", s.rewind)
-	m.HandleFunc("POST /v1/branches/{b}/promote", s.promote)
-	m.HandleFunc("DELETE /v1/branches/{b}", s.branchDelete)
-	m.HandleFunc("GET /v1/log", s.log)
-	m.HandleFunc("POST /v1/shred/{subject}", s.shred)
-	m.HandleFunc("GET /v1/verify", s.verify)
-	m.HandleFunc("POST /v1/indexes", s.index)
-	m.HandleFunc("POST /v1/vectors/{c}/ann", s.vecANN)
-	m.HandleFunc("POST /v1/compact", s.compact)
-	m.HandleFunc("POST /v1/gc", s.gc)
+	path := func(name string) func(*http.Request) string {
+		return func(r *http.Request) string { return r.PathValue(name) }
+	}
+	// h registers a route that needs scope on (kind, name(r)); kind ""
+	// is database-wide, "tx" checks each op in the handler.
+	h := func(pattern string, scope Scope, kind string, name func(*http.Request) string, f http.HandlerFunc) {
+		m.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+			k, n := kind, ""
+			if name != nil {
+				n = name(r)
+			}
+			if err := permit(r, scope, k, n); err != nil {
+				fail(w, err)
+				return
+			}
+			f(w, r)
+		})
+	}
+	const R, W, A = ScopeRead, ScopeWrite, ScopeAdmin
+	prefix := func(r *http.Request) string { return r.URL.Query().Get("prefix") }
+	h("GET /v1/kv", R, "kv", prefix, s.scan)
+	h("GET /v1/kv/{key...}", R, "kv", path("key"), s.get)
+	h("PUT /v1/kv/{key...}", W, "kv", path("key"), s.put)
+	h("DELETE /v1/kv/{key...}", W, "kv", path("key"), s.del)
+	h("POST /v1/tx", W, "tx", nil, s.tx)
+	h("POST /v1/topics/{t}", W, "topic", path("t"), s.pub)
+	h("GET /v1/topics/{t}", R, "topic", path("t"), s.read)
+	h("POST /v1/topics/{t}/groups/{g}/next", R, "topic", path("t"), s.next)
+	h("GET /v1/topics/{t}/stream", R, "topic", path("t"), s.stream)
+	h("PUT /v1/docs/{c}/{id}", W, "docs", path("c"), s.docPut)
+	h("GET /v1/docs/{c}/{id}", R, "docs", path("c"), s.docGet)
+	h("GET /v1/docs/{c}", R, "docs", path("c"), s.docFind)
+	h("PUT /v1/vectors/{c}/{id}", W, "vectors", path("c"), s.vecPut)
+	h("DELETE /v1/vectors/{c}/{id}", W, "vectors", path("c"), s.vecDel)
+	h("POST /v1/vectors/{c}/search", R, "vectors", path("c"), s.vecSearch)
+	h("GET /v1/branches", R, "", nil, s.branches)
+	h("POST /v1/branches", W, "", nil, s.branchCreate)
+	h("POST /v1/branches/{b}/rewind", A, "", nil, s.rewind)
+	h("POST /v1/branches/{b}/promote", A, "", nil, s.promote)
+	h("DELETE /v1/branches/{b}", A, "", nil, s.branchDelete)
+	h("GET /v1/log", R, "", nil, s.log)
+	h("POST /v1/shred/{subject}", A, "", nil, s.shred)
+	h("GET /v1/verify", R, "", nil, s.verify)
+	h("POST /v1/indexes", A, "", nil, s.index)
+	h("POST /v1/vectors/{c}/ann", A, "", nil, s.vecANN)
+	h("POST /v1/compact", A, "", nil, s.compact)
+	h("POST /v1/gc", A, "", nil, s.gc)
 	return m
 }
+
+// acquire takes a slot of a capped pool, or answers 503.
+func acquire(w http.ResponseWriter, pool chan struct{}, what string) (release func(), ok bool) {
+	if pool == nil {
+		return func() {}, true
+	}
+	select {
+	case pool <- struct{}{}:
+		return func() { <-pool }, true
+	default:
+		w.Header().Set("Retry-After", "1")
+		fail(w, fmt.Errorf("%w: too many concurrent %s (limit %d)", errBusy, what, cap(pool)))
+		return nil, false
+	}
+}
+
+var errBusy = errors.New("busy")
 
 // ---- helpers ----
 
@@ -88,8 +146,10 @@ func fail(w http.ResponseWriter, err error) {
 		code = http.StatusGone
 	case errors.Is(err, freshdb.ErrBadLSN), errors.Is(err, errBad):
 		code = http.StatusBadRequest
-	case errors.Is(err, freshdb.ErrFenced):
+	case errors.Is(err, freshdb.ErrFenced), errors.Is(err, errBusy):
 		code = http.StatusServiceUnavailable
+	case errors.Is(err, errForbidden):
+		code = http.StatusForbidden
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
@@ -238,6 +298,21 @@ func (s *Server) tx(w http.ResponseWriter, r *http.Request) {
 		fail(w, fmt.Errorf("%w: %v", errBad, err))
 		return
 	}
+	for _, o := range ops {
+		kind, name := "kv", o.Key
+		switch o.Op {
+		case "pub", "ack":
+			kind, name = "topic", o.Topic
+		case "doc":
+			kind, name = "docs", o.Coll
+		case "vec":
+			kind, name = "vectors", o.Coll
+		}
+		if err := permit(r, ScopeWrite, kind, name); err != nil {
+			fail(w, err)
+			return
+		}
+	}
 	lsn, err := update(r, func(tx *freshdb.Tx) error {
 		for _, o := range ops {
 			var wo []freshdb.WriteOpt
@@ -323,6 +398,13 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	if wait > 0 {
+		release, ok := acquire(w, s.waiters, "long-polls")
+		if !ok {
+			return
+		}
+		defer release()
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), wait)
 	defer cancel()
 	for {
@@ -405,6 +487,13 @@ func (s *Server) next(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	if wait > 0 {
+		release, ok := acquire(w, s.waiters, "long-polls")
+		if !ok {
+			return
+		}
+		defer release()
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), wait)
 	defer cancel()
 	for {
@@ -458,6 +547,11 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 		fail(w, errors.New("streaming unsupported"))
 		return
 	}
+	release, ok := acquire(w, s.streams, "streams")
+	if !ok {
+		return
+	}
+	defer release()
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")
 	h.Set("Cache-Control", "no-cache")
@@ -471,6 +565,12 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	for {
+		// a token revoked (or narrowed) by a reload ends its streams
+		if err := permit(r, ScopeRead, "topic", r.PathValue("t")); err != nil {
+			fmt.Fprintf(w, "event: error\ndata: %q\n\n", err.Error())
+			fl.Flush()
+			return
+		}
 		var ms []freshdb.Message
 		var at uint64
 		err := br(r).View(ctx, func(tx *freshdb.Tx) (err error) {
