@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/raman20/freshdb"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -41,23 +42,28 @@ type ycsbRun struct {
 }
 
 type ycsbParams struct {
-	System     string  `json:"system"`
-	Fsync      bool    `json:"fsync"`
-	Keys       int     `json:"keys"`
-	ValueBytes int     `json:"value_bytes"`
-	Workloads  string  `json:"workloads"`
-	Clients    []int   `json:"clients"`
-	Warmup     string  `json:"warmup"`
-	Duration   string  `json:"duration"`
-	OpenFrac   float64 `json:"open_loop_fraction_of_max"`
-	OpenCap    float64 `json:"open_loop_cap_ops_per_sec"`
-	Seed       uint64  `json:"seed"`
-	Theta      float64 `json:"zipf_theta"`
-	ValueCache int     `json:"freshdb_value_cache_bytes,omitempty"` // 0 = library default
-	LoadSecs   float64 `json:"load_seconds"`
-	LoadRate   float64 `json:"load_keys_per_sec"`
-	DiskAfter  string  `json:"disk_after_run"`
-	PeakRSS    string  `json:"peak_rss"`
+	System         string  `json:"system"`
+	Fsync          bool    `json:"fsync"`
+	Keys           int     `json:"keys"`
+	ValueBytes     int     `json:"value_bytes"`
+	Workloads      string  `json:"workloads"`
+	Clients        []int   `json:"clients"`
+	Warmup         string  `json:"warmup"`
+	Duration       string  `json:"duration"`
+	OpenFrac       float64 `json:"open_loop_fraction_of_max"`
+	OpenCap        float64 `json:"open_loop_cap_ops_per_sec"`
+	Seed           uint64  `json:"seed"`
+	Theta          float64 `json:"zipf_theta"`
+	ValueCache     int     `json:"freshdb_value_cache_bytes,omitempty"` // 0 = library default
+	LoadSecs       float64 `json:"load_seconds"`
+	LoadRate       float64 `json:"load_keys_per_sec"`
+	DiskAfter      string  `json:"disk_after_run"`
+	PeakRSS        string  `json:"peak_rss"`
+	Memory         any     `json:"memory,omitempty"`        // breakdown: see mem.go
+	PageCache      int64   `json:"data_dir_page_cache_mib"` // of the data dir at the end (mincore); shared, reclaimable
+	GOGC           string  `json:"GOGC,omitempty"`
+	GOMEMLIMIT     string  `json:"GOMEMLIMIT,omitempty"`
+	CompactBetween bool    `json:"compact_between_workloads,omitempty"`
 }
 
 func keyName(i uint64) string { return fmt.Sprintf("user%019d", i) }
@@ -80,6 +86,8 @@ func cmdYCSB(args []string) {
 	out := fs.String("out", "results", "output directory")
 	fs.DurationVar(&boltBatchDelay, "bolt-batch-delay", 0, "bbolt only: 0 = db.Update per write; >0 = db.Batch with this MaxBatchDelay")
 	cpuprof := fs.String("cpuprofile", "", "write a CPU profile of the measured closed-loop phase to this file (use with a single workload and client count)")
+	compactBetween := fs.Bool("compact-between", false, "freshdb only: Compact (grace 0) after each workload, as serve --compact-every would")
+	memprof := fs.String("memprofile", "", "write heap profiles to <prefix>-<phase>.pb.gz after load and after each workload")
 	fs.IntVar(&valueCacheBytes, "value-cache", 0, "freshdb only: value cache bytes (0 = the library default; -1 = off)")
 	fs.Parse(args)
 	clients := parseInts(*clientsF)
@@ -97,6 +105,8 @@ func cmdYCSB(args []string) {
 	// a fresh copy per op, as a real application would hand over (engines may retain it)
 	val := func(r *rand.Rand) []byte { o := r.IntN(1 << 20); return append([]byte(nil), pool[o:o+*vsize]...) }
 
+	memS = startMem(*memprof)
+	memS.setPhase("load")
 	logf("ycsb %s fsync=%v: loading %d x %dB", *system, *fsync, *keys, *vsize)
 	lr := rand.New(rand.NewPCG(*seed, 1))
 	t0 := time.Now()
@@ -105,6 +115,7 @@ func cmdYCSB(args []string) {
 	}
 	loadSecs := time.Since(t0).Seconds()
 	logf("loaded in %.1fs", loadSecs)
+	memS.mark("after load")
 	var prof *os.File
 	if *cpuprof != "" {
 		if prof, err = os.Create(*cpuprof); err != nil {
@@ -125,6 +136,7 @@ func cmdYCSB(args []string) {
 			fatal(fmt.Errorf("unknown workload %q", name))
 		}
 		for _, c := range clients {
+			memS.setPhase(fmt.Sprintf("%s c=%d", wl.Name, c))
 			mk := func(salt uint64) func(id int) opFunc {
 				return func(id int) opFunc {
 					r := rand.New(rand.NewPCG(*seed, salt*1000+uint64(id)+7))
@@ -183,12 +195,24 @@ func cmdYCSB(args []string) {
 			logf("%s %s fsync=%v c=%d: max %.0f ops/s | open @%.0f/s p50 %.1fus p99 %.1fus p99.9 %.1fus | errs %d/%d not-issued %d",
 				*system, wl.Name, *fsync, c, closed.OpsPerSec, rate, open.Latency.P50Us, open.Latency.P99Us, open.Latency.P999Us, closed.Errors, open.Errors, open.NotIssued)
 		}
+		if fk, ok := kv.(*freshKV); ok && *compactBetween {
+			t := time.Now()
+			cs, err := fk.db.Compact(bg, freshdb.CompactOptions{})
+			if err != nil {
+				fatal(err)
+			}
+			logf("compact after %s: %d keys, %d deleted, %.1fs", wl.Name, cs.Keys, cs.Deleted, time.Since(t).Seconds())
+		}
+		memS.mark("after " + wl.Name)
 	}
+	memS.mark("end")
+	pc := pageCacheMiB(dir)
 	kv.Close()
 	runtime.GC()
 	res.Params = ycsbParams{System: *system, Fsync: *fsync, Keys: *keys, ValueBytes: *vsize, Workloads: *wls, Clients: clients,
 		Warmup: warm.String(), Duration: dur.String(), OpenFrac: *frac, OpenCap: *openCap, Seed: *seed, Theta: *theta, ValueCache: valueCacheBytes,
-		LoadSecs: round(loadSecs, 2), LoadRate: round(float64(*keys)/loadSecs, 0), DiskAfter: diskUsage(dir), PeakRSS: peakRSS()}
+		LoadSecs: round(loadSecs, 2), LoadRate: round(float64(*keys)/loadSecs, 0), DiskAfter: diskUsage(dir), PeakRSS: peakRSS(), Memory: memS.result(), PageCache: pc,
+		GOGC: os.Getenv("GOGC"), GOMEMLIMIT: os.Getenv("GOMEMLIMIT"), CompactBetween: *compactBetween}
 	writeResult(*out, fmt.Sprintf("ycsb-%s-fsync-%v", *system, *fsync), res)
 	wipe(dir)
 }

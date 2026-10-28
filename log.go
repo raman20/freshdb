@@ -23,6 +23,7 @@ type logState struct {
 	st      store.Store
 	mu      sync.RWMutex
 	segs    []segIdx // segments holding at least one frame, ascending
+	tipCh   [32]byte // chain head after the last indexed frame (when segs != nil)
 	n       uint64   // own frames: LSN = meta.ParentLSN+1 ... ParentLSN+n
 	lastTS  int64
 	base    [32]byte // chain head at ParentLSN (from parent)
@@ -31,12 +32,13 @@ type logState struct {
 	repairs int
 }
 
-// segIdx locates the frames of one segment.
+// segIdx locates the frames of one segment. It is 24 bytes, one per
+// commit batch, so it does not keep the chain head after the segment: that
+// is the next segment's first Prev (or tipCh for the last segment).
 type segIdx struct {
 	seq   uint64
-	first uint64   // LSN of its first frame
-	n     uint64   // frame count
-	chain [32]byte // chain head after its last frame
+	first uint64 // LSN of its first frame
+	n     uint64 // frame count
 }
 
 func segKey(log string, seq uint64) string { return fmt.Sprintf("log/%s/%020d.seg", log, seq) }
@@ -80,15 +82,16 @@ func (l *logState) source(ver lens.Version) (*logState, uint64, bool) {
 
 // tip returns the chain head after the last frame. Caller holds l.mu.
 func (l *logState) tip() [32]byte {
-	if n := len(l.segs); n > 0 {
-		return l.segs[n-1].chain
+	if len(l.segs) > 0 {
+		return l.tipCh
 	}
 	return l.base
 }
 
 // addSeg indexes a segment's frames. Caller holds l.mu (write).
 func (l *logState) addSeg(seq, first, n uint64, ts int64, chain [32]byte) {
-	l.segs = append(l.segs, segIdx{seq: seq, first: first, n: n, chain: chain})
+	l.segs = append(l.segs, segIdx{seq: seq, first: first, n: n})
+	l.tipCh = chain
 	l.n += n
 	l.lastTS = ts
 }
@@ -148,8 +151,23 @@ func (l *logState) chainAt(ctx context.Context, lsn uint64) ([32]byte, error) {
 	if !ok {
 		return [32]byte{}, fmt.Errorf("%w: LSN %d not in log %s", ErrBadLSN, lsn, l.meta.ID)
 	}
-	if lsn == s.first+s.n-1 {
-		return s.chain, nil
+	if lsn == s.first+s.n-1 { // the chain after a segment's last frame
+		x.mu.RLock()
+		i := sort.Search(len(x.segs), func(i int) bool { return x.segs[i].first > lsn })
+		tip, last := x.tipCh, i == len(x.segs)
+		var next segIdx
+		if !last {
+			next = x.segs[i]
+		}
+		x.mu.RUnlock()
+		if last {
+			return tip, nil
+		}
+		frames, err := x.readSeg(ctx, next) // is the next segment's first Prev
+		if err != nil {
+			return [32]byte{}, err
+		}
+		return frames[0].Frame.Prev, nil
 	}
 	frames, err := x.readSeg(ctx, s)
 	if err != nil {

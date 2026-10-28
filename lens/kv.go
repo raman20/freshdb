@@ -38,8 +38,55 @@ var Castagnoli = crc32.MakeTable(crc32.Castagnoli)
 // (values stay ciphertext for subject data), so it can be snapshotted
 // without leaking plaintext; decryption happens at read time.
 type KV struct {
-	m      map[string][]Version // space \x00 key -> versions ascending by LSN
-	inline int                  // values longer than this are kept as positions
+	m      map[string]vers // space \x00 key -> versions ascending by LSN
+	inline int             // values longer than this are kept as positions
+}
+
+// ver is the in-memory form of a Version: 40 bytes instead of 72. The
+// rarely set Subject and inline Val live behind one pointer, so a 1 KiB
+// value kept as a log position costs no extra allocation.
+type ver struct {
+	lsn                      uint64
+	off, len, op, sum, chunk uint32
+	del                      bool
+	x                        *verX // nil unless Subject or Val is set
+}
+
+type verX struct {
+	subject string
+	val     []byte
+}
+
+func pack(v Version) ver {
+	w := ver{lsn: v.LSN, off: v.Off, len: v.Len, op: v.Op, sum: v.Sum, chunk: v.Chunk, del: v.Del}
+	if v.Subject != "" || v.Val != nil {
+		w.x = &verX{v.Subject, v.Val}
+	}
+	return w
+}
+
+func (w ver) unpack() Version {
+	v := Version{LSN: w.lsn, Off: w.off, Len: w.len, Op: w.op, Sum: w.sum, Chunk: w.chunk, Del: w.del}
+	if w.x != nil {
+		v.Subject, v.Val = w.x.subject, w.x.val
+	}
+	return v
+}
+
+// vers is a key's version list: the first version inline (most keys have
+// only one, so they need no slice allocation) and later ones in more.
+type vers struct {
+	one  ver
+	more []ver
+}
+
+func (vs *vers) n() int { return 1 + len(vs.more) }
+
+func (vs *vers) at(i int) *ver {
+	if i == 0 {
+		return &vs.one
+	}
+	return &vs.more[i-1]
 }
 
 // NewKV returns a KV lens that keeps every value inline.
@@ -51,10 +98,17 @@ func NewKVInline(max int) *KV {
 	if max < 0 {
 		max = 0
 	}
-	return &KV{m: map[string][]Version{}, inline: max}
+	return &KV{m: map[string]vers{}, inline: max}
 }
 
 func redact(v *Version) { v.Val, v.Del, v.Off, v.Len, v.Sum, v.Chunk = nil, true, 0, 0, 0, 0 }
+
+// redactVer is redact on the packed form (the subject is kept).
+func redactVer(w *ver) {
+	v := w.unpack()
+	redact(&v)
+	*w = pack(v)
+}
 
 func (*KV) Name() string { return "kv" }
 
@@ -87,39 +141,53 @@ func (l *KV) Apply(e *Entry, env Env) {
 func (l *KV) put(k string, v Version) {
 	vs, ok := l.m[k]
 	if !ok {
-		l.m[k] = []Version{v}
+		l.m[k] = vers{one: pack(v)}
 		return
 	}
-	l.m[k] = append(vs, v)
+	vs.more = append(vs.more, pack(v))
+	l.m[k] = vs
 }
 
 func (l *KV) DropSubject(s string) {
-	for _, vs := range l.m {
-		for i := range vs {
-			if vs[i].Subject == s {
-				redact(&vs[i])
+	for k, vs := range l.m {
+		changed := false
+		for i := 0; i < vs.n(); i++ {
+			if w := vs.at(i); w.x != nil && w.x.subject == s {
+				redactVer(w)
+				changed = true
 			}
+		}
+		if changed {
+			l.m[k] = vs // vs.one is a copy; more shares its array
 		}
 	}
 }
 
+// find returns the index of the version visible at `at`, or -1.
+func (vs *vers) find(at uint64) int {
+	return sort.Search(vs.n(), func(i int) bool { return vs.at(i).lsn > at }) - 1
+}
+
 // Get returns the version of (space,key) visible at LSN `at`.
 func (l *KV) Get(space, key string, at uint64) (Version, bool) {
-	vs := l.m[ck(space, key)]
-	i := sort.Search(len(vs), func(i int) bool { return vs[i].LSN > at }) - 1
-	if i < 0 || vs[i].Del {
+	vs, ok := l.m[ck(space, key)]
+	if !ok {
 		return Version{}, false
 	}
-	return vs[i], true
+	i := vs.find(at)
+	if i < 0 || vs.at(i).del {
+		return Version{}, false
+	}
+	return vs.at(i).unpack(), true
 }
 
 // LastWrite returns the LSN of the latest write to (space,key), 0 if none.
 func (l *KV) LastWrite(space, key string) uint64 {
-	vs := l.m[ck(space, key)]
-	if len(vs) == 0 {
+	vs, ok := l.m[ck(space, key)]
+	if !ok {
 		return 0
 	}
-	return vs[len(vs)-1].LSN
+	return vs.at(vs.n() - 1).lsn
 }
 
 type Pair struct {
@@ -149,8 +217,8 @@ func (l *KV) encode() []byte {
 	// uncompacted state are unchanged.
 	v3 := false
 	for _, vs := range l.m {
-		for _, v := range vs {
-			v3 = v3 || v.Chunk != 0
+		for i := 0; i < vs.n(); i++ {
+			v3 = v3 || vs.at(i).chunk != 0
 		}
 	}
 	e := &enc{}
@@ -164,8 +232,9 @@ func (l *KV) encode() []byte {
 	for _, k := range sortedKeys(l.m) {
 		e.str(k)
 		vs := l.m[k]
-		e.u64(uint64(len(vs)))
-		for _, v := range vs {
+		e.u64(uint64(vs.n()))
+		for i := 0; i < vs.n(); i++ {
+			v := vs.at(i).unpack()
 			e.u64(v.LSN)
 			e.u64(uint64(v.Off)<<32 | uint64(v.Len))
 			e.u64(uint64(v.Op)<<32 | uint64(v.Sum))
@@ -216,7 +285,10 @@ func loadKV(b []byte, inline int, strict bool) (*KV, error) {
 		if c > uint64(len(d.b)) {
 			return nil, ErrBadSnapshot
 		}
-		vs := make([]Version, 0, c)
+		if c == 0 {
+			return nil, ErrBadSnapshot // every key has at least one version
+		}
+		var vs vers
 		for j := uint64(0); j < c && !d.bad; j++ {
 			v := Version{LSN: d.u64()}
 			ol, os := d.u64(), d.u64()
@@ -225,7 +297,14 @@ func loadKV(b []byte, inline int, strict bool) (*KV, error) {
 				v.Chunk = uint32(d.u64())
 			}
 			v.Val, v.Subject, v.Del = d.bytes(), d.str(), d.bool()
-			vs = append(vs, v)
+			if j == 0 {
+				vs.one = pack(v)
+			} else {
+				if vs.more == nil {
+					vs.more = make([]ver, 0, c-1)
+				}
+				vs.more = append(vs.more, pack(v))
+			}
 		}
 		l.m[k] = vs
 	}
@@ -244,7 +323,7 @@ func (l *KV) Latest(fn func(space, key string, v Version) error) error {
 	for _, k := range sortedKeys(l.m) {
 		vs := l.m[k]
 		i := strings.IndexByte(k, 0)
-		if err := fn(k[:i], k[i+1:], vs[len(vs)-1]); err != nil {
+		if err := fn(k[:i], k[i+1:], vs.at(vs.n()-1).unpack()); err != nil {
 			return err
 		}
 	}
@@ -253,4 +332,4 @@ func (l *KV) Latest(fn func(space, key string, v Version) error) error {
 
 // SetLatest makes v the only version of (space,key). For building
 // compaction bases.
-func (l *KV) SetLatest(space, key string, v Version) { l.m[ck(space, key)] = []Version{v} }
+func (l *KV) SetLatest(space, key string, v Version) { l.m[ck(space, key)] = vers{one: pack(v)} }

@@ -44,7 +44,8 @@ type Options struct {
 	// ValueCacheBytes bounds the cache of values read from segments. The
 	// cache lives off the Go heap (anonymous mmap where available), so RSS
 	// grows by about this much once it fills, not by a GC multiple.
-	// 0 = default (256 MiB); negative = no cache.
+	// 0 = default: 1/16 of the memory limit (cgroup v2, else MemTotal),
+	// between 16 and 256 MiB; negative = no cache.
 	ValueCacheBytes int
 }
 
@@ -176,7 +177,7 @@ func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
 		o.InlineMax = 0
 	}
 	if o.ValueCacheBytes == 0 {
-		o.ValueCacheBytes = defaultValueCache
+		o.ValueCacheBytes = defaultValueCacheBytes()
 	}
 	var err error
 	db := &DB{st: st, opts: o, vcache: newValueCache(o.ValueCacheBytes), logs: map[string]*logState{}, views: map[string]*view{}, writers: map[string]*writer{}}
