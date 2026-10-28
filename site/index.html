@@ -28,7 +28,7 @@
     <p class="eyebrow">Open source · Apache-2.0 · Go · pre-1.0 prototype</p>
     <h1>One log. One binary.<br><span class="grad">One API.</span></h1>
     <p class="lede">KV, streams, documents, vectors and transactions are <strong>lenses over a single append-only log</strong> on object storage or a local disk. Branch it, rewind it, and provably forget a user, from one Go binary with no other services.</p>
-    <p class="banner"><b>Pre-1.0 prototype — not for production.</b> The core is model-checked and simulation-tested. Compaction, larger-than-RAM state, auth/TLS and KMS keys are not done yet. Latest release: v0.1.0; this page describes unreleased <code>main</code>.</p>
+    <p class="banner"><b>Pre-1.0 prototype — not for production.</b> The core is model-checked and simulation-tested. Compaction is new and unbenchmarked; larger-than-RAM state, auth/TLS and KMS keys are not done yet. Latest release: v0.1.0; this page describes unreleased <code>main</code>.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/raman20/freshdb">★ View on GitHub</a>
       <a class="btn" href="#install">Install</a>
@@ -165,6 +165,7 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
     <tr><td>FreshTxn</td><td>exactly-once, atomic cursor, serializable, durable prefix</td><td class="n">21,685,744</td><td class="n">2,421,454</td></tr>
     <tr><td>FreshBranch</td><td>rewind exact, old head kept, append-only, time travel stable</td><td class="n">3,430,206</td><td class="n">1,845,287</td></tr>
     <tr><td>FreshMigrate</td><td>files ↔ journal migration: original always reachable, never a partial copy, resume finishes</td><td class="n">149</td><td class="n">88</td></tr>
+    <tr><td>FreshCompact</td><td>compaction: no loss, fenced compactors can't commit, garbage is final, readers safe within the grace period</td><td class="n">1,557,725</td><td class="n">315,903</td></tr>
     <tr><td>FreshShred</td><td>shredded never revealed, no writes after shred, chain verifiable, key eventually gone</td><td class="n">25,570</td><td class="n">6,481</td></tr>
   </table></div>
   <div class="cards3" style="margin-top:18px">
@@ -181,7 +182,7 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
     <p class="sub">A pre-1.0 prototype. Please don't put real personal data in it yet.</p>
     <div class="split">
       <ul class="lim">
-        <li>Keys, KV history, topics, documents and vectors live in RAM, and history is never trimmed. No compaction yet.</li>
+        <li>Keys, KV history, topics, documents and vectors live in RAM. Old versions are only dropped by <code>freshdb compact</code>, which is new, has no benchmarks yet, keeps every topic message, and removes time travel below each branch head.</li>
         <li>Vector search is exact brute force; there is no ANN index.</li>
         <li>One writer per database, with no HA and no read replicas yet.</li>
         <li>Only MinIO is tested. AWS S3 and R2 support the needed conditional writes but are untested.</li>
@@ -202,7 +203,7 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
   <h2>Roadmap</h2>
   <p class="sub">No dates. Everything has to respect the design principles. <a href="https://github.com/raman20/freshdb/blob/main/ROADMAP.md">ROADMAP.md</a></p>
   <div class="road">
-    <div><b>Compaction</b><br>merge segments, GC retired logs</div>
+    <div><b>Retention + TTL</b><br>on top of compaction (now on main)</div>
     <div><b>Persisted lens snapshots</b><br>open in O(tail), not O(history)</div>
     <div><b>Disk-backed lenses</b><br>datasets larger than RAM</div>
     <div><b>ANN vector index</b><br>as a lens, still fold-equivalent</div>

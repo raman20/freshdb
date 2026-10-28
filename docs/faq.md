@@ -3,7 +3,7 @@
 **Is freshDB production-ready?**
 No. It is a pre-1.0 prototype (latest release v0.1.0; `main` has unreleased
 improvements). Its correctness core is model-checked and
-simulation-tested, but it has no production users, no compaction, no
+simulation-tested, but it has no production users, only a first version of compaction, no
 auth/TLS, and most lens state lives in RAM. See the README's
 [status section](../README.md#status-and-limitations).
 
@@ -68,8 +68,10 @@ that in mind. KMS-held keys are on the roadmap.
 Keys, KV history, topics, documents and vectors are in RAM; KV values over
 64 B are read from the log through a 256 MiB off-heap cache
 (`WithValueCacheBytes`). The 1M × 1 KiB YCSB run peaked at 2.12 GiB on `main`
-(7.1 GiB on v0.1.0). History is never trimmed yet, so memory grows with the
-number of writes. See [operations.md](operations.md#memory-and-cache-sizing).
+(7.1 GiB on v0.1.0). Old KV versions stay in memory until you run
+`freshdb compact` (new on `main`), which keeps only the latest live version
+of each key; topics keep every message. See
+[operations.md](operations.md#compaction). See [operations.md](operations.md#memory-and-cache-sizing).
 
 **How fast is it?**
 See [benchmarks.md](benchmarks.md) and the summary in the README. They are

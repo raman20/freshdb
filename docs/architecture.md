@@ -117,6 +117,17 @@ ciphertext stays in old segments. Because the hash chain covers the stored
 ciphertext, it still verifies. `Verify` re-checks everything and sweeps any
 DEK that landed late.
 
+**Compaction** (`compact.go`, `main` only). Runs on the writer with commits
+paused. For each log it writes a *base image* at the head (latest live KV
+versions, every topic message, large values in ≤ 64 MiB chunks), then commits
+one create-only manifest that points the log at its base, drops the parent
+link and lists the replaced segments, bases and snapshots as garbage with a
+not-before time (the grace period). Due garbage, and orphan bases from an
+older epoch, are swept at the next compaction. Reads below the base return
+`ErrCompacted` (HTTP 410). The protocol is model-checked in
+[`spec/FreshCompact.tla`](../spec/FreshCompact.tla); details in
+[design/03-compaction.md](design/03-compaction.md).
+
 ## Why one log is enough for exactly-once
 
 A consumer group's cursor is just another key in the log. "Fetch message,

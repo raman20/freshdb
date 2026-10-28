@@ -33,6 +33,9 @@ passes because the hash chain covers ciphertext. Limits:
   defeat it. Expire noncurrent versions of `keys/`.
 - A DEK create that lands after a shred leaves an orphan key until the next
   open or `verify`; no plaintext is served in that window.
+- Shredded ciphertext stays in the log until a compaction (`freshdb compact`,
+  `main` only) drops it; until then it is unreadable without the DEK.
+  Backups taken earlier still hold it.
 
 ## Keys (dev mode vs `WithKEK`)
 

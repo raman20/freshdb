@@ -19,6 +19,8 @@ payload's bytes canonical, which the hash chain relies on.
   log/<logID>/<seq:%020d>.seg        segment = one group commit (or a fence), create-only, dense seq from 1
   snap/<logID>/<lsn:%020d>.snap      optional KV+topic checkpoint (cache, never truth)
   quarantine/<logID>/<seq>-<epoch>.seg  original bytes of a repaired torn tail segment
+  base/<logID>/<lsn:%020d>-e<epoch>-<nonce>.base         compaction base image (main only)
+  base/<logID>/<lsn:%020d>-e<epoch>-<nonce>.<n:%06d>.val value chunk of that base, ≤ 64 MiB
   keys/_kek                          dev-mode key-encryption key (see SECURITY.md)
   keys/_sign                         ed25519 seed for shred certificates (dev mode)
   keys/dek/<subjectHash>             per-subject DEK, AES-GCM-wrapped by the KEK
@@ -135,6 +137,18 @@ authentication.
   "indexes": [{"coll": "memories", "field": "user"}]
 }
 ```
+
+After a compaction (`main` only) the manifest has `"format": 2`, each
+compacted log has a `"base": {"lsn", "seq", "key", "chunks", "chain", "ts"}`
+(the full state at `lsn`; segments before `seq` are no longer needed, nor
+is the parent), and a `"garbage"` list of
+`{"kind": "segs"|"snaps"|"base", "log", "below", "key", "chunks", "after"}`
+entries deleted once the clock passes `after`. v0.1.0 binaries refuse format
+2 instead of misreading it, so **a compacted database cannot be opened by
+v0.1.0**. A base object starts with the magic `FRDBBAS1`, holds the KV image
+(KV snapshot encoding, values pointing into the chunks) and the topic image,
+and ends with section offsets and a CRC-32C; each value keeps its own CRC.
+See [design/03-compaction.md](design/03-compaction.md).
 
 The manifest with the highest id is current. Creating `id+1` is how a writer
 takes the lease and how branch operations commit; `ErrExists` means another

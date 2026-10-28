@@ -30,9 +30,9 @@ on object storage or a local disk, with branching, rewind and provable deletion.
 > [!WARNING]
 > **Status: pre-1.0 prototype. Do not use it in production.** The latest
 > release is v0.1.0; `main` has unreleased changes (journal storage by
-> default, values read from the log, faster vectors, no OCC give-ups). The
-> correctness core is model-checked and simulation-tested. Still missing:
-> compaction, larger-than-RAM lens state, auth/TLS, KMS keys, and testing on
+> default, values read from the log, faster vectors, no OCC give-ups, and a
+> first version of compaction). The correctness core is model-checked and
+> simulation-tested. Still missing: larger-than-RAM lens state, auth/TLS, KMS keys, and testing on
 > AWS S3 or R2 (only MinIO is tested). The on-storage format may change
 > before 1.0. See [Status and limitations](#status-and-limitations).
 
@@ -77,7 +77,8 @@ agents. That is the same bet SQLite made. Read the
 | **Documents** | JSON documents, secondary indexes added at any time (built by replaying the log) | equality lookups only |
 | **Vectors** | cosine search, exact (recall 1.0), parallel scan | no ANN index yet |
 | **Transactions** | serializable OCC across all lenses; hot keys cannot starve | single writer per database |
-| **History** | time travel to any LSN, zero-copy branches, rewind, promote, reflog | |
+| **History** | time travel to any LSN, zero-copy branches, rewind, promote, reflog | after `compact`, history below each branch head is gone (`410`) |
+| **Compaction** | `freshdb compact` / `POST /v1/compact` / `serve --compact-every`: drops overwritten, deleted and shredded data | new on `main`; manual or on a timer, no retention policy yet |
 | **Deletion** | per-subject crypto-shred, signed certificate, `verify` | covers subject-tagged values only |
 | **Storage** | local directory (journal layout on Linux/macOS/BSD), S3-compatible stores, in-memory | only MinIO is tested among object stores |
 | **Interfaces** | Go library, JSON/HTTP server, CLI — one binary | no auth/TLS on the server yet |
@@ -268,8 +269,9 @@ verify: ok=true
 | `PUT/DELETE /v1/vectors/{c}/{id}`, `POST /v1/vectors/{c}/search` | vectors |
 | `GET/POST /v1/branches`, `POST /v1/branches/{b}/rewind`, `POST /v1/branches/{b}/promote` | branches |
 | `GET /v1/log`, `POST /v1/shred/{subject}`, `GET /v1/verify` | raw log, forget, audit |
+| `POST /v1/compact?grace=5m` | compaction (see [operations](docs/operations.md#compaction)) |
 
-Errors: `404` not found, `409` conflict (retry), `410` subject shredded, `503` fenced by a newer writer.
+Errors: `404` not found, `409` conflict (retry), `410` subject shredded or history compacted away, `503` fenced by a newer writer.
 
 ## Demo: an agent with undo, memory and forget
 
@@ -383,7 +385,7 @@ Read more in [docs/architecture.md](docs/architecture.md) and
 
 ## Correctness evidence
 
-Results are from this repo (v0.1.0, plus FreshMigrate on `main`). CI reruns the TLC checks, 2,000
+Results are from this repo (v0.1.0, plus FreshMigrate and FreshCompact on `main`). CI reruns the TLC checks, 2,000
 simulator seeds, fuzzing and the MinIO tests on every push.
 
 | Method | What | Result |
@@ -393,6 +395,7 @@ simulator seeds, fuzzing and the MinIO tests on every push.
 | | FreshBranch (branch, rewind, time travel) | 3,430,206 states (1,845,287 distinct), no error |
 | | FreshShred (shred steps, crashes, late DEKs; incl. liveness) | 25,570 states (6,481 distinct), no error |
 | | FreshMigrate (files ↔ journal migration, up to 4 crashes with resume; incl. liveness) | 149 states (88 distinct), no error |
+| | FreshCompact (base image + garbage list, crashes, a fenced compactor, slow readers) | 1,557,725 states (315,903 distinct), no error; found one design bug before code |
 | **Deterministic simulation** ([sim/](sim)) | seeded workload + fault-injecting store; checks against a reference model after every step | 50,000 seeds before the final fixes and 10,000 on the final code, all OK. The 10k run covered 137,293 acked txns, 75,537 crashes, 29,979 writer takeovers and 114,926 injected faults. |
 | **Property tests** ([rapid](https://pgregory.net/rapid)) | `lens == fold(log)`, snapshot+tail == fold, `DropSubject == fold(redacted)`, lenses refine reference models | 5,000 checks per lens property, 500 engine programs |
 | **Crash test** | 4 concurrent writers, kill -9 at random points | 200 rounds, 20,166 recovered txns, all checks OK |
@@ -520,7 +523,9 @@ Short version; the full guide is [docs/operations.md](docs/operations.md).
 - **Single writer.** One writer per database; shard by database to scale.
 - **Backups.** Copy the directory or bucket prefix of a stopped database. A
   backup made before a shred can still decrypt that subject.
-- **Growth.** No compaction yet: storage only grows. Prefer `freshdb serve`
+- **Growth.** Run `freshdb compact` (or `serve --compact-every 1h`) to drop
+  overwritten, deleted and shredded data; it also removes time travel below
+  each branch head. See [operations](docs/operations.md#compaction). Prefer `freshdb serve`
   for long-running use (every embedded CLI call is an open, which writes a
   manifest and a fence).
 
@@ -545,13 +550,16 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
 - Hot-key read-modify-write no longer gives up after 16 retries.
 - Vector search is ~55× faster at 100k vectors (still exact).
 - Concurrent escalated transactions share a group commit (writer batching).
+- Storage no longer only grows: `compact` writes a base image per log and
+  deletes replaced segments after a grace period (first version).
 - The Windows build works again.
 - A v0.1.0 bug where returned or passed value slices aliased internal state.
 
 **Still true:**
-- Keys, KV version history, topics, documents and vectors live in RAM, and
-  history is never trimmed. There is no compaction. Snapshots are off by
-  default and don't speed up open yet.
+- Keys, KV version history, topics, documents and vectors live in RAM.
+  History is only trimmed when you run compaction, which is new, has no
+  benchmark results yet, and keeps every topic message (no retention).
+  Snapshots are off by default and don't speed up open yet.
 - Vector search is exact brute force; there is no ANN index.
 - One writer per database, with no HA and no replicas.
 - The HTTP server has no auth or TLS; the CLI has no `--kek` flag.

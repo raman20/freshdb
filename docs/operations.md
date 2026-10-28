@@ -138,13 +138,44 @@ export FRESHDB_ADDR=http://127.0.0.1:7070            # point CLI calls at it
 - **Restore:** copy the backup to a new location and open it. `verify`
   checks CRCs, hash chains, fencing and shred state.
 
-## Growth and housekeeping
+## Compaction
 
-There is **no compaction or retention yet**: the log only grows. In the
-files layout and on S3 that is one object per group commit plus a manifest
-and a fence per open; the journal is one file that grows in 8 MiB steps.
-Retired logs from `rewind` stay reachable through the reflog. Plan disk
-for the full history.
+New on `main` (not in v0.1.0). Compaction writes a **base image** of every
+log at its head: the latest live version of each key, every topic message,
+and large values in chunk files. It then commits a manifest that lists the
+old segments, bases and snapshots as garbage, and deletes them once a grace
+period has passed. Design: [design/03-compaction.md](design/03-compaction.md);
+model: [`spec/FreshCompact.tla`](../spec/FreshCompact.tla).
+
+```sh
+freshdb compact                       # embedded, against FRESHDB_URL or --db; grace 0s
+freshdb serve --compact-every 1h --compact-grace 5m   # background, on a timer
+curl -XPOST '127.0.0.1:7070/v1/compact?grace=5m'      # on a running server
+```
+
+`compact` prints what it did, for example
+`{"base_bytes":300310,"deleted":401,"keys":3,"logs":1,"messages":0,"pending":0}`.
+`pending` counts garbage still waiting for its grace period; the next
+compaction deletes it.
+
+What you give up:
+- **Time travel, `rewind` and `branch create --at` below the base.**
+  They return `410` (`ErrCompacted`), e.g.
+  `history before the compaction base was compacted away: LSN 1 < base 6`.
+- **Structural sharing between branches.** Each branch gets its own base.
+- `log` and `verify` start at the base (the base records the hash-chain head,
+  so the chain still verifies from there).
+
+What it does not do yet: no retention for topics (every message is kept),
+no TTL, and no benchmark results for it so far. Values of a subject
+shredded after the last compaction are dropped by the next one.
+
+Disk space: on the files layout and S3, replaced objects are deleted. In the
+journal file they are hole-punched on Linux, so `du` drops but the file's
+apparent size does not (tested: 25 MiB → 5.7 MiB after overwriting three
+large keys 200 times). On macOS/BSD the bytes are zeroed instead and space
+is not returned.
+
 
 ## Health checks
 

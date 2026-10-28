@@ -16,7 +16,7 @@ otherwise; the latest release is
 
 | Doc | For |
 |---|---|
-| [operations.md](operations.md) | storage URLs and layouts, `freshdb migrate`, memory and cache sizing, server, backups, growth |
+| [operations.md](operations.md) | storage URLs and layouts, `freshdb migrate`, memory and cache sizing, server, backups, compaction |
 | [security.md](security.md) | what is encrypted, shred limits, dev-mode keys, network exposure |
 | [../SECURITY.md](../SECURITY.md) | how to report a vulnerability |
 
@@ -30,6 +30,7 @@ otherwise; the latest release is
 | [design-principles.md](design-principles.md) | why one log, and what we refuse to build |
 | [design/01-journal-default.md](design/01-journal-default.md) | design: journal as the default local layout, migration |
 | [design/02-read-path.md](design/02-read-path.md) | design: point reads, the off-heap value cache |
+| [design/03-compaction.md](design/03-compaction.md) | design: compaction base images, garbage with a grace period |
 
 ## Evidence and numbers
 
