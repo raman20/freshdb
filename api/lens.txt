@@ -1,0 +1,103 @@
+const ANNVersion = "1"
+var Castagnoli = crc32.MakeTable(crc32.Castagnoli)
+var ErrBadSnapshot = errors.New("lens: bad snapshot")
+func CanonicalJSON(v any) (string, bool)
+func DecodeVec(b []byte) ([]float32, bool)
+func EncodeVec(v []float32) []byte
+func Normalize(q []float32) ([]float32, bool)
+func SortHits(h []Hit)
+type ANNLoadStats struct {
+	Graphs   int
+	Rebuilt  int
+	Reused   int
+	Stale    int
+	Inserted int
+type ANNParams struct {
+	M              int
+	EfConstruction int
+	EfSearch       int
+type ANNSnapshot map[string]map[int]*annSnap
+func DecodeANN(b []byte) (ANNSnapshot, error)
+type DocIndex struct {
+func NewDocIndex(coll, field string) *DocIndex
+func (l *DocIndex) Apply(e *Entry, env Env)
+func (l *DocIndex) Digest() [32]byte
+func (l *DocIndex) DropSubject(s string)
+func (l *DocIndex) Lookup(canon string) []string
+func (l *DocIndex) Name() string
+type Entry struct {
+	Log string
+	LSN uint64
+	TS  int64
+	Ops []format.Op
+type Env interface {
+type Hit struct {
+	ID    string
+	Score float32
+func MergeHits(parts [][]Hit, k int) []Hit
+type KV struct {
+func LoadKV(b []byte, inline int) (*KV, error)
+func LoadKVBase(b []byte, inline int) (*KV, error)
+func NewKV() *KV
+func NewKVInline(max int) *KV
+func (l *KV) Apply(e *Entry, env Env)
+func (l *KV) Digest() [32]byte
+func (l *KV) DropSubject(s string)
+func (l *KV) Get(space, key string, at uint64) (Version, bool)
+func (l *KV) Inline() int
+func (l *KV) LastWrite(space, key string) uint64
+func (l *KV) Latest(fn func(space, key string, v Version) error) error
+func (*KV) Name() string
+func (l *KV) Scan(space, prefix string, at uint64) []Pair
+func (l *KV) SetLatest(space, key string, v Version)
+func (l *KV) Snapshot() []byte
+type Lens interface {
+type Msg struct {
+	Offset   uint64
+	LSN      uint64
+	TS       int64
+	Val      []byte
+	Subject  string
+	Redacted bool
+type Pair struct {
+	Key string
+type Topic struct {
+func LoadTopic(b []byte) (*Topic, error)
+func NewTopic() *Topic
+func (l *Topic) All(space string) []Msg
+func (l *Topic) Apply(e *Entry, env Env)
+func (l *Topic) Digest() [32]byte
+func (l *Topic) DropSubject(s string)
+func (l *Topic) Len(space string, at uint64) uint64
+func (*Topic) Name() string
+func (l *Topic) Read(space string, from uint64, max int, at uint64) []Msg
+func (l *Topic) SetAll(space string, ms []Msg)
+func (l *Topic) Snapshot() []byte
+func (l *Topic) Spaces() []string
+func (l *Topic) Topics(prefix string) []string
+type Vector struct {
+func NewVector() *Vector
+func (l *Vector) ANN(coll string, u []float32, k, ef, minN int) ([]Hit, bool)
+func (l *Vector) Apply(e *Entry, env Env)
+func (l *Vector) CheckANN() error
+func (l *Vector) Count(coll string) int
+func (l *Vector) Digest() [32]byte
+func (l *Vector) DropSubject(s string)
+func (l *Vector) EnableANN(coll string, p ANNParams)
+func (l *Vector) EnableANNFrom(coll string, p ANNParams, snap ANNSnapshot) ANNLoadStats
+func (l *Vector) MarshalANN() []byte
+func (*Vector) Name() string
+func (l *Vector) Search(coll string, q []float32, k int) []Hit
+func (l *Vector) Slots(coll string, dim int) int
+func (l *Vector) TopK(coll string, u []float32, k, lo, hi int) []Hit
+type Version struct {
+	LSN     uint64
+	Off     uint32
+	Len     uint32
+	Op      uint32
+	Sum     uint32
+	Del     bool
+	Chunk   uint32
+	Subject string
+	Val     []byte
+func (v Version) Ref() bool

@@ -30,6 +30,22 @@ jobs:
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@latest
           "$(go env GOPATH)/bin/staticcheck" ./...
+      - name: govulncheck (fails on vulnerabilities the code can reach)
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+      - name: exported API unchanged unless api/ is updated (docs/api-stability.md)
+        run: |
+          scripts/api-surface.sh
+          git diff --exit-code api/ || { echo "exported API changed: run scripts/api-surface.sh, commit api/, and add a CHANGELOG line if it breaks"; exit 1; }
+      - name: release dry run (SBOM, checksums, signature verifies with a throwaway key)
+        run: |
+          ssh-keygen -q -t ed25519 -N '' -f /tmp/k
+          FRESHDB_SIGN_KEY=/tmp/k scripts/release.sh v0.0.0-ci > /dev/null
+          echo "release@freshdb $(cat /tmp/k.pub)" > /tmp/allowed
+          ssh-keygen -Y verify -f /tmp/allowed -I release@freshdb -n freshdb-release -s dist/checksums.txt.sig < dist/checksums.txt
+          (cd dist && sha256sum -c checksums.txt)
+          python3 -c "import json; d=json.load(open('dist/sbom.spdx.json')); assert len(d['packages']) > 5"
 
   test:
     runs-on: ubuntu-latest
@@ -59,7 +75,7 @@ jobs:
       - name: cross-compile (CGO off)
         run: |
           for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 freebsd/amd64; do
-            CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -o /dev/null ./cmd/freshdb && echo "$t ok"
+            CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -o /dev/null ./cmd/freshdb || { echo "$t FAILED"; exit 1; }; echo "$t ok"
           done
 
   simulation:

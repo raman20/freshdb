@@ -19,6 +19,8 @@ in its "Changes since v0.1.0" section.
   `quarantine/`).
 
 ### Fixed
+- Windows builds (broken since the format-version work: a constant lived
+  in a unix-only file); the CI cross-build loop now fails on an error.
 - Disk full: a commit's storage error now wraps its cause (`errors.Is(err,
   syscall.ENOSPC)`), and `Compact`/`GC` refuse to run on a writer halted by
   a storage error instead of silently replacing it (a commit after the halt
@@ -28,6 +30,10 @@ in its "Changes since v0.1.0" section.
 - Backup: a data race on the report counters (found by the race suite).
 
 ### Added
+- docs/api-stability.md (semver, stable-track vs experimental surfaces,
+  deprecation), docs/threat-model.md, docs/release-checklist.md; SECURITY.md
+  response timeline. CI: govulncheck, exported-API diff gate (`api/`),
+  release dry run (SPDX SBOM, checksums, SSH signature verify).
 - `freshdb s3check URL` (and `store.S3Check`): probes an S3 endpoint for
   the guarantees freshDB needs (create-only and concurrent creates, read-
   and list-after-write, ranged GET, delete visibility, large single PUT).

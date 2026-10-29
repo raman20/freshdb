@@ -89,7 +89,7 @@ func (p *s3Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case x < f/3:
 		p.count("fault: 503 SlowDown")
 		w.Header().Set("Content-Type", "application/xml")
-		w.WriteHeader(503)
+		w.WriteHeader(http.StatusServiceUnavailable)
 		io.WriteString(w, `<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code><Message>injected</Message></Error>`)
 		return
 	case x < 2*f/3:
@@ -103,11 +103,11 @@ func (p *s3Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	out.ContentLength = int64(len(body))
 	resp, err := http.DefaultTransport.RoundTrip(out)
 	if err != nil {
-		http.Error(w, err.Error(), 502)
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == 412 {
+	if resp.StatusCode == http.StatusPreconditionFailed {
 		p.count("412 (create refused)")
 	}
 	if x < f {

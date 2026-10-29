@@ -84,9 +84,23 @@ func main() {
 // keyModel: values written to a key, in order; nil = deleted. Index i is
 // the i-th operation; acked is the last acknowledged index (-1: none; the
 // key starts absent), tried the last attempted.
+//
+// vals holds ops [base, tried]; older ones can never be observed again
+// and are dropped (prune), else the model grows with every op (a 6 h
+// run was OOM-killed at 13 GB after 11 minutes before this).
 type keyModel struct {
 	vals         [][]byte
+	base         int
 	acked, tried int
+}
+
+// prune drops ops below floor (never below base).
+func (k *keyModel) prune(floor int) {
+	if floor <= k.base {
+		return
+	}
+	k.vals = append([][]byte(nil), k.vals[floor-k.base:]...)
+	k.base = floor
 }
 
 // allowed: the observed value v (nil = absent) is the value of some op in
@@ -95,8 +109,8 @@ func (k *keyModel) allowed(v []byte, lo, hi int) bool {
 	if lo < 0 && v == nil {
 		return true
 	}
-	for i := max(lo, 0); i <= hi; i++ {
-		if (k.vals[i] == nil) == (v == nil) && bytes.Equal(k.vals[i], v) {
+	for i := max(lo, 0, k.base); i <= hi; i++ {
+		if x := k.vals[i-k.base]; (x == nil) == (v == nil) && bytes.Equal(x, v) {
 			return true
 		}
 	}
@@ -119,6 +133,7 @@ type worker struct {
 	ops   atomic.Int64
 	errs  atomic.Int64
 	pairs int
+	pin   map[string][2]int // lower bounds of a running backup check
 }
 
 // ---- harness ----
@@ -554,7 +569,19 @@ func at(m *keyModel, i int) []byte {
 	if i < 0 {
 		return nil
 	}
-	return m.vals[i]
+	if i < m.base {
+		return []byte("(pruned)")
+	}
+	return m.vals[i-m.base]
+}
+
+// pin stops pruning below the given lower bounds (nil: unpin).
+func (h *harness) pin(p map[string][2]int) {
+	for _, w := range h.ws {
+		w.mu.Lock()
+		w.pin = p
+		w.mu.Unlock()
+	}
 }
 
 // backupCheck: online backup, then restore and check against the model
@@ -562,6 +589,8 @@ func at(m *keyModel, i int) []byte {
 func (h *harness) backupCheck() error {
 	h.srvMu.RLock()
 	lo := h.snapshotBounds()
+	h.pin(lo.keys)
+	defer h.pin(nil)
 	dst := filepath.Join(*dir, fmt.Sprintf("backup%d", h.backups%2))
 	c, b, err := h.do("POST", "/v1/backup?to="+url.QueryEscape(dst), nil)
 	hi := h.snapshotBounds()
@@ -651,7 +680,7 @@ func (w *worker) attempt(kv map[string][]byte) map[string]int {
 	for k, v := range kv {
 		m := w.key(k)
 		m.vals = append(m.vals, v)
-		m.tried = len(m.vals) - 1
+		m.tried = m.base + len(m.vals) - 1
 		idx[k] = m.tried
 	}
 	return idx
@@ -661,7 +690,20 @@ func (w *worker) ack(idx map[string]int) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	for k, i := range idx {
-		w.keys[k].acked = i
+		m := w.keys[k]
+		if i <= m.acked {
+			continue
+		}
+		m.acked = i
+		floor := i
+		if w.pin != nil { // a backup check still needs ops from its start
+			lo, ok := w.pin[k]
+			floor = min(floor, lo[0])
+			if !ok {
+				floor = -1
+			}
+		}
+		m.prune(floor)
 	}
 }
 

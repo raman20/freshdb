@@ -1,0 +1,45 @@
+const (
+	SegMagic      = "FRDBSEG1"
+	SegVersion    = 1
+	SegHeaderSize = 8 + 2 + 2 + 8 + 8 + 4
+	FrameHdrSize  = 8
+	MaxFrameSize  = 64 << 20
+	MaxOps        = 1 << 20
+var (
+	ErrTorn    = errors.New("format: torn or corrupt tail")
+	ErrHeader  = errors.New("format: bad segment header")
+	ErrCorrupt = errors.New("format: corrupt frame")
+	ErrVersion = errors.New("format: unsupported segment version")
+func AppendFrame(dst []byte, f *Frame) ([]byte, []byte)
+func CRC(b []byte) uint32
+func ChainNext(prev [32]byte, payload []byte) [32]byte
+func DecodeSegment(b []byte) (SegHeader, []Decoded, int, error)
+func EncodeHeader(h SegHeader) []byte
+func EncodePayload(f *Frame) []byte
+type Decoded struct {
+	Frame   *Frame
+	Payload []byte
+type Frame struct {
+	LSN  uint64
+	TS   int64
+	Prev [32]byte
+	Ops  []Op
+func DecodePayload(p []byte) (*Frame, error)
+type Kind uint8
+const (
+	OpPut    Kind = 1
+	OpDel    Kind = 2
+	OpAppend Kind = 3
+	OpShred  Kind = 4
+func (k Kind) String() string
+type Op struct {
+	Kind    Kind
+	Subject string
+	Space   string
+	Key     string
+	Value   []byte
+	ValOff uint32
+type SegHeader struct {
+	Epoch uint64
+	Seq   uint64
+func DecodeHeader(b []byte) (SegHeader, error)

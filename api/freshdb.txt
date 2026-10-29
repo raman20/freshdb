@@ -1,0 +1,288 @@
+const (
+	MaxTxBytes = format.MaxFrameSize
+	MaxTxOps   = format.MaxOps
+const ANNExactBelow = 4096
+const BackupInfoKey = "backup/info.json"
+const MaxKeyBytes = 8 << 10
+var (
+	ErrNotFound       = errors.New("freshdb: not found")
+	ErrConflict       = errors.New("freshdb: transaction conflict (serializability); retry")
+	ErrFenced         = errors.New("freshdb: fenced: another writer took over this database")
+	ErrUnknownOutcome = errors.New("freshdb: commit outcome unknown (storage error); reopen to learn whether it committed")
+	ErrShredded       = errors.New("freshdb: subject has been crypto-shredded")
+	ErrClosed         = errors.New("freshdb: database closed")
+	ErrCorrupt        = errors.New("freshdb: corrupt log")
+	ErrVersion        = format.ErrVersion
+	ErrReadOnly       = errors.New("freshdb: read-only transaction")
+	ErrBranchExists   = errors.New("freshdb: branch already exists")
+	ErrNoBranch       = errors.New("freshdb: no such branch")
+	ErrNotFastForward = errors.New("freshdb: promote is not a fast-forward")
+	ErrBadLSN         = errors.New("freshdb: LSN out of range")
+	ErrMainBranch     = errors.New("freshdb: branch main cannot be deleted")
+	ErrCompacted = errors.New("freshdb: history before the compaction base was compacted away")
+	ErrWrongKEK = errors.New("freshdb: wrong key-encryption key for this database")
+	ErrTooLarge = errors.New("freshdb: transaction too large")
+	ErrBusy = errors.New("freshdb: compaction already running")
+var LatencyBounds = []float64{0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+func Formats() string
+func HolderName() string
+func ParseKey(s string) ([]byte, error)
+func SubjectHash(subject string) string
+func VerifyCertificate(c *Certificate) bool
+type ANNDecl struct {
+	Coll string `json:"coll"`
+type ANNOptions struct {
+	M              int `json:"m,omitempty"`
+	EfConstruction int `json:"ef_construction,omitempty"`
+	EfSearch       int `json:"ef_search,omitempty"`
+type BackupInfo struct {
+	Version  int    `json:"version"`
+	Formats  string `json:"formats"`
+	Manifest uint64 `json:"manifest"`
+	Heads   map[string]uint64 `json:"heads"`
+	Objects int               `json:"objects"`
+	Bytes   int64             `json:"bytes"`
+	Digest   string    `json:"digest"`
+	Started  time.Time `json:"started"`
+	Finished time.Time `json:"finished"`
+type BackupReport struct {
+	Copied  int   `json:"copied"`
+	CopiedB int64 `json:"copied_bytes"`
+	Removed int   `json:"removed"`
+type BaseMeta struct {
+	LSN    uint64 `json:"lsn"`
+	Seq    uint64 `json:"seq"`
+	Key    string `json:"key"`
+	Chunks int    `json:"chunks"`
+	Chain  string `json:"chain"`
+	TS     int64  `json:"ts"`
+type Branch struct {
+func (b *Branch) Head() (uint64, error)
+func (b *Branch) Name() string
+func (b *Branch) Update(ctx context.Context, fn func(*Tx) error) error
+func (b *Branch) UpdateLSN(ctx context.Context, fn func(*Tx) error) (uint64, error)
+func (b *Branch) View(ctx context.Context, fn func(*Tx) error) error
+func (b *Branch) ViewAt(ctx context.Context, at uint64, fn func(*Tx) error) error
+type Certificate struct {
+	SubjectHash string   `json:"subject_hash"`
+	ShredLSN    uint64   `json:"shred_lsn"`
+	Branch      string   `json:"branch"`
+	ChainHead   string   `json:"chain_head"`
+	ManifestID  uint64   `json:"manifest_id"`
+	DEKDeleted  bool     `json:"dek_deleted"`
+	Lenses      []string `json:"lenses_purged"`
+	TS          int64    `json:"ts"`
+	PublicKey   string   `json:"public_key"`
+	Signature   string   `json:"signature,omitempty"`
+type CompactOptions struct {
+	Grace time.Duration
+type CompactStats struct {
+	Logs      int   `json:"logs"`
+	Keys      int   `json:"keys"`
+	Messages  int   `json:"messages"`
+	BaseBytes int64 `json:"base_bytes"`
+	Deleted   int   `json:"deleted"`
+	Pending   int   `json:"pending"`
+	LogsDropped      int `json:"logs_dropped,omitempty"`
+	ReflogPruned     int `json:"reflog_pruned,omitempty"`
+	ManifestsDeleted int `json:"manifests_deleted,omitempty"`
+type DB struct {
+func Open(ctx context.Context, url string, opts ...Option) (*DB, error)
+func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
+func (db *DB) Backup(ctx context.Context, dst store.Store) (*BackupReport, error)
+func (db *DB) Branch(name string) *Branch
+func (db *DB) Branches() map[string]uint64
+func (db *DB) CheckANN(branch string) error
+func (db *DB) Close() error
+func (db *DB) Compact(ctx context.Context, o CompactOptions) (CompactStats, error)
+func (db *DB) Crash()
+func (db *DB) CreateBranch(ctx context.Context, name, from string, at uint64) error
+func (db *DB) DeleteBranch(ctx context.Context, name string) error
+func (db *DB) DevKEK() bool
+func (db *DB) EnableANN(ctx context.Context, coll string, o ANNOptions) error
+func (db *DB) Entries(branch string) ([]*lens.Entry, error)
+func (db *DB) Epoch() uint64
+func (db *DB) GC(ctx context.Context, o GCOptions) (CompactStats, error)
+func (db *DB) Get(ctx context.Context, key string) (v []byte, err error)
+func (db *DB) Head(branch string) (uint64, error)
+func (db *DB) Healthy() error
+func (db *DB) IsShredded(subject string) bool
+func (db *DB) LensDigests(branch string) (map[string][32]byte, uint64, error)
+func (db *DB) Manifest() *Manifest
+func (db *DB) Ping(ctx context.Context) error
+func (db *DB) Promote(ctx context.Context, src, dst string) error
+func (db *DB) PublicKey() string
+func (db *DB) Put(ctx context.Context, key string, val []byte, opts ...WriteOpt) error
+func (db *DB) RebuildDigests(branch string) (map[string][32]byte, error)
+func (db *DB) RegisterIndex(ctx context.Context, coll, field string) error
+func (db *DB) Rewind(ctx context.Context, name string, at uint64) error
+func (db *DB) Shred(ctx context.Context, subject string) (*Certificate, error)
+func (db *DB) Stats() Stats
+func (db *DB) Update(ctx context.Context, fn func(*Tx) error) error
+func (db *DB) Verify(ctx context.Context) (*VerifyReport, error)
+func (db *DB) View(ctx context.Context, fn func(*Tx) error) error
+func (db *DB) ViewLog(ctx context.Context, logID string, at uint64, fn func(*Tx) error) error
+func (db *DB) WaitHead(ctx context.Context, branch string, seen uint64) (uint64, error)
+type DocTx struct {
+func (d DocTx) Delete(id string) error
+func (d DocTx) Find(field string, value any) ([]string, error)
+func (d DocTx) Get(id string) (json.RawMessage, error)
+func (d DocTx) Put(id string, doc any, opts ...WriteOpt) error
+type GCOptions struct {
+	Grace time.Duration
+	KeepFor time.Duration
+	KeepCommits uint64
+	KeepReflog int
+	KeepManifests int
+type Garbage struct {
+	Kind   string `json:"kind"`
+	Log    string `json:"log,omitempty"`
+	Below  uint64 `json:"below,omitempty"`
+	Key    string `json:"key,omitempty"`
+	Chunks int    `json:"chunks,omitempty"`
+	After  int64  `json:"after"`
+type Group struct {
+func (g Group) Ack(msg Message) error
+func (g Group) Cursor() (uint64, error)
+func (g Group) Fetch(max int) ([]Message, error)
+func (g Group) Seek(offset uint64) error
+type Histogram struct {
+	Counts []uint64 `json:"counts"`
+	Count  uint64   `json:"count"`
+	Sum    float64  `json:"sum_seconds"`
+func (h Histogram) Quantile(q float64) float64
+type IndexDecl struct {
+	Coll  string `json:"coll"`
+	Field string `json:"field"`
+type KV struct {
+	Key   string
+	Value []byte
+type KeyFunc func(ctx context.Context) ([]byte, error)
+func (f KeyFunc) KEK(ctx context.Context) ([]byte, error)
+type KeyProvider interface {
+func KeyFromEnv(name string) KeyProvider
+func KeyFromFile(path string) KeyProvider
+type LatencyHistogram struct {
+func (h *LatencyHistogram) Observe(d time.Duration)
+func (h *LatencyHistogram) Snapshot() Histogram
+type LogMeta struct {
+	ID        string `json:"id"`
+	Parent    string `json:"parent,omitempty"`
+	ParentLSN uint64 `json:"parent_lsn,omitempty"`
+	SnapLSN   uint64 `json:"snap_lsn,omitempty"`
+	SnapKey   string `json:"snap_key,omitempty"`
+	Base *BaseMeta `json:"base,omitempty"`
+type Manifest struct {
+	Format  int                 `json:"format"`
+	ID      uint64              `json:"id"`
+	Epoch   uint64              `json:"epoch"`
+	DBID    string              `json:"db_id"`
+	NextLog uint64              `json:"next_log"`
+	Logs    map[string]*LogMeta `json:"logs"`
+	Refs    map[string]string   `json:"refs"`
+	Reflog  []RefChange         `json:"reflog,omitempty"`
+	Indexes []IndexDecl         `json:"indexes,omitempty"`
+	ANN     []ANNDecl           `json:"ann,omitempty"`
+	Garbage []Garbage           `json:"garbage,omitempty"`
+type Message struct {
+	Topic    string `json:"topic"`
+	Offset   uint64 `json:"offset"`
+	LSN      uint64 `json:"lsn"`
+	TS       int64  `json:"ts"`
+	Value    []byte `json:"value"`
+	Redacted bool   `json:"redacted,omitempty"`
+type Op = format.Op
+type Option func(*Options)
+func WithClock(f func() int64) Option
+func WithHolder(s string) Option
+func WithInlineMax(n int) Option
+func WithKEK(k []byte) Option
+func WithKeyProvider(p KeyProvider) Option
+func WithLogf(f func(string, ...any)) Option
+func WithRand(r io.Reader) Option
+func WithRepairTail(on bool) Option
+func WithSnapshotEvery(n int) Option
+func WithValueCacheBytes(n int) Option
+type Options struct {
+	Clock func() int64
+	Rand io.Reader
+	Holder string
+	KEK []byte
+	Keys KeyProvider
+	SnapshotEvery int
+	MaxBatch int
+	Logf func(format string, args ...any)
+	InlineMax int
+	ValueCacheBytes int
+	RepairTail bool
+type RefChange struct {
+	Name string `json:"name"`
+	From string `json:"from,omitempty"`
+	To   string `json:"to"`
+	At   uint64 `json:"at"`
+	Why  string `json:"why"`
+	TS   int64  `json:"ts,omitempty"`
+type RestoreReport struct {
+	Info    BackupInfo `json:"backup"`
+	Objects int        `json:"objects"`
+	Bytes   int64      `json:"bytes"`
+func Restore(ctx context.Context, src, dst store.Store) (*RestoreReport, error)
+type Stats struct {
+	Commits      uint64 `json:"commits"`
+	CommitErrors uint64 `json:"commit_errors"`
+	Conflicts    uint64 `json:"conflicts"`
+	CommitLatency Histogram `json:"commit_latency"`
+	Segments      uint64    `json:"segments"`
+	SegmentBytes  uint64    `json:"segment_bytes"`
+	SegmentWrite     Histogram `json:"segment_write"`
+	Compactions      uint64    `json:"compactions"`
+	CompactionErrors uint64    `json:"compaction_errors"`
+	GCs              uint64    `json:"gcs"`
+	GCErrors         uint64    `json:"gc_errors"`
+	CompactionPause  Histogram `json:"compaction_pause"`
+	Snapshots        uint64    `json:"snapshots"`
+	SnapshotErrors   uint64    `json:"snapshot_errors"`
+	ValueCacheHits   uint64    `json:"value_cache_hits"`
+	ValueCacheMisses uint64    `json:"value_cache_misses"`
+	ValueCacheBytes  int64     `json:"value_cache_bytes"`
+	Heads map[string]uint64 `json:"heads"`
+	Halted string `json:"halted,omitempty"`
+type TopicTx struct {
+func (t TopicTx) Group(name string) Group
+func (t TopicTx) Len() uint64
+func (t TopicTx) Publish(val []byte, opts ...WriteOpt) error
+func (t TopicTx) Read(from uint64, max int) ([]Message, error)
+type Tx struct {
+func (tx *Tx) At() uint64
+func (tx *Tx) Delete(key string) error
+func (tx *Tx) Doc(coll string) DocTx
+func (tx *Tx) Get(key string) ([]byte, error)
+func (tx *Tx) Put(key string, val []byte, opts ...WriteOpt) error
+func (tx *Tx) Scan(prefix string) ([]KV, error)
+func (tx *Tx) Topic(name string) TopicTx
+func (tx *Tx) Vector(coll string) VecTx
+type VecTx struct {
+func (v VecTx) Delete(id string) error
+func (v VecTx) Put(id string, vec []float32, opts ...WriteOpt) error
+func (v VecTx) Search(q []float32, k int) ([]lens.Hit, error)
+func (v VecTx) SearchANN(q []float32, k, ef int) ([]lens.Hit, error)
+func (v VecTx) SearchExact(q []float32, k int) ([]lens.Hit, error)
+type VerifyReport struct {
+	OK              bool              `json:"ok"`
+	Manifests       int               `json:"manifests"`
+	Logs            int               `json:"logs"`
+	Segments        int               `json:"segments"`
+	Entries         int               `json:"entries"`
+	ChainHeads      map[string]string `json:"chain_heads"`
+	EncryptedValues int               `json:"encrypted_values"`
+	Unreadable      int               `json:"unreadable_shredded_values"`
+	SweptDEKs       int               `json:"swept_late_deks,omitempty"`
+	Snapshots       int               `json:"snapshots"`
+	Format int `json:"manifest_format"`
+	Scrubbed bool     `json:"scrubbed"`
+	Objects  int      `json:"objects"`
+	Bytes    int64    `json:"bytes"`
+	Problems []string `json:"problems,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
+type WriteOpt func(*format.Op)
+func Subject(s string) WriteOpt

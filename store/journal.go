@@ -803,9 +803,6 @@ type jev struct {
 	data []byte
 }
 
-// JournalVersion is the journal file format this build reads and writes.
-const JournalVersion = 1
-
 // jfault, when set (disk-full tests only), can fail a write after letting
 // a prefix of it through (op 'w', returns how many bytes land) or fail a
 // sync (op 's').

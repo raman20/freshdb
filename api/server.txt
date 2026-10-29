@@ -1,0 +1,63 @@
+const (
+	DefaultReadTimeout  = 5 * time.Minute
+	DefaultWriteTimeout = 2 * time.Minute
+const DefaultMaxBody = 96 << 20
+const DefaultSlowOp = time.Second
+func Handler(db *freshdb.DB) http.Handler
+func New(db *freshdb.DB, o Options) http.Handler
+func ParseGCOptions(get func(string) string, grace time.Duration) (freshdb.GCOptions, error)
+type Auth struct {
+func LoadTokenFile(path string) (*Auth, error)
+func NewAuth(t *Tokens) *Auth
+func (a *Auth) Reload() (bool, error)
+func (a *Auth) Set(t *Tokens)
+func (a *Auth) Watch(ctx context.Context, every time.Duration, logf func(string, ...any))
+type Certs struct {
+func LoadCerts(certFile, keyFile string) (*Certs, error)
+func (c *Certs) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error)
+func (c *Certs) Reload() (bool, error)
+func (c *Certs) Watch(ctx context.Context, every time.Duration, logf func(string, ...any))
+type Grant struct {
+	Name      string
+	Scope     Scope
+	Resources []Resource
+type LogEntry struct {
+	LSN uint64  `json:"lsn"`
+	TS  int64   `json:"ts"`
+	Log string  `json:"log"`
+	Ops []LogOp `json:"ops"`
+type LogOp struct {
+	Kind    string `json:"kind"`
+	Space   string `json:"space"`
+	Key     string `json:"key"`
+	Subject string `json:"subject,omitempty"`
+	Value   string `json:"value,omitempty"`
+type Options struct {
+	Token string
+	Auth *Auth
+	MaxBody int
+	Version string
+	Logger *slog.Logger
+	AccessLog bool
+	SlowOp time.Duration
+	Pprof bool
+	Drain <-chan struct{}
+type Resource struct {
+	Prefix     bool
+type Scope int
+const (
+	ScopeRead Scope = 1 + iota
+func (s Scope) String() string
+type Server struct {
+	DB *freshdb.DB
+type Tokens struct {
+func ParseTokens(b []byte) (*Tokens, error)
+type TxOp struct {
+	Op      string          `json:"op"`
+	Key     string          `json:"key,omitempty"`
+	Value   json.RawMessage `json:"value,omitempty"`
+	Topic   string          `json:"topic,omitempty"`
+	Group   string          `json:"group,omitempty"`
+	Offset  uint64          `json:"offset,omitempty"`
+	Coll    string          `json:"coll,omitempty"`
+	Subject string          `json:"subject,omitempty"`

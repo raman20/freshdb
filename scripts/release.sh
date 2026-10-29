@@ -29,4 +29,14 @@ PY
     tar -C dist -czf dist/$name.tar.gz $name
   fi
 done
-(cd dist && sha256sum *.tar.gz *.zip > checksums.txt && cat checksums.txt)
+python3 scripts/sbom.py "$V" > dist/sbom.spdx.json
+(cd dist && sha256sum *.tar.gz *.zip sbom.spdx.json > checksums.txt && cat checksums.txt)
+# Optional signature over checksums.txt with an SSH key (no extra tools):
+#   verify: ssh-keygen -Y verify -f allowed_signers -I release@freshdb \
+#             -n freshdb-release -s checksums.txt.sig < checksums.txt
+if [ -n "${FRESHDB_SIGN_KEY:-}" ]; then
+  ssh-keygen -Y sign -q -f "$FRESHDB_SIGN_KEY" -n freshdb-release dist/checksums.txt
+  echo "signed: dist/checksums.txt.sig"
+else
+  echo "unsigned (set FRESHDB_SIGN_KEY to sign checksums.txt)"
+fi

@@ -1,0 +1,96 @@
+const JournalVersion = 1
+var (
+	ErrExists   = errors.New("store: object already exists")
+	ErrNotFound = errors.New("store: not found")
+	ErrCorrupt = errors.New("store: corrupt")
+	ErrVersion = format.ErrVersion
+var ErrInjected = errors.New("store: injected fault")
+func CheckConditional(ctx context.Context, s Store) error
+func GetRange(ctx context.Context, st Store, key string, off, n int64) ([]byte, error)
+func Keys(ctx context.Context, s Store) ([]string, error)
+func Migrate(ctx context.Context, dir string, to Layout, logf func(string, ...any)) (err error)
+type CheckResult struct {
+	Name   string
+	OK     bool
+	Detail string
+func S3Check(ctx context.Context, st Store, large int) []CheckResult
+type FS struct {
+func NewFS(root string) (*FS, error)
+func (s *FS) Close() error
+func (s *FS) Delete(_ context.Context, key string) error
+func (s *FS) Get(_ context.Context, key string) ([]byte, error)
+func (s *FS) GetRange(_ context.Context, key string, off, n int64) ([]byte, error)
+func (s *FS) Keys(context.Context) ([]string, error)
+func (s *FS) List(_ context.Context, prefix string) ([]string, error)
+func (s *FS) PutIfAbsent(_ context.Context, key string, data []byte) error
+func (s *FS) Root() string
+func (s *FS) SetUnsafeNoSync(on bool)
+type FaultProbs struct {
+	FailBefore float64
+	FailAfter  float64
+	Delay      float64
+	Dup        float64
+	ReadFail   float64
+	Torn       float64
+type Faulty struct {
+	Inner Store
+	P  FaultProbs
+	On bool
+	Trace []string
+func NewFaulty(inner Store, seed int64, p FaultProbs) *Faulty
+func (f *Faulty) Delete(ctx context.Context, key string) error
+func (f *Faulty) Flush(ctx context.Context)
+func (f *Faulty) Get(ctx context.Context, key string) ([]byte, error)
+func (f *Faulty) GetRange(ctx context.Context, key string, off, n int64) ([]byte, error)
+func (f *Faulty) List(ctx context.Context, prefix string) ([]string, error)
+func (f *Faulty) PutIfAbsent(ctx context.Context, key string, data []byte) error
+type Journal struct {
+func NewJournal(dir string) (*Journal, error)
+func (j *Journal) Close() error
+func (j *Journal) Delete(_ context.Context, key string) error
+func (j *Journal) Get(ctx context.Context, key string) ([]byte, error)
+func (j *Journal) GetRange(_ context.Context, key string, off, n int64) ([]byte, error)
+func (j *Journal) Keys(context.Context) ([]string, error)
+func (j *Journal) List(_ context.Context, prefix string) ([]string, error)
+func (j *Journal) PutIfAbsent(_ context.Context, key string, data []byte) error
+func (j *Journal) SetUnsafeNoSync(on bool)
+func (j *Journal) Sync() error
+type Layout string
+const (
+	LayoutNone Layout = ""
+	LayoutFiles Layout = "files"
+	LayoutJournal Layout = "journal"
+func DefaultLayout() Layout
+func DetectLayout(dir string) (Layout, error)
+type Mem struct {
+func NewMem() *Mem
+func SharedMem(name string) *Mem
+func (s *Mem) Delete(_ context.Context, key string) error
+func (s *Mem) Get(_ context.Context, key string) ([]byte, error)
+func (s *Mem) GetRange(_ context.Context, key string, off, n int64) ([]byte, error)
+func (m *Mem) Keys(context.Context) ([]string, error)
+func (s *Mem) List(_ context.Context, prefix string) ([]string, error)
+func (s *Mem) PutIfAbsent(_ context.Context, key string, data []byte) error
+func (s *Mem) Raw(fn func(m map[string][]byte))
+type RangeReader interface {
+type S3 struct {
+func NewS3(c *minio.Client, bucket, prefix string) *S3
+func NewS3FromURL(u *url.URL) (*S3, error)
+func (s *S3) Delete(ctx context.Context, key string) error
+func (s *S3) Get(ctx context.Context, key string) ([]byte, error)
+func (s *S3) GetRange(ctx context.Context, key string, off, n int64) ([]byte, error)
+func (s *S3) Keys(ctx context.Context) ([]string, error)
+func (s *S3) List(ctx context.Context, prefix string) ([]string, error)
+func (s *S3) PutIfAbsent(ctx context.Context, key string, data []byte) error
+type ShrinkStats struct {
+	Objects        int   `json:"objects"`
+	SizeBefore     int64 `json:"size_before"`
+	AllocBefore    int64 `json:"alloc_before"`
+	SizeAfter      int64 `json:"size_after"`
+	AllocAfter     int64 `json:"alloc_after"`
+	DeadRecsBefore int   `json:"dead_records_before"`
+func ShrinkJournal(dir string) (ShrinkStats, error)
+type Store interface {
+func Open(raw string) (Store, error)
+func OpenLocal(dir string) (Store, error)
+type Walker interface {

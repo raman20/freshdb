@@ -11,9 +11,27 @@ Please **do not open a public issue.** Report privately through GitHub:
 (Security → Advisories → "Report a vulnerability").
 
 Include the affected version or commit, the storage backend, and steps or a
-simulator seed that reproduce the problem. Expect an acknowledgement within
-**7 days** (best effort; this is a small project). We will agree a disclosure
-timeline with you and credit you unless you prefer otherwise.
+simulator seed that reproduce the problem. We credit reporters unless they
+prefer otherwise.
+
+| step | target (best effort; this is a small project) |
+|---|---|
+| acknowledgement | 7 days |
+| assessment (confirmed or not, severity) | 14 days |
+| fix on `main` for a confirmed high or critical issue | 30 days |
+| public advisory | when a fix is available, or 90 days after the report, whichever is first, unless agreed otherwise |
+
+Fixed issues get a GitHub security advisory and a CHANGELOG "Security"
+entry. The [threat model](docs/threat-model.md) says what freshDB defends
+against and what it does not.
+
+## Verifying downloads
+
+`scripts/release.sh` produces `checksums.txt` (SHA-256 of every archive)
+and an SPDX SBOM (`sbom.spdx.json`), and can sign `checksums.txt` with an
+SSH key (`ssh-keygen -Y sign`). **No release signing key is published
+yet**, so existing releases are unsigned; verify against `checksums.txt`
+from the GitHub release page.
 
 ## Supported versions
 

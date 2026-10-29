@@ -67,8 +67,9 @@ named), **documented** (accepted limit, written down where users read).
 | id | gap | status |
 |---|---|---|
 | S4.1 | pprof/metrics must not leak to non-admin tokens once added. | fixed (item 15): admin scope; pprof refused without auth |
-| S4.2 | No `govulncheck` in CI, no SBOM, release checksums not signed. | open → item 21 |
-| S4.3 | No threat model document; SECURITY.md has no response timeline. | open → item 21 |
+| S4.2 | No `govulncheck` in CI, no SBOM, release checksums not signed. | fixed in tooling: govulncheck in CI (0 reachable; 3 unreachable in x/net, x/crypto), SPDX SBOM and optional SSH signature in `scripts/release.sh`, release dry run with signature verify in CI. **No signing key published** |
+| S4.5 | The CI cross-build loop ignored failures: Windows had not compiled since item 14 (`store.JournalVersion` in a unix-only file) while CI stayed green. | fixed: constant moved, loop fails on error |
+| S4.3 | No threat model document; SECURITY.md has no response timeline. | fixed: docs/threat-model.md, timeline in SECURITY.md, docs/release-checklist.md |
 | S4.4 | No per-token rate limits, no audit log of admin actions. | documented |
 
 ## S5 — performance cliffs
@@ -88,7 +89,7 @@ named), **documented** (accepted limit, written down where users read).
 | S6.1 | Version stamps exist for manifests (`format`) and segments, not for snapshots, bases, ANN blobs or the token file; no single "format version" a user can query. | fixed: `ErrVersion` for manifest, segment, base, journal; caches rebuilt; unversioned objects gated by the manifest format; `freshdb version` lists formats — design 13 |
 | S6.2 | No golden files: an encoder change can alter the on-disk format without any test failing. | fixed: golden databases (v0.1.0 written by v0.1.0 code; main, main-compacted) with read and byte-identity tests |
 | S6.3 | No written upgrade/downgrade policy; migration is tested from v0.1.0 directories only. | fixed: docs/compatibility.md (policy + measured matrix); found: v0.1.0 opens a journal directory as empty (documented, unfixable in v0.1.0) |
-| S6.4 | No documented stable API surface, semver or deprecation policy. | open → item 21 |
+| S6.4 | No documented stable API surface, semver or deprecation policy. | fixed: docs/api-stability.md (surfaces labelled stable-track / experimental / internal); exported Go API snapshotted in `api/`, diffed in CI. HTTP/CLI not diffed |
 | S6.5 | S3: only MinIO is tested; AWS S3 and R2 are untested (need credentials). Conditional-write behaviour of other S3-compatibles is unknown. | partly fixed: `freshdb s3check` probes an endpoint; fault injection against MinIO; tested-on matrix in docs/s3.md. AWS/R2/GCS still untested |
 
 ## Verdict per area (updated as items land)
@@ -103,4 +104,4 @@ named), **documented** (accepted limit, written down where users read).
 | soak / chaos | not ready |
 | memory bound | not ready (RAM-bound by design today) |
 | S3 | experimental. MinIO only (CI): fault injection (503, resets, lost replies) with no false fences or lost acks, request cost measured, `s3check` for other endpoints. Not yet: any real cloud provider, snapshots > 5 GiB |
-| API stability / supply chain | not ready |
+| API stability / supply chain | policy written, Go API diff-gated, govulncheck + SBOM + checksums in CI. Not yet: 1.0 freeze, HTTP/CLI compatibility tests, a published signing key, reproducible builds |

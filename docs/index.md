@@ -47,6 +47,9 @@ otherwise; the latest release is
 | [design/16-operational-safety.md](design/16-operational-safety.md) | design: graceful drain/shutdown, bind before open, per-request timeouts, key limits, lease records |
 | [design/17-s3-correctness.md](design/17-s3-correctness.md) | design: S3 fault injection, request cost, `s3check` |
 | [s3.md](s3.md) | running on S3: required guarantees, retries, cost per operation, `s3check`, tested-on matrix |
+| [api-stability.md](api-stability.md) | semver, which surfaces are stable-track vs experimental, deprecation policy |
+| [threat-model.md](threat-model.md) | assets, actors, threats and their status |
+| [release-checklist.md](release-checklist.md) | gates before any release |
 
 ## Evidence and numbers
 
