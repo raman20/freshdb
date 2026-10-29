@@ -54,10 +54,10 @@ named), **documented** (accepted limit, written down where users read).
 
 | id | gap | status |
 |---|---|---|
-| S3.1 | No metrics (`/metrics`), no commit latency histograms, no cache/GC/compaction counters. | open → item 15 |
-| S3.2 | Logs are unstructured `log.Printf`; no request log, no slow-op log. | open → item 15 |
-| S3.3 | `/healthz` only says the process is up; no `/readyz` that checks the store. | open → item 15 |
-| S3.4 | No pprof endpoint. | open → item 15 |
+| S3.1 | No metrics (`/metrics`), no commit latency histograms, no cache/GC/compaction counters. | fixed: `GET /metrics` (Prometheus text, admin scope), `DB.Stats()` — design 14 |
+| S3.2 | Logs are unstructured `log.Printf`; no request log, no slow-op log. | fixed: `--log-format json` (slog), `--access-log`, `--slow-op` (default 1 s) |
+| S3.3 | `/healthz` only says the process is up; no `/readyz` that checks the store. | fixed: `/readyz` (closed / fenced / halted / store reachable; cached 1 s), `DB.Ping` |
+| S3.4 | No pprof endpoint. | fixed: `--pprof`, admin scope, refused without auth |
 | S3.5 | No backup or restore command; the documented method is copying the directory/bucket while stopped. No restore drill. | open → item 16 |
 | S3.6 | Point-in-time recovery exists only as `branch create --at LSN` / `rewind`; no way to restore a database to a log position into a new location. | open → item 16 |
 | S3.7 | No long soak run; crash tests and the simulator run for seconds to minutes. | open → item 18 |
@@ -96,7 +96,7 @@ named), **documented** (accepted limit, written down where users read).
 |---|---|
 | durability / corruption handling | journal store: corruption detected, never silently dropped; power-loss modelled. Disk full tested by fault injection (S1.10). Still open: fs:// and S3 not power-loss modelled, no salvage tool |
 | formats / upgrades | stamps on every authoritative object, refusal tested, golden files for v0.1.0 and main, written policy. Not yet: frozen 1.0 policy, migration tooling for a future bump, old-binary column in CI |
-| observability | not ready |
+| observability | metrics, readiness, structured/access/slow logs and pprof exist and are tested. Not yet: tracing, shipped dashboards/alert rules, a real Prometheus scrape in CI |
 | backup / restore | not ready |
 | operational safety | not ready |
 | soak / chaos | not ready |

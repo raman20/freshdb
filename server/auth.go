@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -30,6 +31,20 @@ type Options struct {
 	// MaxBody caps a request body in bytes (default DefaultMaxBody); a
 	// larger one is refused with 413.
 	MaxBody int
+	// Version is reported in freshdb_build_info on /metrics.
+	Version string
+	// Logger receives the access log and the slow-request log
+	// (default slog.Default()).
+	Logger *slog.Logger
+	// AccessLog logs every request (method, route, status, bytes,
+	// seconds, token name) at Info.
+	AccessLog bool
+	// SlowOp logs, at Warn, requests slower than this (default
+	// DefaultSlowOp; < 0 = never). Streams and long-polls are exempt.
+	SlowOp time.Duration
+	// Pprof serves net/http/pprof under /debug/pprof/ to admin tokens.
+	// Ignored without auth (Token or Auth).
+	Pprof bool
 }
 
 // DefaultMaxBody is the default request body cap: one transaction's limit
@@ -276,6 +291,17 @@ func New(db *freshdb.DB, o Options) http.Handler {
 		w.Header().Set("Content-Type", "text/plain")
 		w.Write([]byte("ok\n"))
 	})
+	// readyz: can this server take writes now? (DB.Ping, cached 1s.)
+	// Unauthenticated like healthz, so it says only which class of problem.
+	m.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		if err := s.obs.ready(r.Context(), db); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprintf(w, "not ready: %s\n", notReady(err))
+			return
+		}
+		w.Write([]byte("ok\n"))
+	})
 	if o.Token == "" && o.Auth == nil {
 		m.Handle("/", api)
 		return m
@@ -288,6 +314,7 @@ func New(db *freshdb.DB, o Options) http.Handler {
 			c.admin = static
 		}
 		if !ok || c.grant() == nil {
+			s.obs.unauthorized.Add(1)
 			w.Header().Set("WWW-Authenticate", `Bearer realm="freshdb"`)
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
@@ -318,4 +345,18 @@ func permit(r *http.Request, scope Scope, kind, name string) error {
 		return fmt.Errorf("%w: token %q may not use %s %q", errForbidden, g.Name, kind, name)
 	}
 	return nil
+}
+
+// notReady classifies a DB.Ping error for /readyz.
+func notReady(err error) string {
+	switch {
+	case errors.Is(err, freshdb.ErrClosed):
+		return "closed"
+	case errors.Is(err, freshdb.ErrFenced):
+		return "fenced (another writer took over)"
+	case errors.Is(err, freshdb.ErrUnknownOutcome):
+		return "writer halted on a storage error (restart needed)"
+	default:
+		return "storage unreachable"
+	}
 }

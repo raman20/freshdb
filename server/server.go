@@ -40,10 +40,12 @@ type Server struct {
 
 	streams, waiters chan struct{} // nil: no cap
 	maxBody          int64
+	obs              *observer
+	pprof            bool
 }
 
 func newServer(db *freshdb.DB, o Options) *Server {
-	s := &Server{DB: db}
+	s := &Server{DB: db, obs: newObserver(o), pprof: o.Pprof && (o.Token != "" || o.Auth != nil)}
 	mk := func(n, def int) chan struct{} {
 		if n == 0 {
 			n = def
@@ -72,7 +74,7 @@ func (s *Server) routes() http.Handler {
 	// h registers a route that needs scope on (kind, name(r)); kind ""
 	// is database-wide, "tx" checks each op in the handler.
 	h := func(pattern string, scope Scope, kind string, name func(*http.Request) string, f http.HandlerFunc) {
-		m.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+		m.HandleFunc(pattern, s.obs.wrap(pattern, func(w http.ResponseWriter, r *http.Request) {
 			k, n := kind, ""
 			if name != nil {
 				n = name(r)
@@ -85,7 +87,7 @@ func (s *Server) routes() http.Handler {
 				r.Body = http.MaxBytesReader(w, r.Body, s.maxBody)
 			}
 			f(w, r)
-		})
+		}))
 	}
 	const R, W, A = ScopeRead, ScopeWrite, ScopeAdmin
 	prefix := func(r *http.Request) string { return r.URL.Query().Get("prefix") }
@@ -116,6 +118,10 @@ func (s *Server) routes() http.Handler {
 	h("POST /v1/vectors/{c}/ann", A, "", nil, s.vecANN)
 	h("POST /v1/compact", A, "", nil, s.compact)
 	h("POST /v1/gc", A, "", nil, s.gc)
+	h("GET /metrics", A, "", nil, s.metrics)
+	if s.pprof {
+		pprofRoutes(func(p string, f http.HandlerFunc) { h(p, A, "", nil, f) })
+	}
 	return m
 }
 

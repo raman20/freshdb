@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/raman20/freshdb/format"
 	"github.com/raman20/freshdb/lens"
@@ -94,9 +95,23 @@ func (w *writer) submit(r *commitReq) commitRes {
 		w.mu.RUnlock()
 		return commitRes{err: err}
 	}
+	t0 := time.Now()
 	w.ch <- r
 	w.mu.RUnlock()
-	return <-r.done
+	res := <-r.done
+	m := &w.db.met
+	switch {
+	case res.err == nil:
+		m.commits.Add(1)
+		m.commitLat.Observe(time.Since(t0))
+	case errors.Is(res.err, ErrConflict):
+		m.conflicts.Add(1)
+	case errors.Is(res.err, errPaused):
+	default:
+		m.commitErrors.Add(1)
+		m.commitLat.Observe(time.Since(t0))
+	}
+	return res
 }
 
 func (w *writer) stop() {
@@ -335,7 +350,9 @@ func (w *writer) process(batch []*commitReq) {
 		return
 	}
 	// Durability point: the whole batch becomes visible atomically or not at all.
+	t0 := time.Now()
 	err := putExactlyOnce(ctx, w.db.st, segKey(w.l.meta.ID, seq), seg)
+	w.db.met.segmentLat.Observe(time.Since(t0))
 	if err != nil {
 		if errors.Is(err, store.ErrExists) {
 			w.failed = ErrFenced
@@ -344,10 +361,14 @@ func (w *writer) process(batch []*commitReq) {
 		} else {
 			w.failed = fmt.Errorf("segment %d, writer halted until reopen: %w: %w", seq, ErrUnknownOutcome, err)
 		}
+		halt := w.failed
+		w.db.met.halted.CompareAndSwap(nil, &halt)
 		w.db.logf("freshdb: writer for %s halted: %v", w.l.meta.ID, w.failed)
 		fail(accepted, w.failed)
 		return
 	}
+	w.db.met.segments.Add(1)
+	w.db.met.segmentBytes.Add(uint64(len(seg)))
 	w.l.mu.Lock()
 	w.l.addSeg(seq, entries[0].LSN, uint64(len(entries)), ts, chain)
 	w.l.nextSeq = seq + 1
@@ -373,7 +394,10 @@ func (w *writer) process(batch []*commitReq) {
 	if w.db.opts.SnapshotEvery > 0 && w.sinceSnap >= w.db.opts.SnapshotEvery {
 		w.sinceSnap = 0
 		if err := w.db.writeSnapshot(ctx, w.l.meta.ID, w.v); err != nil {
+			w.db.met.snapshotErrors.Add(1)
 			w.db.logf("freshdb: snapshot failed (non-fatal): %v", err)
+		} else {
+			w.db.met.snapshots.Add(1)
 		}
 	}
 	for i, r := range accepted {

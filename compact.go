@@ -79,6 +79,18 @@ func (db *DB) Compact(ctx context.Context, o CompactOptions) (CompactStats, erro
 
 // runCompaction is Compact (gc false) or GC (gc true).
 func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats CompactStats, err error) {
+	t0 := time.Now()
+	defer func() {
+		runs, errs := &db.met.compactions, &db.met.compactErrors
+		if gc {
+			runs, errs = &db.met.gcs, &db.met.gcErrors
+		}
+		runs.Add(1)
+		if err != nil {
+			errs.Add(1)
+		}
+		db.met.compactLat.Observe(time.Since(t0))
+	}()
 	db.mu.Lock()
 	switch {
 	case db.closed:

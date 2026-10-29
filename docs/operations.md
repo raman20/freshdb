@@ -140,7 +140,7 @@ export FRESHDB_ADDR=http://127.0.0.1:7070            # point CLI calls at it
   scoped tokens) and TLS (`--tls-cert`, `--tls-key`); `serve` refuses a
   non-loopback `--listen` without a token unless you pass
   `--insecure-no-auth`. Clients send the token with `--addr ... --token`
-  or `FRESHDB_TOKEN`. `GET /healthz` needs no token.
+  or `FRESHDB_TOKEN`. `GET /healthz` and `/readyz` need no token.
 - Token file, one per line (`#` comments; a bare `TOKEN` line is admin):
 
       read   r-token-123  name=dashboards
@@ -274,7 +274,43 @@ headers and hole edges; +0.33 MiB per cycle here) and its apparent size
 only grows, so run `gc --shrink` during maintenance windows.
 
 
-## Health checks
+## Health checks and monitoring
+
+- `GET /healthz`: the process is up (liveness). No token.
+- `GET /readyz`: the database can take writes: open, not fenced by another
+  writer, no writer halted by a storage error, and the store answers (two
+  reads, cached 1 s). 503 with `not ready: closed | fenced | writer halted
+  ... | storage unreachable`. No token. Use it for readiness and for
+  load-balancer health; a halted or fenced server needs a restart (or to
+  be retired), not more traffic.
+- `GET /metrics`: Prometheus text format; needs an admin token when auth
+  is on (`bearer_token_file` in the scrape config). Families:
+  `freshdb_commits_total`, `freshdb_commit_errors_total`,
+  `freshdb_conflicts_total`, `freshdb_commit_latency_seconds` (histogram),
+  `freshdb_segments_total`, `freshdb_segment_bytes_total`,
+  `freshdb_segment_write_seconds`, `freshdb_compactions_total{kind}`,
+  `freshdb_compaction_errors_total{kind}`,
+  `freshdb_compaction_pause_seconds`, `freshdb_snapshots_total`,
+  `freshdb_snapshot_errors_total`, `freshdb_value_cache_*`,
+  `freshdb_branches`, `freshdb_head_lsn{branch="main"}`,
+  `freshdb_writer_halted`, `freshdb_http_requests_total{route,code}`,
+  `freshdb_http_request_duration_seconds{route}` (streams and long-polls
+  excluded), `freshdb_http_unauthorized_total`, `freshdb_http_inflight`,
+  `freshdb_http_streams`, `freshdb_http_waiters`, `freshdb_build_info`, and
+  `go_*` runtime gauges. Embedded users get the same numbers from
+  `db.Stats()`, `db.Healthy()` and `db.Ping(ctx)`.
+- Suggested alerts: `freshdb_writer_halted == 1` (page: commits fail until
+  restart; check disk space / store errors in the log);
+  `increase(freshdb_commit_errors_total[5m]) > 0`;
+  `histogram_quantile(0.99, rate(freshdb_commit_latency_seconds_bucket[5m]))`
+  above your SLO; `increase(freshdb_compaction_errors_total[1h]) > 0`;
+  `/readyz` failing.
+- Logs: `--log-format json` (one JSON object per line, including the
+  engine's messages), `--access-log` (every request: method, route, status,
+  bytes, seconds, remote, token *name*), `--slow-op 1s` (default; WARN for
+  slower requests, `0` turns it off; streams and long-polls exempt).
+- Profiling: `--pprof` serves `/debug/pprof/` to admin tokens; `serve`
+  refuses it without auth. Heap profiles can contain plaintext values.
 
 `freshdb verify` (or `GET /v1/verify`) re-reads everything and reports
 `"ok": true` plus counts. It is O(history); run it offline or rarely.

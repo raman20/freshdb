@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -51,6 +52,10 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
         [--max-streams 1024] [--max-waiters 4096]   caps on SSE streams and long-polls (503 over it)
         [--insecure-no-auth]                  allow a non-loopback --listen without a token
         [--max-body 100663296]                request body cap in bytes (413 over it)
+        [--log-format text|json]              log format (json: one slog object per line)
+        [--access-log] [--slow-op 1s]         log every request; log requests slower than this (0: off)
+        [--pprof]                             serve /debug/pprof/ to admin tokens (needs auth)
+                                              also: GET /metrics (Prometheus; admin token), /healthz, /readyz
   freshdb put KEY VALUE [--subject S]         write a key
   freshdb get KEY [--at LSN]                  read a key (time travel with --at)
   freshdb del KEY
@@ -97,7 +102,7 @@ type cli struct {
 func parse(argv []string) ([]string, map[string]string) {
 	var args []string
 	flags := map[string]string{}
-	bools := map[string]bool{"follow": true, "help": true, "h": true, "exact": true, "insecure-no-auth": true, "shrink": true, "repair-tail": true}
+	bools := map[string]bool{"follow": true, "help": true, "h": true, "exact": true, "insecure-no-auth": true, "shrink": true, "repair-tail": true, "access-log": true, "pprof": true}
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
 		if strings.HasPrefix(a, "-") && len(a) > 1 && !isNumberish(a) {
@@ -227,6 +232,23 @@ func buildVersion() string {
 }
 
 func serve(dbURL string, flags map[string]string) {
+	switch flags["log-format"] {
+	case "", "text":
+	case "json":
+		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+	default:
+		log.Fatalf("freshdb: --log-format: want text or json, got %q", flags["log-format"])
+	}
+	slowOp := server.DefaultSlowOp
+	if v := flags["slow-op"]; v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			log.Fatalf("freshdb: --slow-op: %v", err)
+		}
+		if slowOp = d; d == 0 {
+			slowOp = -1
+		}
+	}
 	listen := flags["listen"]
 	if listen == "" {
 		listen = env("FRESHDB_LISTEN", "127.0.0.1:7070")
@@ -258,11 +280,15 @@ func serve(dbURL string, flags map[string]string) {
 		}
 		log.Printf("freshdb: WARNING: --insecure-no-auth: anyone who can reach %s can read and write every branch", listen)
 	}
+	if flags["pprof"] != "" && token == "" && auth == nil {
+		log.Fatal("freshdb: --pprof needs auth (--token or --token-file): profiles expose memory contents")
+	}
 	db, err := freshdb.Open(context.Background(), dbURL, keyOpts(flags)...)
 	if err != nil {
 		log.Fatalf("freshdb: open %s: %v", dbURL, err)
 	}
-	opts := server.Options{Token: token, Auth: auth, MaxStreams: intFlag(flags, "max-streams"), MaxWaiters: intFlag(flags, "max-waiters"), MaxBody: intFlag(flags, "max-body")}
+	opts := server.Options{Token: token, Auth: auth, MaxStreams: intFlag(flags, "max-streams"), MaxWaiters: intFlag(flags, "max-waiters"), MaxBody: intFlag(flags, "max-body"),
+		Version: buildVersion(), AccessLog: flags["access-log"] != "", SlowOp: slowOp, Pprof: flags["pprof"] != ""}
 	srv := &http.Server{Addr: listen, Handler: server.New(db, opts), ReadHeaderTimeout: 10 * time.Second,
 		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}}
 	var certs *server.Certs

@@ -96,6 +96,7 @@ type DB struct {
 	views   map[string]*view   // live views of writable logs
 	writers map[string]*writer // by log id
 	vcache  *valueCache
+	met     metrics
 	// bw caches branch name -> writer for the read path; nil = rebuild.
 	// Reset (under db.mu held exclusively) whenever refs, writers or
 	// closed change, so readers never need db.mu on a hit.

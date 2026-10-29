@@ -1,0 +1,39 @@
+Item 15: observability. Before = 3ac666a (item 14), after = this commit.
+Same box, 8 vCPU, go test -bench -count=6, medians. Noise between runs of the
+same binary is about ±10% on these benchmarks (see the fs rows).
+
+1. What an operator could see (functional)
+   before: /healthz (process up), unstructured log lines. No metrics, no
+           readiness, no request/slow log, no profiler. A writer halted by
+           ENOSPC was visible only as failing commits.
+   after:  /metrics (Prometheus text, up to 32 families incl. commit latency,
+           segment write, compaction pause histograms, HTTP by route/code),
+           /readyz (closed / fenced / halted / storage), JSON logs, access
+           log, slow-op log (1 s default), pprof (admin, needs auth).
+           TestReadyz: takeover by a second process -> 503 "fenced" within
+           the 1 s cache; TestDiskFull: halt -> Ping = ErrUnknownOutcome
+           wrapping ENOSPC, Stats.Halted set.
+
+2. Engine cost (commit path: 2 time.Now + atomics per commit and segment)
+                               before        after
+   PutSerial/mem               6766 ns/op    6806 ns/op   (+0.6%, noise)
+   PutSerial/fs              288820 ns/op  284174 ns/op   (noise)
+   PutParallel/mem             2754 ns/op    2850 ns/op   (+3.5%)
+   PutParallel/fs              8305 ns/op    7432 ns/op   (noise)
+   Get (value cache counters)   773 ns/op     663 ns/op   (noise)
+   allocs/op unchanged (33 / 44 / 23 / 23 / 6).
+
+3. HTTP cost (in-process GET through the full handler, BenchmarkAuthGet)
+                     before                 first cut              final
+   noauth   2696 ns 27 allocs   2912 ns 31 allocs   2626 ns 28 allocs
+   token    2272 ns 31 allocs   2743 ns 35 allocs   2331 ns 32 allocs (+2.6%)
+   scoped   2358 ns 31 allocs   3124 ns 35 allocs   2395 ns 32 allocs (+1.6%)
+   First cut: +20-32% from a sync.Map key built per request
+   (route + code string), URL query parsing on every request (for the
+   long-poll check) and a per-route map lookup. Final: per-route stats
+   resolved at registration, status counts in a fixed array, query parsed
+   only when RawQuery contains "wait=". Remaining: 1 alloc (the status
+   recorder) + 32 B.
+
+Not measured: /metrics scrape cost under load; overhead over a real
+network (would be smaller relative to the ~2 us handler).

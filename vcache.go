@@ -8,6 +8,7 @@ import (
 	"hash/crc32"
 	"hash/maphash"
 	"sync"
+	"sync/atomic"
 
 	"github.com/raman20/freshdb/lens"
 	"github.com/raman20/freshdb/store"
@@ -50,6 +51,8 @@ type vcShard struct {
 	swept  uint64            // head at the last stale-index sweep
 	m      map[uint64]uint64 // key hash -> logical position of the entry
 	closed bool
+	hits   atomic.Uint64 // per shard: no cache line shared by every reader
+	misses atomic.Uint64
 	_      [32]byte // keep neighbouring shards' locks off one cache line
 }
 
@@ -118,12 +121,28 @@ func (c *valueCache) get(k vcKey) ([]byte, bool) {
 	}
 	s.mu.RUnlock()
 	if out == nil {
+		s.misses.Add(1)
 		return nil, false
 	}
+	s.hits.Add(1)
 	if refresh { // second chance: copy it to the head before it is overwritten
 		c.put(k, out)
 	}
 	return out, true
+}
+
+// counts returns the hits and misses so far and the cache size.
+func (c *valueCache) counts() (hits, misses uint64, size int64) {
+	if c == nil {
+		return 0, 0, 0
+	}
+	for i := range c.shards {
+		s := &c.shards[i]
+		hits += s.hits.Load()
+		misses += s.misses.Load()
+		size += int64(len(s.ring))
+	}
+	return
 }
 
 // put stores a copy of v (callers may keep using v).

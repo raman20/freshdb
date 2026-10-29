@@ -67,7 +67,19 @@ func TestDiskFull(t *testing.T) {
 				if v, err := db.Get(ctx, "k7"); err != nil || string(v) != "v7" {
 					t.Fatalf("read after halt: %q %v", v, err)
 				}
+				// monitoring sees it: not ready, halted in Stats, errors counted
+				if err := db.Ping(ctx); !errors.Is(err, ErrUnknownOutcome) || !errors.Is(err, syscall.ENOSPC) {
+					t.Fatalf("Ping after a halt: %v", err)
+				}
+				st := db.Stats()
+				if st.Halted == "" || st.Commits != 50 || st.CommitErrors != 2 || st.CompactionErrors != 1 {
+					t.Fatalf("stats after a halt: halted %q commits %d errors %d compaction errors %d",
+						st.Halted, st.Commits, st.CommitErrors, st.CompactionErrors)
+				}
 				db.Close()
+				if err := db.Healthy(); !errors.Is(err, ErrClosed) {
+					t.Fatalf("Healthy after Close: %v", err)
+				}
 				db = mustOpen(t, inner)
 				defer db.Close()
 				for i := 0; i < 50; i++ {

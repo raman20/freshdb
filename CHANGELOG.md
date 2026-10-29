@@ -23,6 +23,14 @@ in its "Changes since v0.1.0" section.
   could succeed without the reopen that learns the failed commit's outcome).
 
 ### Added
+- Observability: `GET /metrics` (Prometheus text format, admin scope:
+  commits, conflicts, errors, commit/segment/compaction latency histograms,
+  value-cache hits, HTTP requests by route and code, runtime gauges),
+  `GET /readyz` (closed / fenced / halted / store reachable),
+  `--log-format json`, `--access-log`, `--slow-op` (default 1 s), `--pprof`
+  (admin only, needs auth). Go API: `DB.Stats`, `DB.Healthy`, `DB.Ping`,
+  `LatencyHistogram`; `server.Options` gains `Version`, `Logger`,
+  `AccessLog`, `SlowOp`, `Pprof`.
 - **Format versioning** (docs/compatibility.md, design 13). `ErrVersion`
   for a manifest, segment, base or journal file written by a newer freshdb
   (a newer base or journal used to be reported as corruption); `freshdb
