@@ -193,7 +193,7 @@ func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
 		o.ValueCacheBytes = defaultValueCacheBytes()
 	}
 	var err error
-	db := &DB{st: st, opts: o, vcache: newValueCache(o.ValueCacheBytes), logs: map[string]*logState{}, views: map[string]*view{}, writers: map[string]*writer{}, annStats: map[string]lens.ANNLoadStats{}}
+	db := &DB{st: &holdStore{Store: st}, opts: o, vcache: newValueCache(o.ValueCacheBytes), logs: map[string]*logState{}, views: map[string]*view{}, writers: map[string]*writer{}, annStats: map[string]lens.ANNLoadStats{}}
 	if err := db.acquire(ctx); err != nil {
 		return nil, err
 	}

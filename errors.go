@@ -38,6 +38,9 @@ var (
 	// ErrTooLarge: the transaction does not fit in one log frame
 	// (MaxTxBytes encoded, MaxTxOps ops). Nothing was written.
 	ErrTooLarge = errors.New("freshdb: transaction too large")
+	// ErrBusy: a compaction or GC is already running on this database;
+	// retry later. HTTP 409.
+	ErrBusy = errors.New("freshdb: compaction already running")
 )
 
 // Size limits of one transaction, checked at commit (after encryption).

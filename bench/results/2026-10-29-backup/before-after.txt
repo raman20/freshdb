@@ -1,0 +1,30 @@
+Item 16: backup / restore / PITR. Before = 1f91bea, after = this commit.
+
+1. Functional
+   before: no backup command. Documented method: stop the server, copy the
+           directory or bucket. No restore check, no drill. Copying a live
+           database could catch a compaction mid-sweep (objects referenced by
+           the copied manifest already deleted) with nothing to detect it.
+   after:  online `freshdb backup DEST` / POST /v1/backup / DB.Backup;
+           `freshdb restore BACKUP --db DEST [--at LSN]` / Restore.
+           Deletes are held during a backup (TestBackupHoldsDeletes: a
+           compaction deleting objects mid-backup; mutation "no hold" fails it).
+           Interrupted, half-updated, corrupted (1 bit) and foreign backups
+           refused (TestBackupFailures). TestBackupDrill (mem + journal, with
+           a sequential writer and compaction/GC every 2 ms): restore is a
+           gap-free prefix holding every write acked before the backup
+           started; 6 runs (3 x mem, journal): acked-before-start -> restored
+           442->442, 306->312, 328->329, 320->323, 528->529, 305->307; the
+           incremental backup after a shred no longer holds the subject's key.
+           scripts/restore-drill.sh (real binary, live server, kill -9 after
+           the backup): "DRILL OK: 208 writes acknowledged before the backup,
+           212 restored (gap-free prefix), objects: 50".
+
+2. Cost (journal layout, local disk, 100,000 keys x 100 B in 1,000 commits)
+   full backup                    1,005 objects  11.8 MB   61 ms
+   re-run, nothing changed        copied 0                 16 ms
+   after 1,000 more commits       copied 1,000 (0.2 MB)    26 ms
+   after a compaction             copied 5 (18.0 MB), removed 2,001   102 ms
+   restore (9 objects, 18.0 MB, digest re-read)            84 ms
+   Not measured: S3 destinations (request count = objects copied + a full
+   listing of both sides + one GET per object for the digest).

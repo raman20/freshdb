@@ -101,7 +101,7 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 		return stats, db.failed
 	case db.compacting:
 		db.mu.Unlock()
-		return stats, errors.New("freshdb: compaction already running")
+		return stats, ErrBusy
 	}
 	db.compacting, db.compactDone = true, make(chan struct{})
 	ws := make([]*writer, 0, len(db.writers))

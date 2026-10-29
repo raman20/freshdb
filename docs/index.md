@@ -43,6 +43,7 @@ otherwise; the latest release is
 | [design/12-durability.md](design/12-durability.md) | design: size limits, journal corruption vs torn tail, repair opt-in, power-loss crash-point test |
 | [design/13-format-versioning.md](design/13-format-versioning.md) | design: version stamps, `ErrVersion`, golden databases, compatibility policy |
 | [design/14-observability.md](design/14-observability.md) | design: `/metrics`, `/readyz`, structured/access/slow logs, pprof, `DB.Stats` |
+| [design/15-backup.md](design/15-backup.md) | design: online backup (delete hold), incremental copy, digest record, restore, PITR |
 
 ## Evidence and numbers
 

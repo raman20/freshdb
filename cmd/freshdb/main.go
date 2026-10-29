@@ -80,6 +80,11 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
                                               old manifests; --shrink (local journal, no server)
                                               then rewrites journal.fj with only live objects
   freshdb migrate [--to journal|files]         convert a stopped local DB's on-disk layout
+  freshdb backup DEST_URL                      online, consistent copy (path, journal:///, s3://...);
+                                              re-running into the same DEST copies only new objects
+  freshdb restore BACKUP_URL --db DEST [--at LSN] [--branch main]
+                                              copy a complete backup into an empty DEST, check its
+                                              digest, open + verify; --at rewinds the branch (PITR)
   freshdb version
 
 Every command takes --branch B (default main). Use --addr http://host:7070
@@ -152,6 +157,9 @@ func main() {
 		fmt.Println("freshdb", buildVersion())
 		fmt.Println("formats:", freshdb.Formats())
 		return
+	}
+	if args[0] == "restore" {
+		os.Exit(restore(dbURL, args, flags))
 	}
 	if args[0] == "migrate" {
 		os.Exit(migrate(dbURL, flags["to"]))
@@ -652,6 +660,12 @@ func (c *cli) run() int {
 			}
 		}
 		st, _ = c.call("POST", "/v1/gc?"+q.Encode(), nil, false)
+	case "backup":
+		if len(c.args) < 2 {
+			fmt.Fprintln(os.Stderr, "usage: freshdb backup DEST_URL")
+			return 2
+		}
+		st, _ = c.call("POST", "/v1/backup?to="+url.QueryEscape(c.args[1]), nil, false)
 	case "verify":
 		var b []byte
 		st, b = c.call("GET", "/v1/verify", nil, false)
@@ -718,4 +732,66 @@ func intFlag(flags map[string]string, name string) int {
 		log.Fatalf("freshdb: --%s: %v", name, err)
 	}
 	return n
+}
+
+// restore: copy a backup into an empty --db, check it, open and verify
+// it, and optionally rewind a branch to --at (point in time).
+func restore(dbURL string, args []string, flags map[string]string) int {
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: freshdb restore BACKUP_URL --db DEST [--at LSN] [--branch main]")
+		return 2
+	}
+	ctx := context.Background()
+	src, err := store.Open(args[1])
+	if err != nil {
+		log.Printf("freshdb restore: %v", err)
+		return 1
+	}
+	dst, err := store.Open(dbURL)
+	if err != nil {
+		log.Printf("freshdb restore: %v", err)
+		return 1
+	}
+	rep, err := freshdb.Restore(ctx, src, dst)
+	for _, s := range []store.Store{src, dst} {
+		if c, ok := s.(io.Closer); ok {
+			c.Close()
+		}
+	}
+	if err != nil {
+		log.Printf("freshdb restore: %v", err)
+		return 1
+	}
+	log.Printf("freshdb restore: copied %d objects (%d bytes), digest matches; backup of manifest %d taken %s",
+		rep.Objects, rep.Bytes, rep.Info.Manifest, rep.Info.Started.Format(time.RFC3339))
+	db, err := freshdb.Open(ctx, dbURL, keyOpts(flags)...)
+	if err != nil {
+		log.Printf("freshdb restore: open restored database: %v", err)
+		return 1
+	}
+	defer db.Close()
+	vr, err := db.Verify(ctx)
+	if err != nil || !vr.OK {
+		log.Printf("freshdb restore: verify: %v %+v", err, vr)
+		return 1
+	}
+	if at := flags["at"]; at != "" {
+		lsn, err := strconv.ParseUint(at, 10, 64)
+		if err != nil {
+			log.Printf("freshdb restore: --at: %v", err)
+			return 2
+		}
+		b := flags["branch"]
+		if b == "" {
+			b = "main"
+		}
+		if err := db.Rewind(ctx, b, lsn); err != nil {
+			log.Printf("freshdb restore: rewind %s to %d: %v", b, lsn, err)
+			return 1
+		}
+		log.Printf("freshdb restore: %s rewound to LSN %d (the previous head is in the reflog)", b, lsn)
+	}
+	out, _ := json.Marshal(db.Branches())
+	log.Printf("freshdb restore: verified; branch heads %s", out)
+	return 0
 }

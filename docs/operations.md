@@ -178,18 +178,45 @@ export FRESHDB_ADDR=http://127.0.0.1:7070            # point CLI calls at it
 
 ## Backups and restore
 
-- **Local, journal or files layout:** stop the writer, then copy the
-  directory (`cp -a data data.bak`). Check a copy with
-  `freshdb --db ./data.bak verify`.
-- **S3:** segment, manifest and certificate objects are immutable, so a copy
-  of the prefix is a complete backup; `keys/dek/*` objects are deleted on
-  shred.
-- **Shred and backups:** a backup (or an object version) taken before a
-  shred still holds that subject's DEK and can decrypt its data. If you
-  rely on shred, expire noncurrent versions of `keys/` and rotate backups.
-  In dev mode the KEK is in `keys/_kek` too. See [security.md](security.md).
-- **Restore:** copy the backup to a new location and open it. `verify`
-  checks CRCs, hash chains, fencing and shred state.
+- **Online backup:** `freshdb backup DEST` (through a running server with
+  `--addr`, admin token; or `POST /v1/backup?to=DEST`; or `db.Backup` in
+  Go). DEST is any store URL the *server* can write: a path (journal
+  layout by default), `fs:///path`, `s3://bucket/prefix?...`. Commits keep
+  going; compaction and GC run but their deletes wait until the copy ends.
+  The backup is consistent: it opens at the newest manifest when the copy
+  started, plus any commits acknowledged during the copy, never a gap.
+- **Incremental:** run it again into the same DEST: only new objects are
+  copied and objects the database no longer has are removed (so a
+  shredded subject's key leaves the backup at the next run). A DEST
+  holding anything else (another database's backup, unrelated files) is
+  refused.
+- **Complete or not:** a backup ends by writing `backup/info.json`
+  (objects, bytes, a SHA-256 digest of every object). An interrupted run
+  leaves no record, and restore refuses it; re-run the backup.
+- **Restore:** `freshdb restore BACKUP --db NEW` copies into an empty
+  location, re-reads and checks every object against the digest, opens
+  the database and runs `verify`. Pass the same KEK as the source
+  (`--kek-file` / `FRESHDB_KEK`); without it a KEK-mode backup cannot be
+  opened (keep the KEK separately from backups). In dev-key mode the KEK
+  is inside the backup.
+- **Point in time:** `freshdb restore BACKUP --db NEW --at LSN [--branch
+  main]` rewinds the branch to that log position after the restore (the
+  previous head stays in the reflog). Only history the backup still holds
+  is reachable: compaction drops history below each head, GC keeps what
+  `--keep-for` / `--keep-commits` say. To get further back, keep older
+  backups (one DEST per retention slot).
+- **Drill:** `scripts/restore-drill.sh` runs a live server with writes and
+  compactions, backs it up, kills it with `-9`, restores, and checks that
+  every write acknowledged before the backup is there with no gaps. Run it
+  against your binary after upgrades.
+- **Shred and backups:** a backup taken before a shred still holds that
+  subject's DEK and can decrypt its data until that backup is updated or
+  deleted. Shredding never waits for a running backup, so a backup that
+  overlaps a shred may or may not hold the key. If you rely on shred, keep
+  backup retention short (and expire noncurrent S3 versions of `keys/`).
+  See [security.md](security.md).
+- **Offline copy** still works: stop the writer, copy the directory or
+  prefix, `freshdb --db COPY verify`.
 
 ## Compaction
 

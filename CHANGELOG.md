@@ -21,8 +21,18 @@ in its "Changes since v0.1.0" section.
   syscall.ENOSPC)`), and `Compact`/`GC` refuse to run on a writer halted by
   a storage error instead of silently replacing it (a commit after the halt
   could succeed without the reopen that learns the failed commit's outcome).
+- Starting a compaction or GC while one runs returned HTTP 500; it is now
+  `ErrBusy` / HTTP 409 (found by the soak harness).
+- Backup: a data race on the report counters (found by the race suite).
 
 ### Added
+- Backup and restore: `freshdb backup DEST` / `POST /v1/backup` /
+  `DB.Backup` (online, consistent, incremental, ends with a digest record),
+  `freshdb restore BACKUP --db NEW [--at LSN]` / `Restore` (verified copy,
+  point-in-time rewind), `scripts/restore-drill.sh`. `S3` stores gain
+  `Keys` (recursive listing).
+- `bench/cmd/freshdb-soak`: real-time soak/chaos harness (mixed workload,
+  periodic kill -9, concurrent compaction/GC/backup, invariant checker).
 - Observability: `GET /metrics` (Prometheus text format, admin scope:
   commits, conflicts, errors, commit/segment/compaction latency histograms,
   value-cache hits, HTTP requests by route and code, runtime gauges),

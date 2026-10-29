@@ -33,6 +33,7 @@ import (
 	"github.com/raman20/freshdb"
 	"github.com/raman20/freshdb/format"
 	"github.com/raman20/freshdb/lens"
+	"github.com/raman20/freshdb/store"
 )
 
 type Server struct {
@@ -118,6 +119,7 @@ func (s *Server) routes() http.Handler {
 	h("POST /v1/vectors/{c}/ann", A, "", nil, s.vecANN)
 	h("POST /v1/compact", A, "", nil, s.compact)
 	h("POST /v1/gc", A, "", nil, s.gc)
+	h("POST /v1/backup", A, "", nil, s.backup)
 	h("GET /metrics", A, "", nil, s.metrics)
 	if s.pprof {
 		pprofRoutes(func(p string, f http.HandlerFunc) { h(p, A, "", nil, f) })
@@ -154,7 +156,7 @@ func fail(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, freshdb.ErrNotFound), errors.Is(err, freshdb.ErrNoBranch):
 		code = http.StatusNotFound
-	case errors.Is(err, freshdb.ErrConflict), errors.Is(err, freshdb.ErrBranchExists), errors.Is(err, freshdb.ErrNotFastForward), errors.Is(err, freshdb.ErrMainBranch):
+	case errors.Is(err, freshdb.ErrConflict), errors.Is(err, freshdb.ErrBranchExists), errors.Is(err, freshdb.ErrNotFastForward), errors.Is(err, freshdb.ErrMainBranch), errors.Is(err, freshdb.ErrBusy):
 		code = http.StatusConflict
 	case errors.Is(err, freshdb.ErrShredded), errors.Is(err, freshdb.ErrCompacted):
 		code = http.StatusGone
@@ -918,6 +920,31 @@ func (s *Server) compact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, st)
+}
+
+// backup copies a consistent snapshot to ?to=URL (a store URL the server
+// can write: a local path, journal:///, fs:///, s3://). Admin only: the
+// server writes wherever it can reach.
+func (s *Server) backup(w http.ResponseWriter, r *http.Request) {
+	to := r.URL.Query().Get("to")
+	if to == "" {
+		fail(w, fmt.Errorf("%w: ?to= (destination store URL) is required", errBad))
+		return
+	}
+	dst, err := store.Open(to)
+	if err != nil {
+		fail(w, fmt.Errorf("%w: backup destination: %v", errBad, err))
+		return
+	}
+	if c, ok := dst.(io.Closer); ok {
+		defer c.Close()
+	}
+	rep, err := s.DB.Backup(r.Context(), dst)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, rep)
 }
 
 // gc runs GC with retention: ?grace= (default 5m), keep-for=DURATION,

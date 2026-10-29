@@ -153,6 +153,24 @@ func (s *S3) List(ctx context.Context, prefix string) ([]string, error) {
 	return out, nil
 }
 
+// Keys lists every object under the prefix (recursive), sorted; the
+// conditional-write probe objects are skipped.
+func (s *S3) Keys(ctx context.Context) ([]string, error) {
+	var out []string
+	for o := range s.c.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Prefix: s.prefix, Recursive: true}) {
+		if o.Err != nil {
+			return nil, o.Err
+		}
+		k := strings.TrimPrefix(o.Key, s.prefix)
+		if k == "" || strings.HasSuffix(k, "/") || strings.HasPrefix(k, "_probe/") {
+			continue
+		}
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 func (s *S3) Delete(ctx context.Context, key string) error {
 	return s.c.RemoveObject(ctx, s.bucket, s.prefix+key, minio.RemoveObjectOptions{})
 }
