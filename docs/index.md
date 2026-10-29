@@ -45,6 +45,7 @@ otherwise; the latest release is
 | Doc | For |
 |---|---|
 | [benchmarks.md](benchmarks.md) | every benchmark table, method, environment and caveat; "Changes since v0.1.0" |
+| [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) | production-readiness audit: every known gap by severity, with status |
 | [STATUS.md](STATUS.md) | post-v0.1.0 work items with commit and measured result |
 | [../spec/RESULTS.md](../spec/RESULTS.md) | TLA+ specs and TLC results |
 | [../bench/](../bench/) | the `freshdb-bench` suite and raw results |
