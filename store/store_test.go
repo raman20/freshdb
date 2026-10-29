@@ -89,8 +89,12 @@ func TestFSConformance(t *testing.T) {
 		t.Fatal(err)
 	}
 	conformance(t, s)
-	// leftover temp files are cleaned on open and never visible
-	os.WriteFile(filepath.Join(d, tmpDir, "junk"), []byte("partial"), 0o644)
+	// stale leftover temp files are cleaned on open and never visible
+	// (fresh ones may be a put in flight: TestNewFSKeepsFreshTmp)
+	junk := filepath.Join(d, tmpDir, "junk")
+	os.WriteFile(junk, []byte("partial"), 0o644)
+	past := time.Now().Add(-2 * staleTmpAge)
+	os.Chtimes(junk, past, past)
 	if _, err := NewFS(d); err != nil {
 		t.Fatal(err)
 	}

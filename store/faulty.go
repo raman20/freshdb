@@ -19,7 +19,7 @@ type FaultProbs struct {
 	Delay      float64 // response is a timeout; effect lands LATER (reordered)
 	Dup        float64 // effect applied, client sees a duplicated-retry 412
 	ReadFail   float64 // Get/List fails
-	Torn       float64 // log/snapshot put: a random PREFIX is stored, then error (crash mid-write)
+	Torn       float64 // segment/snapshot put: a random PREFIX is stored, then error (crash mid-write)
 }
 
 // Faulty wraps a Store with a seeded fault injector. With a single caller
@@ -82,7 +82,7 @@ func (f *Faulty) PutIfAbsent(ctx context.Context, key string, data []byte) error
 		err := f.Inner.PutIfAbsent(ctx, key, data)
 		f.Trace = append(f.Trace, fmt.Sprintf("put-fail-after %s %v", key, err))
 		return ErrInjected
-	case f.roll(f.P.Torn) && (strings.HasPrefix(key, "log/") || strings.HasPrefix(key, "snap/")):
+	case f.roll(f.P.Torn) && tearable(key):
 		cut := f.rng.Intn(len(data) + 1)
 		err := f.Inner.PutIfAbsent(ctx, key, data[:cut])
 		f.Trace = append(f.Trace, fmt.Sprintf("put-torn %s %d/%d %v", key, cut, len(data), err))
@@ -122,4 +122,11 @@ func (f *Faulty) Delete(ctx context.Context, key string) error {
 		return ErrInjected
 	}
 	return f.Inner.Delete(ctx, key)
+}
+
+// tearable: the objects Torn may cut. Torn models a store without atomic
+// puts (none is supported) to exercise --repair-tail on segments; small
+// metadata objects (repair notes, manifests, keys) are not torn.
+func tearable(key string) bool {
+	return strings.HasPrefix(key, "snap/") || strings.HasPrefix(key, "log/") && strings.HasSuffix(key, ".seg")
 }

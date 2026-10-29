@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // FS is a local-directory Store. PutIfAbsent = write temp file, fsync it,
@@ -40,12 +41,25 @@ func NewFS(root string) (*FS, error) {
 	if err := os.MkdirAll(filepath.Join(root, tmpDir), 0o755); err != nil {
 		return nil, err
 	}
-	// Remove leftovers from crashed writes; they were never visible.
-	ents, _ := os.ReadDir(filepath.Join(root, tmpDir))
-	for _, e := range ents {
-		os.Remove(filepath.Join(root, tmpDir, e.Name()))
-	}
+	removeStaleTmp(filepath.Join(root, tmpDir), time.Now().Add(-staleTmpAge))
 	return &FS{root: root}, nil
+}
+
+// staleTmpAge: a temp file older than this is a leftover of a crashed
+// write. Younger ones may be another live process's put in flight (a CLI
+// opening the directory a server writes to): removing those made the
+// server's commit fail and halted its writer. One put takes far less.
+const staleTmpAge = time.Hour
+
+// removeStaleTmp deletes temp files last modified before cutoff. They were
+// never visible as objects, so removing them loses nothing.
+func removeStaleTmp(dir string, cutoff time.Time) {
+	ents, _ := os.ReadDir(dir)
+	for _, e := range ents {
+		if fi, err := e.Info(); err == nil && fi.ModTime().Before(cutoff) {
+			os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
 }
 
 func (s *FS) Root() string { return s.root }
