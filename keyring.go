@@ -83,6 +83,9 @@ func openKeyring(ctx context.Context, st store.Store, rnd io.Reader, kek []byte)
 	if err != nil {
 		return nil, err
 	}
+	if len(seed) != ed25519.SeedSize {
+		return nil, fmt.Errorf("%w: keys/_sign holds %d bytes, want %d", ErrCorrupt, len(seed), ed25519.SeedSize)
+	}
 	k.sign = ed25519.NewKeyFromSeed(seed)
 	hasCheck, err := k.verifyKEKCheck(ctx)
 	if err != nil {
