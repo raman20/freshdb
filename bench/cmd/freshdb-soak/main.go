@@ -371,7 +371,11 @@ func (h *harness) status() {
 	}
 	var du int64
 	filepath.Walk(h.db, func(_ string, fi os.FileInfo, err error) error {
-		if err == nil && !fi.IsDir() {
+		// Not ours: a host snapshotter (seen on the dev box) drops full,
+		// non-sparse copies named journal.fj.box-store-snap-* next to the
+		// journal for a few minutes; counting them reported 13-22 GB for
+		// a 1.8 GB database.
+		if err == nil && !fi.IsDir() && !strings.Contains(fi.Name(), ".box-store-snap-") {
 			if st, ok := fi.Sys().(*syscall.Stat_t); ok {
 				du += st.Blocks * 512
 			}

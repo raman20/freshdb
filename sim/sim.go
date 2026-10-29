@@ -24,6 +24,7 @@ package sim
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -63,8 +64,12 @@ type Result struct {
 	TraceHash        [32]byte
 }
 
+// document field literals and their numeric class (Find matches by value)
+var simDocVals = []string{"1", "1.0", "10e-1", "2", "2e0", "3"}
+var simDocClass = map[string]string{"1": "1", "1.0": "1", "10e-1": "1", "2": "2", "2e0": "2", "3": "3"}
+
 type mop struct {
-	kind    byte // 'p' put, 'd' del, 't' publish, 'v' vector put, 'x' vector del
+	kind    byte // 'p' put, 'd' del, 't' publish, 'v' vector put, 'x' vector del, 'D' doc put, 'Y' doc del
 	key     string
 	val     string
 	subject string
@@ -190,6 +195,13 @@ func Run(seed int64, cfg Config) (Result, error) {
 	if err := s.db.EnableANN(s.ctx, "c", freshdb.ANNOptions{M: 2 + int(seed%4), EfConstruction: 4}); err != nil {
 		return s.res, s.fail("enable ann: %v", err)
 	}
+	// odd seeds index the documents' field, even seeds scan: Find must
+	// match the model either way
+	if seed%2 == 1 {
+		if err := s.db.RegisterIndex(s.ctx, "docs", "f"); err != nil {
+			return s.res, s.fail("register index: %v", err)
+		}
+	}
 	s.st.On = true
 	for s.res.Steps = 0; s.res.Steps < cfg.Steps; s.res.Steps++ {
 		var err error
@@ -245,7 +257,7 @@ func (s *sim) txn() error {
 	ops := []mop{}
 	for i := 0; i < n; i++ {
 		m := mop{key: "k" + strconv.Itoa(s.rng.Intn(6)), val: fmt.Sprintf("v%d.%d", id, i), subject: subjects[s.rng.Intn(4)]}
-		switch r := s.rng.Intn(14); {
+		switch r := s.rng.Intn(17); {
 		case r < 6:
 			m.kind = 'p'
 		case r < 8:
@@ -254,8 +266,12 @@ func (s *sim) txn() error {
 			m.kind = 't'
 		case r < 13:
 			m.kind, m.key = 'v', "e"+strconv.Itoa(s.rng.Intn(40))
-		default:
+		case r < 14:
 			m.kind, m.key, m.val, m.subject = 'x', "e"+strconv.Itoa(s.rng.Intn(40)), "", ""
+		case r < 16: // field f: equal numbers in different literals
+			m.kind, m.key, m.val = 'D', "d"+strconv.Itoa(s.rng.Intn(6)), simDocVals[s.rng.Intn(len(simDocVals))]
+		default:
+			m.kind, m.key, m.val, m.subject = 'Y', "d"+strconv.Itoa(s.rng.Intn(6)), "", ""
 		}
 		ops = append(ops, m)
 	}
@@ -279,6 +295,10 @@ func (s *sim) txn() error {
 				err = tx.Vector("c").Put(m.key, simVec(m.val), o...)
 			case 'x':
 				err = tx.Vector("c").Delete(m.key)
+			case 'D':
+				err = tx.Doc("docs").Put(m.key, json.RawMessage(`{"f":`+m.val+`}`), o...)
+			case 'Y':
+				err = tx.Doc("docs").Delete(m.key)
 			}
 			if err != nil {
 				return err
@@ -543,6 +563,7 @@ func (s *sim) check() error {
 	// expected state = fold of model ops over recovered ids
 	kv := map[string]string{}
 	vec := map[string]string{}
+	docs := map[string]string{} // id -> canonical class of f
 	var topic []string
 	for _, id := range ids {
 		kv["__tx"] = strconv.Itoa(id)
@@ -571,11 +592,20 @@ func (s *sim) check() error {
 				}
 			case 'x':
 				delete(vec, m.key)
+			case 'D':
+				if gone {
+					delete(docs, m.key)
+				} else {
+					docs[m.key] = simDocClass[m.val]
+				}
+			case 'Y':
+				delete(docs, m.key)
 			}
 		}
 	}
 	got := map[string]string{}
 	gotVec := map[string]string{}
+	gotDocs := map[string]string{}
 	var gotTopic []string
 	var start, n uint64
 	err = s.db.View(s.ctx, func(tx *freshdb.Tx) error {
@@ -592,6 +622,18 @@ func (s *sim) check() error {
 		}
 		for _, h := range hs {
 			gotVec[h.ID] = ""
+		}
+		for _, class := range []string{"1", "2", "3"} {
+			ids, err := tx.Doc("docs").Find("f", json.Number(class))
+			if err != nil {
+				return err
+			}
+			for _, id := range ids {
+				if prev, dup := gotDocs[id]; dup {
+					return fmt.Errorf("doc %s found by f=%s and f=%s", id, prev, class)
+				}
+				gotDocs[id] = class
+			}
 		}
 		start, n = tx.Topic("t").Start(), tx.Topic("t").Len()
 		ms, err := tx.Topic("t").Read(0, 0)
@@ -615,6 +657,9 @@ func (s *sim) check() error {
 	}
 	if !mapEq(vec, gotVec) {
 		return s.fail("vector lens != model fold\n  want %v\n  got  %v", sorted(vec), sorted(gotVec))
+	}
+	if !mapEq(docs, gotDocs) {
+		return s.fail("document Find != model fold (indexed %v)\n  want %v\n  got  %v", s.seed%2 == 1, sorted(docs), sorted(gotDocs))
 	}
 	if err := s.db.CheckANN("main"); err != nil {
 		return s.fail("%v", err)

@@ -61,30 +61,39 @@ read-write path is the overlay of the transaction's own writes
 
 - Unit / property: `docs_find_test.go` (rapid: indexed vs unindexed DB
   over random puts, deletes, subjects and shreds, in read-only and
-  read-write transactions), `lens/canon_test.go`, `TestHTTPAPI`.
-  Deterministic simulation: documents and the index lens are in the
-  simulator's op mix through the lens digest (`Digest` 100 % covered).
+  read-write transactions), `lens/canon_test.go`, `TestHTTPAPI`;
+  `TestPropEngineLensEqualsFoldAcrossRestart` (rapid) checks the index
+  lens digest against a from-scratch fold across reopens.
+- Deterministic simulation (`sim/`: store faults, crashes, takeovers,
+  compaction, GC, shreds): now writes and deletes documents whose field
+  `f` uses equal numbers in different literals (`1`, `1.0`, `10e-1`),
+  indexes them on odd seeds and scans on even seeds, and after every
+  recovery checks `Find` for each value against the model fold. It kills
+  the "no remove on overwrite" mutant (seed 3, step 47). Before this
+  review the simulator wrote no documents.
 - Fuzz: `FuzzCanonNumber` (canonical equality ⇔ exact rational equality,
   4.6 M execs / 60 s), `FuzzDocField` (any stored bytes: no panic, result
   valid JSON and idempotent, 2.0 M execs / 60 s). The HTTP query decoder
   is `encoding/json`.
-- Mutation (11 hand mutants, `/workspace/mutD.sh` style: drop the prefix
-  read, drop or weaken the overlay, skip trailing-zero trim / leading-zero
-  trim / fraction shift / sign, skip subject map add/remove, skip remove on
-  overwrite, float64 query decode): **11/11 killed** after adding the
-  sign cases (`-1` vs `1`) to `TestCanonicalJSONNumbers`.
-- Coverage of the component (whole root/lens/server suites): `DocIndex`
-  100 % except `CanonicalJSON` 72.7 % and `canonNumber` 95.5 %;
-  `DocTx.Find` 89 %, `RegisterIndex` 82 %. Uncovered, justified:
-  `CanonicalJSON`'s re-decode and re-marshal error returns (unreachable:
-  the input was just produced by `json.Marshal`, and `canonNumbers` only
-  swaps `json.Number` literals for valid ones); `canonNumber`'s
-  out-of-int64 exponent branch is reached only by literals the fuzzer
-  hits but the unit corpus keeps in the `ParseInt` error branch;
-  `Find`'s `lensView` error and scan error (a closed or failed DB, covered
-  for the other tx methods); `RegisterIndex`'s manifest-commit and fold
-  errors (store faults: covered by the manifest fault tests, not per
-  caller).
+- Mutation (11 hand mutants on a worktree: drop the prefix read, drop or
+  weaken the overlay, skip trailing-zero trim / leading-zero trim /
+  fraction shift / sign, skip subject-map add / remove, skip remove on
+  overwrite, float64 query decode): **11/11 killed**, after adding the
+  sign cases (`-1` vs `1`) to `TestCanonicalJSONNumbers`. A 12th,
+  skipping `DropSubject` for a replayed `OpShred` in `Apply`, survives
+  everything including the simulator: it is equivalent today, because
+  `Shred` calls `DropSubject` on every view directly and a replayed put of
+  a shredded subject fails to decrypt (treated as a delete). The branch
+  stays as defence in depth.
+- Coverage (whole root/lens/server suites): `DocIndex` 100 %,
+  `canonNumber` 100 % (unit cases for exponents past int64),
+  `CanonicalJSON` 72.7 %, `DocTx.Find` 89 %, `RegisterIndex` 82 %.
+  Uncovered, justified: `CanonicalJSON`'s re-decode and re-marshal error
+  returns (unreachable: the input was just produced by `json.Marshal`, and
+  `canonNumbers` only swaps `json.Number` literals for valid ones);
+  `Find`'s `lensView` and scan errors (a closed or failed DB, covered for
+  the other tx methods); `RegisterIndex`'s manifest-commit and fold errors
+  (store faults: covered by the manifest fault tests, not per caller).
 
 ## TLA+ alignment
 

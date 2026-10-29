@@ -35,6 +35,8 @@ func TestCanonicalJSONNumbers(t *testing.T) {
 		{json.Number("-2.5"), 2.5},
 		{json.Number("1"), true},
 		{json.Number("1e9223372036854775807"), json.Number("1e9223372036854775806")},
+		{json.Number("1e99999999999999999999"), json.Number("1e99999999999999999998")},  // exponent past int64: kept as is
+		{json.Number("1e99999999999999999999"), json.Number("10e99999999999999999998")}, // (equal values, documented: such literals only equal themselves)
 	}
 	for _, d := range differ {
 		a, _ := CanonicalJSON(d[0])
