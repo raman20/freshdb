@@ -10,6 +10,29 @@ break APIs and the on-storage format.
 Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
+### Changed (component B review: KV)
+
+- The KV lens keeps all but its newest versions in immutable compressed
+  runs (front-coded keys, hash-indexed) instead of one map: live heap per
+  key 172 → 30 B after a snapshot load at 10M keys (61–64 B right after
+  ingest, with merge buffers), a 100-key prefix `Scan` no longer walks
+  every key (866 ms → 0.05–0.07 ms at 10M), snapshot load 4–5.5× faster.
+  Point `Get` is 1.1–1.3× slower and lens ingest 1.7–1.9× slower (merges);
+  numbers and method in `docs/components/kv.md`. Snapshot bytes and
+  digests are unchanged.
+
+### Fixed (component B review: KV)
+
+- A KV snapshot or base with a key lacking the space separator loaded and
+  then panicked `Latest`; keys out of order or repeated silently replaced
+  each other; versions out of order broke reads; non-canonical bools,
+  nil-marked strings and a needless KV3 tag were accepted. All are now
+  `ErrBadSnapshot` (snapshot: replay instead; base: `ErrCorrupt`). Found
+  by the new `FuzzLoadKV`, which also checks accepted bytes re-encode
+  identically.
+- `DropSubject` (every shred, and every open after one) walked every key;
+  it now rewrites only runs that hold the subject.
+
 ### Fixed (component A review: the log)
 
 - S3 `Get` now takes the object size from the GET response itself (one

@@ -96,11 +96,23 @@ func (d *dec) bytes() []byte {
 	d.b = d.b[n:]
 	return v
 }
-func (d *dec) str() string { return string(d.bytes()) }
+
+// str decodes a string. A string is never written as nil, so the nil
+// marker is malformed input, not "".
+func (d *dec) str() string {
+	if len(d.b) >= 8 && binary.LittleEndian.Uint64(d.b) == math.MaxUint64 {
+		d.bad = true
+		return ""
+	}
+	return string(d.bytes())
+}
 func (d *dec) bool() bool {
 	if len(d.b) < 1 {
 		d.bad = true
 		return false
+	}
+	if d.b[0] > 1 {
+		d.bad = true // a bool is written as 0 or 1 only
 	}
 	v := d.b[0] == 1
 	d.b = d.b[1:]
