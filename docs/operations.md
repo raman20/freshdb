@@ -50,7 +50,8 @@ The store must support create-only conditional writes
 (`If-None-Match: *` on PUT); `Open` checks this and refuses otherwise.
 **Only MinIO is tested** (in CI). AWS S3 and Cloudflare R2 document the
 needed semantics but have not been tested with freshDB. Values are read
-back with ranged GETs.
+back with ranged GETs. Run `freshdb s3check` against a new endpoint first;
+see [s3.md](s3.md) for the guarantees, retries and request cost.
 
 ## Migrating a v0.1.0 directory
 

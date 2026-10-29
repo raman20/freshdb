@@ -45,6 +45,8 @@ otherwise; the latest release is
 | [design/14-observability.md](design/14-observability.md) | design: `/metrics`, `/readyz`, structured/access/slow logs, pprof, `DB.Stats` |
 | [design/15-backup.md](design/15-backup.md) | design: online backup (delete hold), incremental copy, digest record, restore, PITR |
 | [design/16-operational-safety.md](design/16-operational-safety.md) | design: graceful drain/shutdown, bind before open, per-request timeouts, key limits, lease records |
+| [design/17-s3-correctness.md](design/17-s3-correctness.md) | design: S3 fault injection, request cost, `s3check` |
+| [s3.md](s3.md) | running on S3: required guarantees, retries, cost per operation, `s3check`, tested-on matrix |
 
 ## Evidence and numbers
 

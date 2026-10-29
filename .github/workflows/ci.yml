@@ -138,6 +138,7 @@ jobs:
           export FRESHDB_URL='s3://freshdb-ci/cli?endpoint=127.0.0.1:9000&insecure=1&create=1'
           /tmp/freshdb put hello world
           test "$(/tmp/freshdb get hello)" = world
+          /tmp/freshdb s3check --large-mib 8
           /tmp/freshdb verify
 
   bench-smoke:

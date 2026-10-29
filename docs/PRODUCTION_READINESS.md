@@ -78,7 +78,8 @@ named), **documented** (accepted limit, written down where users read).
 | S5.1 | The key index (every key and version) lives in RAM: memory grows with keys, ~10× Pebble steady state (design 07). | open → item 19 |
 | S5.2 | HNSW build is single-threaded (16 min at 1M × 128-d); after a crash, vectors since the last clean close are re-inserted on open. | documented |
 | S5.3 | The journal file only shrinks offline (`gc --shrink`). | documented |
-| S5.4 | S3 request cost per commit and per open is not measured. | open → item 20 |
+| S5.4 | S3 request cost per commit and per open is not measured. | fixed (measured): docs/s3.md — 1 PUT per serial commit, 0.06 with 32 writers, ~2 GETs per segment at open |
+| S5.5 | A snapshot is one object holding the whole key index; above 5 GiB a single S3 PUT fails (multipart is disabled). | open (not reached in tests; design 17) |
 
 ## S6 — compatibility
 
@@ -88,7 +89,7 @@ named), **documented** (accepted limit, written down where users read).
 | S6.2 | No golden files: an encoder change can alter the on-disk format without any test failing. | fixed: golden databases (v0.1.0 written by v0.1.0 code; main, main-compacted) with read and byte-identity tests |
 | S6.3 | No written upgrade/downgrade policy; migration is tested from v0.1.0 directories only. | fixed: docs/compatibility.md (policy + measured matrix); found: v0.1.0 opens a journal directory as empty (documented, unfixable in v0.1.0) |
 | S6.4 | No documented stable API surface, semver or deprecation policy. | open → item 21 |
-| S6.5 | S3: only MinIO is tested; AWS S3 and R2 are untested (need credentials). Conditional-write behaviour of other S3-compatibles is unknown. | open → item 20 (`s3check`) |
+| S6.5 | S3: only MinIO is tested; AWS S3 and R2 are untested (need credentials). Conditional-write behaviour of other S3-compatibles is unknown. | partly fixed: `freshdb s3check` probes an endpoint; fault injection against MinIO; tested-on matrix in docs/s3.md. AWS/R2/GCS still untested |
 
 ## Verdict per area (updated as items land)
 
@@ -101,5 +102,5 @@ named), **documented** (accepted limit, written down where users read).
 | operational safety | graceful drain + shutdown, bind-before-open, per-request timeouts, key/body/tx limits, lease records naming writers, 409 for busy maintenance; tested with the real binary. Not yet: rate limits, global in-flight cap, request-level DB deadlines |
 | soak / chaos | not ready |
 | memory bound | not ready (RAM-bound by design today) |
-| S3 | MinIO only |
+| S3 | experimental. MinIO only (CI): fault injection (503, resets, lost replies) with no false fences or lost acks, request cost measured, `s3check` for other endpoints. Not yet: any real cloud provider, snapshots > 5 GiB |
 | API stability / supply chain | not ready |

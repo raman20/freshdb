@@ -28,6 +28,10 @@ in its "Changes since v0.1.0" section.
 - Backup: a data race on the report counters (found by the race suite).
 
 ### Added
+- `freshdb s3check URL` (and `store.S3Check`): probes an S3 endpoint for
+  the guarantees freshDB needs (create-only and concurrent creates, read-
+  and list-after-write, ranged GET, delete visibility, large single PUT).
+  S3 fault-injection and request-cost tests; docs/s3.md.
 - Backup and restore: `freshdb backup DEST` / `POST /v1/backup` /
   `DB.Backup` (online, consistent, incremental, ends with a digest record),
   `freshdb restore BACKUP --db NEW [--at LSN]` / `Restore` (verified copy,
