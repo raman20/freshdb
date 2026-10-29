@@ -94,6 +94,11 @@ named), **documented** (accepted limit, written down where users read).
 
 ## Verdict per area (updated as items land)
 
+Overall: **not production ready.** Nothing below is production-grade yet.
+Closest: durability and formats on the local journal store, backup/restore
+and operational safety (tested, unproven in the field). Experimental: S3,
+soak evidence (pending), memory bound.
+
 | area | verdict |
 |---|---|
 | durability / corruption handling | journal store: corruption detected, never silently dropped; power-loss modelled. Disk full tested by fault injection (S1.10). Still open: fs:// and S3 not power-loss modelled, no salvage tool |
@@ -101,7 +106,7 @@ named), **documented** (accepted limit, written down where users read).
 | observability | metrics, readiness, structured/access/slow logs and pprof exist and are tested. Not yet: tracing, shipped dashboards/alert rules, a real Prometheus scrape in CI |
 | backup / restore | online consistent backup, incremental, verified restore, PITR within retained history, drill (test + script). Not yet: S3-destination cost measured, scheduled backups, backup encryption beyond what the data already has |
 | operational safety | graceful drain + shutdown, bind-before-open, per-request timeouts, key/body/tx limits, lease records naming writers, 409 for busy maintenance; tested with the real binary. Not yet: rate limits, global in-flight cap, request-level DB deadlines |
-| soak / chaos | not ready |
-| memory bound | not ready (RAM-bound by design today) |
+| soak / chaos | not ready, result pending. Harness built (kill -9, concurrent compaction/GC/backup, invariant checker); 6 h run started 2026-10-29 20:00 IST: at 1 h 29 m, 20.7 M ops, 45 kill -9 restarts, every check and restored backup OK, no violation. Final line (`SOAK OK`/`SOAK FAIL`) in `/workspace/soak6h.out` (data in `/workspace/soak6h`). Long simulator run (4 × 150 seeds × 2 000 steps): first attempt found a harness liveness limit (open under read-fault storms, design 18), fixed; rerun result pending in `/workspace/simlong/shard*.out` |
+| memory bound | not ready: key index and lens state in RAM (S5.1); disk-backed index deferred, on the ROADMAP |
 | S3 | experimental. MinIO only (CI): fault injection (503, resets, lost replies) with no false fences or lost acks, request cost measured, `s3check` for other endpoints. Not yet: any real cloud provider, snapshots > 5 GiB |
 | API stability / supply chain | policy written, Go API diff-gated, govulncheck + SBOM + checksums in CI. Not yet: 1.0 freeze, HTTP/CLI compatibility tests, a published signing key, reproducible builds |
