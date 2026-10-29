@@ -103,6 +103,18 @@ func TestRecoverRefusesForgedSegments(t *testing.T) {
 			forge(t, st, segs[2], func(_ *format.SegHeader, fs []*format.Frame) { fs[0].LSN++ })
 			return st
 		}, ErrCorrupt},
+		{"LSN gap, chain re-forged", func(t *testing.T, st *store.Mem, segs []string) store.Store {
+			// the chain check alone cannot see this: every Prev is right
+			forge(t, st, segs[len(segs)-1], func(_ *format.SegHeader, fs []*format.Frame) {
+				prev := fs[0].Prev
+				for _, f := range fs {
+					f.LSN++
+					f.Prev = prev
+					prev = format.ChainNext(prev, format.EncodePayload(f))
+				}
+			})
+			return st
+		}, ErrCorrupt},
 		{"chain broken", func(t *testing.T, st *store.Mem, segs []string) store.Store {
 			forge(t, st, segs[2], func(_ *format.SegHeader, fs []*format.Frame) { fs[0].Prev[0] ^= 1 })
 			return st
