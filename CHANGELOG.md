@@ -10,7 +10,7 @@ break APIs and the on-storage format.
 Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
-### Fixed (component D review: documents, in progress)
+### Fixed (component D review: documents)
 
 - `Find` with an index now includes the transaction's own writes and is
   part of its read set (a concurrent matching insert conflicts), like the
@@ -19,6 +19,8 @@ in its "Changes since v0.1.0" section.
   `GET /v1/docs/{c}?value=` no longer rounds large integers through
   float64. New `lens.DocField`.
 - Shredding a subject no longer walks every indexed document.
+- A document that is not a JSON object, or an unencodable `Find` value,
+  is now `ErrBadValue` (HTTP 400; was a plain error, HTTP 500).
 
 ### Fixed (soak investigation, bench/results/2026-10-30-soak-investigation)
 

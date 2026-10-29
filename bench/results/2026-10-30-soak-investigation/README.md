@@ -60,6 +60,62 @@ All times IST. Box: 8 vCPU, 15 GiB RAM, shared disk.
   headroom; a compaction's transient copies (whole-topic encode, ~450 MB
   base buffer) are a second candidate.
 
+## Confirmation soaks (2026-10-30 03:53-04:52 IST)
+
+Two 25 min soaks, seed 7, binaries at 7549a9e + the soak driver's
+"server ready in" log line, heap/goroutine/metrics snapshots every 3 min:
+`base2` (no topic retention, as the 6 h run) and `ret2`
+(`--topic-max-messages=10000`). **Caveat:** the box also ran two full
+test suites and the component D benches during them; and 25 min cannot
+show whether a 6 h run stays flat. Both: **SOAK OK** (every full check and
+every restored backup passed).
+
+| | 6 h run at 26 min (old binary) | base2 (25 min) | ret2 (25 min, retention) |
+|---|---|---|---|
+| ops, rate (cumulative) | 9.04 M, 5.7k/s | 10.07 M, 6.6k/s | 12.31 M, 8.1k/s |
+| first 30 s | 21k/s | 21.1k/s | 13.9k/s |
+| max server RSS | 596 MiB (at 22 min) | 837 MiB | 412 MiB |
+| topic heap at the last profile | - | 285 MB (`Topic.add` + `SetAll`) | 9 MB |
+| restart → ready (17 restarts) | not logged (≤ 30 s by the driver) | p50 3.65 s, max 14.2 s | p50 2.84 s, max 6.2 s |
+| database on disk at the end (allocated) | - | 1.8 GB | 1.9 GB |
+| slow requests (> 1 s) | - | 514 | 455 |
+
+What this confirms or refutes:
+
+- **Retention bounds memory (S5.6): confirmed.** Same workload, half the
+  peak RSS; the topic lens went from the largest heap item to 9 MB.
+- **Restart open time:** confirmed short at this size (p50 3-4 s, max
+  14 s). It still grows with dead records (S2.9); a 6 h database was not
+  reopened under the new binary in a soak.
+- **The 21k/s start is a cold-start burst** (empty database, before the
+  first compaction, check and backup), in both binaries. Not a regression
+  signal by itself.
+- **Rate decline, "growing checks" hypothesis: supported in one window,
+  not quantified over 6 h.** base2 04:08-04:16: the driver completed only
+  ~50k ops in 8 min while the server, per its own metrics, ran 36k commits
+  at 1.7 ms mean commit latency and logged one slow request after
+  04:08:11: the server was mostly idle. The driver was inside `backupCheck` (backup 51.7 s,
+  then restore, open, verify and full check of the copy, sequential in
+  the main loop, with the workers' histories pinned, i.e. unpruned) the
+  whole time. The harness, not the database, throttled throughput there.
+- **Compaction already slow in hour 1: one cause observed, share not
+  measured.** Two goroutine dumps (04:15-04:16; that process paused writers
+  14.4 s over 3 compactions) show the sweep deleting garbage one object at a time
+  (`deleteGarbage` → `Journal.Delete`: an appended tombstone + fdatasync,
+  then erase + punch + fdatasync, per object) while every writer waits,
+  interleaved with the backup's deferred deletes for the journal's write
+  lock. 135 µs per delete on a quiet small journal. Candidate fixes: a
+  batched journal delete (one fsync pair per batch) or sweeping outside
+  the writer pause. Not done yet.
+- **The 6 GiB peak: not reproduced** (max 837 MiB in 25 min); still a
+  hypothesis.
+- **Measurement artefact found:** a host snapshotter on this box drops
+  full, non-sparse copies named `journal.fj.box-store-snap-*` next to the
+  journal for minutes at a time; the driver's `disk` column counted them
+  (13-22 GB for a 1.8 GB database). The driver now skips them. The 6 h
+  run's interim disk numbers may include such copies; its final 9.5 GiB
+  was confirmed separately as the journal itself (S5.3).
+
 ## Not fixed (documented)
 
 - Topics without retention grow RAM and every compaction's cost without
