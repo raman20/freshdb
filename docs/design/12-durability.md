@@ -142,6 +142,38 @@ and sync paths, random prefixes, multi-op full periods, mid-run reopens),
 Not tested on a real full filesystem (needs root to mount a small tmpfs or
 loop device on this box); the fault hook sits directly above the syscalls.
 
+## Storage fault model (component A review)
+
+What the store may do, and what the log does about it. "Transient" faults
+leave the stored object intact; a re-read can return it.
+
+| fault | where injected (sim) | handling |
+|---|---|---|
+| failed request, lost response, duplicate 412, delayed write | every key | retries; `putExactlyOnce` read-back; ambiguous commits are `ErrUnknownOutcome` |
+| torn write (prefix stored) | segments, snapshots | non-tail: `ErrCorrupt`; tail: refused, or kept up to the last valid frame with `--repair-tail` and a create-only repair note |
+| bit flip on read (transient) | `log/`, `manifest/` | every log read is judged; a bad read is re-read, and damage is believed only after 3 identical consecutive reads (`getStable`) |
+| misdirected read (another object's bytes) | `log/`, `manifest/` (same directory) | an object that names another key (segment seq, manifest id, first LSN) is re-read; it is believed only if all 6 reads return it, then `ErrCorrupt` |
+| short read | `log/`, `manifest/` | the `Store.Get` contract: a store returns the whole object or `ErrShortRead` (S3 checks the size; net/http checks Content-Length). A silent prefix that ends on a frame boundary would be indistinguishable from a shorter log, so it is outside the model |
+| stale LIST (newest keys missing) | `log/` | recovery reads segments by sequence number until one is not found; LIST only checks for holes past that point, so a stale LIST cannot shorten the log or make a non-tail segment look like the tail |
+| latent rot (persistent damage) | `TestRotAtlas` | every live object is damaged in turn (bit flips, truncation, another object's bytes, deletion); the result is `ErrCorrupt` or the right data |
+
+The oracle in both the simulator and the atlas is "`ErrCorrupt` or the
+right answer, never a wrong one". In the simulator, an open that reports
+`ErrCorrupt` while read faults are on is retried without them and must then
+open cleanly and pass every check (the counter is reported; it was 0 in
+3000 seeds after the hardening above).
+
+Not covered:
+
+- **Lost objects.** Losing the newest segment of a log or the newest
+  manifest looks exactly like that write never happening, so it is not
+  detectable (the atlas records it). Losing any other segment is a hole
+  (`ErrCorrupt`). The store must not lose acknowledged objects.
+- **manifest/ LIST must be consistent.** The lease and fencing rely on it
+  (TLA+ `FreshLog`); stale LISTs are injected only for `log/`.
+- Read faults are injected only into `log/` and `manifest/`. Other prefixes
+  (keys, values, bases, indexes) join as their components are reviewed.
+
 ## Numbers
 
 bench/results/2026-10-29-durability/before-after.txt:
