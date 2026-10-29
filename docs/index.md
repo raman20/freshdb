@@ -26,6 +26,7 @@ otherwise; the latest release is
 |---|---|
 | [architecture.md](architecture.md) | stores, manifests, fencing, writer and group commit, lenses, branches, shred |
 | [formats.md](formats.md) | byte layouts: bucket keys, journal file, segments, payloads, manifests, snapshots |
+| [compatibility.md](compatibility.md) | format version stamps, upgrade/downgrade policy and tested matrix, golden files |
 | [lens-authoring.md](lens-authoring.md) | the lens contract and how to add or change one |
 | [design-principles.md](design-principles.md) | why one log, and what we refuse to build |
 | [design/01-journal-default.md](design/01-journal-default.md) | design: journal as the default local layout, migration |
@@ -40,6 +41,7 @@ otherwise; the latest release is
 | [design/10-hnsw-persist.md](design/10-hnsw-persist.md) | design: persisting HNSW graphs, validated restore and catch-up |
 | [design/11-auth-scopes.md](design/11-auth-scopes.md) | design: scoped tokens, rotation, certificate reload, stream/long-poll caps |
 | [design/12-durability.md](design/12-durability.md) | design: size limits, journal corruption vs torn tail, repair opt-in, power-loss crash-point test |
+| [design/13-format-versioning.md](design/13-format-versioning.md) | design: version stamps, `ErrVersion`, golden databases, compatibility policy |
 
 ## Evidence and numbers
 

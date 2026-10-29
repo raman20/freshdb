@@ -1,0 +1,1 @@
+{"format":1,"id":6,"epoch":1,"db_id":"52fdfc072182654f163f5f0f9a621d72","next_log":2,"logs":{"L1":{"id":"L1","snap_lsn":40,"snap_key":"snap/L1/00000000000000000040.snap"}},"refs":{"main":"L1"},"indexes":[{"coll":"users","field":"team"}]}E‰Wu

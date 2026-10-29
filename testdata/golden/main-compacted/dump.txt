@@ -1,0 +1,131 @@
+branch main head 44
+kv after = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+kv bob/email = "bob@example.com"
+kv k00 = "v25"
+kv k02 = "v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27v27"
+kv k03 = "v28"
+kv k04 = "v29"
+kv k05 = "v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30v30"
+kv k06 = "v31"
+kv k07 = "v32"
+kv k09 = "v34"
+kv k10 = "v35"
+kv k11 = "v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36v36"
+kv k12 = "v37"
+kv k13 = "v38"
+kv k14 = "v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39v39"
+kv k15 = "v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15"
+kv k16 = "v16"
+kv k17 = "v17"
+kv k18 = "v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18"
+kv k20 = "v20"
+kv k21 = "v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21v21"
+kv k22 = "v22"
+kv k23 = "v23"
+kv k24 = "v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24v24"
+get alice/email = "" shredded=false
+get bob/email = "bob@example.com" shredded=false
+msg 0 lsn 1 ts 1800000000001000000 "e0" redacted=false
+msg 1 lsn 2 ts 1800000000002000000 "e1" redacted=false
+msg 2 lsn 3 ts 1800000000003000000 "e2" redacted=false
+msg 3 lsn 4 ts 1800000000004000000 "e3" redacted=false
+msg 4 lsn 5 ts 1800000000005000000 "e4" redacted=false
+msg 5 lsn 6 ts 1800000000006000000 "e5" redacted=false
+msg 6 lsn 7 ts 1800000000007000000 "e6" redacted=false
+msg 7 lsn 8 ts 1800000000008000000 "e7" redacted=false
+msg 8 lsn 9 ts 1800000000009000000 "e8" redacted=false
+msg 9 lsn 10 ts 1800000000010000000 "e9" redacted=false
+msg 10 lsn 11 ts 1800000000011000000 "e10" redacted=false
+msg 11 lsn 12 ts 1800000000012000000 "e11" redacted=false
+msg 12 lsn 13 ts 1800000000013000000 "e12" redacted=false
+msg 13 lsn 14 ts 1800000000014000000 "e13" redacted=false
+msg 14 lsn 15 ts 1800000000015000000 "e14" redacted=false
+msg 15 lsn 16 ts 1800000000016000000 "e15" redacted=false
+msg 16 lsn 17 ts 1800000000017000000 "e16" redacted=false
+msg 17 lsn 18 ts 1800000000018000000 "e17" redacted=false
+msg 18 lsn 19 ts 1800000000019000000 "e18" redacted=false
+msg 19 lsn 20 ts 1800000000020000000 "e19" redacted=false
+msg 20 lsn 21 ts 1800000000021000000 "e20" redacted=false
+msg 21 lsn 22 ts 1800000000022000000 "e21" redacted=false
+msg 22 lsn 23 ts 1800000000023000000 "e22" redacted=false
+msg 23 lsn 24 ts 1800000000024000000 "e23" redacted=false
+msg 24 lsn 25 ts 1800000000025000000 "e24" redacted=false
+msg 25 lsn 26 ts 1800000000026000000 "e25" redacted=false
+msg 26 lsn 27 ts 1800000000027000000 "e26" redacted=false
+msg 27 lsn 28 ts 1800000000028000000 "e27" redacted=false
+msg 28 lsn 29 ts 1800000000029000000 "e28" redacted=false
+msg 29 lsn 30 ts 1800000000030000000 "e29" redacted=false
+msg 30 lsn 31 ts 1800000000031000000 "e30" redacted=false
+msg 31 lsn 32 ts 1800000000032000000 "e31" redacted=false
+msg 32 lsn 33 ts 1800000000033000000 "e32" redacted=false
+msg 33 lsn 34 ts 1800000000034000000 "e33" redacted=false
+msg 34 lsn 35 ts 1800000000035000000 "e34" redacted=false
+msg 35 lsn 36 ts 1800000000036000000 "e35" redacted=false
+msg 36 lsn 37 ts 1800000000037000000 "e36" redacted=false
+msg 37 lsn 38 ts 1800000000038000000 "e37" redacted=false
+msg 38 lsn 39 ts 1800000000039000000 "e38" redacted=false
+msg 39 lsn 40 ts 1800000000040000000 "e39" redacted=false
+msg 40 lsn 41 ts 1800000000041000000 "" redacted=true
+cursor g1 5 <nil>
+doc u0 {"n":35,"team":"t1"} <nil>
+doc u1 {"n":36,"team":"t0"} <nil>
+doc u2 {"n":37,"team":"t1"} <nil>
+doc u3 {"n":38,"team":"t0"} <nil>
+doc u4 {"n":39,"team":"t1"} <nil>
+find team=t1 [u0 u2 u4] <nil>
+hit x4 0.8440
+hit x8 0.8317
+hit x9 0.8296
+branch exp head 21
+kv exp-only = "x"
+kv k00 = "v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0v0"
+kv k02 = "v2"
+kv k03 = "v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3v3"
+kv k04 = "v4"
+kv k06 = "v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6v6"
+kv k07 = "v7"
+kv k08 = "v8"
+kv k09 = "v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9v9"
+kv k10 = "v10"
+kv k11 = "v11"
+kv k13 = "v13"
+kv k14 = "v14"
+kv k15 = "v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15v15"
+kv k16 = "v16"
+kv k17 = "v17"
+kv k18 = "v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18v18"
+kv k19 = "v19"
+get alice/email = "" shredded=false
+get bob/email = "" shredded=false
+msg 0 lsn 1 ts 1800000000001000000 "e0" redacted=false
+msg 1 lsn 2 ts 1800000000002000000 "e1" redacted=false
+msg 2 lsn 3 ts 1800000000003000000 "e2" redacted=false
+msg 3 lsn 4 ts 1800000000004000000 "e3" redacted=false
+msg 4 lsn 5 ts 1800000000005000000 "e4" redacted=false
+msg 5 lsn 6 ts 1800000000006000000 "e5" redacted=false
+msg 6 lsn 7 ts 1800000000007000000 "e6" redacted=false
+msg 7 lsn 8 ts 1800000000008000000 "e7" redacted=false
+msg 8 lsn 9 ts 1800000000009000000 "e8" redacted=false
+msg 9 lsn 10 ts 1800000000010000000 "e9" redacted=false
+msg 10 lsn 11 ts 1800000000011000000 "e10" redacted=false
+msg 11 lsn 12 ts 1800000000012000000 "e11" redacted=false
+msg 12 lsn 13 ts 1800000000013000000 "e12" redacted=false
+msg 13 lsn 14 ts 1800000000014000000 "e13" redacted=false
+msg 14 lsn 15 ts 1800000000015000000 "e14" redacted=false
+msg 15 lsn 16 ts 1800000000016000000 "e15" redacted=false
+msg 16 lsn 17 ts 1800000000017000000 "e16" redacted=false
+msg 17 lsn 18 ts 1800000000018000000 "e17" redacted=false
+msg 18 lsn 19 ts 1800000000019000000 "e18" redacted=false
+msg 19 lsn 20 ts 1800000000020000000 "e19" redacted=false
+cursor g1 0 <nil>
+doc u0 {"n":15,"team":"t1"} <nil>
+doc u1 {"n":16,"team":"t0"} <nil>
+doc u2 {"n":17,"team":"t1"} <nil>
+doc u3 {"n":18,"team":"t0"} <nil>
+doc u4 {"n":19,"team":"t1"} <nil>
+find team=t1 [u0 u2 u4] <nil>
+hit x4 0.9290
+hit x3 0.9045
+hit x9 0.8886
+shredded alice=true bob=false
+verify ok=true

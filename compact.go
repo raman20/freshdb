@@ -488,6 +488,10 @@ func (db *DB) loadBase(ctx context.Context, b *logState) (*baseImage, error) {
 	bad := func(why string) error {
 		return fmt.Errorf("%w: log %s base %s: %s", ErrCorrupt, b.meta.ID, bm.Key, why)
 	}
+	if len(data) >= 8 && string(data[:7]) == baseMagic[:7] && data[7] != baseMagic[7] {
+		return nil, fmt.Errorf("%w: log %s base %s has version %q (this build reads %q; upgrade the binary)",
+			ErrVersion, b.meta.ID, bm.Key, data[7], baseMagic[7])
+	}
 	if len(data) < 28 || string(data[:8]) != baseMagic {
 		return nil, bad("bad header")
 	}

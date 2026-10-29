@@ -17,6 +17,9 @@ import (
 
 const annMagic = "FHNSW1\x00\x00"
 
+// ANNVersion is the HNSW snapshot format (a cache: unknown ones are rebuilt).
+const ANNVersion = "1"
+
 var errANNFormat = errors.New("lens: bad ANN snapshot")
 
 // ANNSaveStats / ANNLoadStats describe a save or a restore.

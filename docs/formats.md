@@ -4,8 +4,10 @@ Describes unreleased `main`. v0.1.0 used the same segment, payload and
 manifest formats and only the files layout for local directories.
 
 > **Pre-1.0: these formats may change between minor versions.** Readers refuse
-> unknown versions instead of guessing. A version bump will always come with
-> a CHANGELOG entry, and a migration path once there are real users.
+> unknown versions with `ErrVersion` instead of guessing. A version bump will
+> always come with a CHANGELOG entry, and a migration path once there are
+> real users. Version stamps, the upgrade/downgrade policy and the golden
+> files that pin these bytes: [compatibility.md](compatibility.md).
 
 All integers are little-endian. "uvarint" is Go's `encoding/binary` unsigned
 varint, and the decoder only accepts the minimal encoding. That makes every

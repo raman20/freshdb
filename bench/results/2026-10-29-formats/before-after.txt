@@ -1,0 +1,20 @@
+Format versioning (docs/design/13-format-versioning.md). before = 6ff63a5, after = this change.
+
+1. Object stamped with a newer version, then open (version_test.go)
+   manifest "format": 3   before: "freshdb: manifest format 3 not supported by this binary (refusing to downgrade)", no sentinel
+                          after:  errors.Is(err, ErrVersion); "...this build reads 1 and 2; written by a newer freshdb? upgrade the binary"; no manifest written
+   base FRDBBAS2          before: ErrCorrupt "bad header" (reported as corruption)
+                          after:  ErrVersion naming the log and base key
+   journal FRESHJ2        before: "store: journal.fj: not a journal file"
+                          after:  ErrVersion "…journal.fj has version "2" (this build reads "1"…)"; file unchanged
+   (segments: ErrVersion since f1e5096)
+
+2. Encoder drift (mutation: default inline limit 64 → 65, which changes only KV snapshot bytes)
+   before: no test failed (no golden files)
+   after:  TestGoldenBytes/main fails naming 4 snapshot objects
+
+3. Cross-version reads, real v0.1.0 code (git worktree at v0.1.0, testdata/golden/gen)
+   main reads v0.1.0 golden (files, and journal after migrate): dump identical (131 lines)
+   v0.1.0 reads main golden (uncompacted):  dump identical
+   v0.1.0 reads main-compacted golden:      refused, "manifest format 2 not supported by this binary"
+   v0.1.0 on a main journal directory:      opens as an EMPTY database, creates manifest/ log/ keys/ next to journal.fj (documented hazard)

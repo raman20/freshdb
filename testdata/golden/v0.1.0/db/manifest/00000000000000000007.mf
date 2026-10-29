@@ -1,0 +1,1 @@
+{"format":1,"id":7,"epoch":1,"db_id":"52fdfc072182654f163f5f0f9a621d72","next_log":3,"logs":{"L1":{"id":"L1","snap_lsn":40,"snap_key":"snap/L1/00000000000000000040.snap"},"L2":{"id":"L2","parent":"L1","parent_lsn":20}},"refs":{"exp":"L2","main":"L1"},"reflog":[{"name":"exp","to":"L2","at":20,"why":"branch from main"}],"indexes":[{"coll":"users","field":"team"}]}Þo

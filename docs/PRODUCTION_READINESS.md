@@ -84,9 +84,9 @@ named), **documented** (accepted limit, written down where users read).
 
 | id | gap | status |
 |---|---|---|
-| S6.1 | Version stamps exist for manifests (`format`) and segments, not for snapshots, bases, ANN blobs or the token file; no single "format version" a user can query. | open → item 14 |
-| S6.2 | No golden files: an encoder change can alter the on-disk format without any test failing. | open → item 14 |
-| S6.3 | No written upgrade/downgrade policy; migration is tested from v0.1.0 directories only. | open → item 14 |
+| S6.1 | Version stamps exist for manifests (`format`) and segments, not for snapshots, bases, ANN blobs or the token file; no single "format version" a user can query. | fixed: `ErrVersion` for manifest, segment, base, journal; caches rebuilt; unversioned objects gated by the manifest format; `freshdb version` lists formats — design 13 |
+| S6.2 | No golden files: an encoder change can alter the on-disk format without any test failing. | fixed: golden databases (v0.1.0 written by v0.1.0 code; main, main-compacted) with read and byte-identity tests |
+| S6.3 | No written upgrade/downgrade policy; migration is tested from v0.1.0 directories only. | fixed: docs/compatibility.md (policy + measured matrix); found: v0.1.0 opens a journal directory as empty (documented, unfixable in v0.1.0) |
 | S6.4 | No documented stable API surface, semver or deprecation policy. | open → item 21 |
 | S6.5 | S3: only MinIO is tested; AWS S3 and R2 are untested (need credentials). Conditional-write behaviour of other S3-compatibles is unknown. | open → item 20 (`s3check`) |
 
@@ -95,7 +95,7 @@ named), **documented** (accepted limit, written down where users read).
 | area | verdict |
 |---|---|
 | durability / corruption handling | journal store: corruption detected, never silently dropped; power-loss modelled. Disk full tested by fault injection (S1.10). Still open: fs:// and S3 not power-loss modelled, no salvage tool |
-| formats / upgrades | not ready |
+| formats / upgrades | stamps on every authoritative object, refusal tested, golden files for v0.1.0 and main, written policy. Not yet: frozen 1.0 policy, migration tooling for a future bump, old-binary column in CI |
 | observability | not ready |
 | backup / restore | not ready |
 | operational safety | not ready |

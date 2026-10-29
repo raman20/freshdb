@@ -142,6 +142,8 @@ type VerifyReport struct {
 	Unreadable      int               `json:"unreadable_shredded_values"`
 	SweptDEKs       int               `json:"swept_late_deks,omitempty"`
 	Snapshots       int               `json:"snapshots"`
+	// Format is the current manifest's format (1, or 2 once compacted).
+	Format int `json:"manifest_format"`
 	// Objects and Bytes count what the store-level scrub read back (every
 	// object of a local store, each checked against the store's own
 	// checksum where it has one); Scrubbed is false when the store cannot
@@ -162,6 +164,9 @@ type VerifyReport struct {
 // has a DEK.
 func (db *DB) Verify(ctx context.Context) (*VerifyReport, error) {
 	r := &VerifyReport{ChainHeads: map[string]string{}}
+	db.mu.Lock()
+	r.Format = db.man.Format
+	db.mu.Unlock()
 	bad := func(f string, a ...any) { r.Problems = append(r.Problems, fmt.Sprintf(f, a...)) }
 	keys, err := db.st.List(ctx, "manifest/")
 	if err != nil {

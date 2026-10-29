@@ -65,9 +65,9 @@ type jent struct {
 }
 
 const (
-	jrnMagic   = "FRESHJ1\x00"
-	jrnHead    = 32 // magic(8) salt(16) crc(4) pad(4)
-	jrnHdr     = 12 // crc(4) kind(1) pad(1) klen(2) dlen(4)
+	jrnMagic   = "FRESHJ1\x00" // byte 6 is the version
+	jrnHead    = 32            // magic(8) salt(16) crc(4) pad(4)
+	jrnHdr     = 12            // crc(4) kind(1) pad(1) klen(2) dlen(4)
 	jrnMaxKey  = 4096
 	jrnMaxData = 1 << 30
 
@@ -172,6 +172,9 @@ func (j *Journal) open() error {
 		if err := syncDir(j.dir); err != nil {
 			return err
 		}
+	case n == jrnHead && string(h[:6]) == jrnMagic[:6] && string(h[:8]) != jrnMagic:
+		return fmt.Errorf("%w: %s has version %q (this build reads %q; written by a newer freshdb? upgrade the binary)",
+			ErrVersion, filepath.Join(j.dir, jrnFile), h[6:7], jrnMagic[6:7])
 	case n < jrnHead || string(h[:8]) != jrnMagic ||
 		binary.LittleEndian.Uint32(h[24:28]) != crc32.Checksum(h[:24], jcrc):
 		return fmt.Errorf("store: %s: not a journal file (%v)", jrnFile, err)
@@ -799,6 +802,9 @@ type jev struct {
 	off  int64
 	data []byte
 }
+
+// JournalVersion is the journal file format this build reads and writes.
+const JournalVersion = 1
 
 // jfault, when set (disk-full tests only), can fail a write after letting
 // a prefix of it through (op 'w', returns how many bytes land) or fail a

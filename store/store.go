@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/raman20/freshdb/format"
 )
 
 var (
@@ -18,6 +20,8 @@ var (
 	// ErrCorrupt: stored bytes fail their checksum (or the file holds
 	// damaged records followed by valid ones). Never repaired silently.
 	ErrCorrupt = errors.New("store: corrupt")
+	// ErrVersion: a journal file of a format this build does not know.
+	ErrVersion = format.ErrVersion
 )
 
 // Store is a minimal object store.

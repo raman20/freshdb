@@ -23,6 +23,12 @@ in its "Changes since v0.1.0" section.
   could succeed without the reopen that learns the failed commit's outcome).
 
 ### Added
+- **Format versioning** (docs/compatibility.md, design 13). `ErrVersion`
+  for a manifest, segment, base or journal file written by a newer freshdb
+  (a newer base or journal used to be reported as corruption); `freshdb
+  version` lists the formats; `verify` reports the manifest format. Golden
+  databases under `testdata/golden` (one written by the v0.1.0 code) are
+  read by every test run, and the current format is pinned byte for byte.
 - **Durability hardening** (docs/design/12-durability.md). Transactions over
   64 MiB encoded or 2^20 ops fail with `ErrTooLarge` (`MaxTxBytes`,
   `MaxTxOps`) instead of being acknowledged and then breaking the next open;

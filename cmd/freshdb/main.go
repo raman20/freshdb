@@ -145,6 +145,7 @@ func main() {
 	}
 	if args[0] == "version" {
 		fmt.Println("freshdb", buildVersion())
+		fmt.Println("formats:", freshdb.Formats())
 		return
 	}
 	if args[0] == "migrate" {

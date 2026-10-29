@@ -18,6 +18,11 @@ var (
 	ErrShredded       = errors.New("freshdb: subject has been crypto-shredded")
 	ErrClosed         = errors.New("freshdb: database closed")
 	ErrCorrupt        = errors.New("freshdb: corrupt log")
+	// ErrVersion: an object (manifest, segment, base, journal file) carries
+	// a format version this build does not know, i.e. it was written by a
+	// newer freshdb. Nothing is changed; upgrade the binary
+	// (docs/compatibility.md).
+	ErrVersion        = format.ErrVersion
 	ErrReadOnly       = errors.New("freshdb: read-only transaction")
 	ErrBranchExists   = errors.New("freshdb: branch already exists")
 	ErrNoBranch       = errors.New("freshdb: no such branch")

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/raman20/freshdb/format"
+	"github.com/raman20/freshdb/lens"
 	"github.com/raman20/freshdb/store"
 )
 
@@ -94,6 +95,13 @@ const (
 	manifestFormatBase = 2
 )
 
+// Formats describes the on-storage format versions this build reads and
+// writes (`freshdb version`; docs/compatibility.md).
+func Formats() string {
+	return fmt.Sprintf("manifest %d-%d, segment %d, base %s, journal %d, kv snapshot KV2, ann %s",
+		manifestFormat, manifestFormatBase, format.SegVersion, baseMagic[7:], store.JournalVersion, lens.ANNVersion)
+}
+
 func manifestKey(id uint64) string { return fmt.Sprintf("manifest/%020d.mf", id) }
 
 func (m *Manifest) clone() *Manifest {
@@ -123,7 +131,8 @@ func decodeManifest(b []byte) (*Manifest, error) {
 		return nil, fmt.Errorf("%w: manifest: %v", ErrCorrupt, err)
 	}
 	if m.Format != manifestFormat && m.Format != manifestFormatBase {
-		return nil, fmt.Errorf("freshdb: manifest format %d not supported by this binary (refusing to downgrade)", m.Format)
+		return nil, fmt.Errorf("%w: manifest format %d (this build reads %d and %d; written by a newer freshdb? upgrade the binary)",
+			ErrVersion, m.Format, manifestFormat, manifestFormatBase)
 	}
 	c := m.clone2()
 	return &c, nil
