@@ -1,0 +1,36 @@
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkPutSerial/fs-8     	    3230	    325533 ns/op
+BenchmarkPutSerial/mem-8    	  222090	      7285 ns/op
+BenchmarkGet-8              	    5642	    197502 ns/op
+BenchmarkOpenRecover10k/get=0s/snapshot=false-8         	     100	  11405408 ns/op	       251.5 seg-gets/op
+BenchmarkOpenRecover10k/get=0s/snapshot=true-8          	     174	   7682593 ns/op	       188.5 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=false-8        	       4	 278744308 ns/op	       203.5 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=true-8         	      21	  81002815 ns/op	       112.0 seg-gets/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkPutSerial/mem-8    	  244050	      7272 ns/op
+BenchmarkPutSerial/fs-8     	    3600	    319573 ns/op
+BenchmarkGet-8              	    4820	    225691 ns/op
+BenchmarkOpenRecover10k/get=0s/snapshot=false-8         	     100	  12904644 ns/op	       251.5 seg-gets/op
+BenchmarkOpenRecover10k/get=0s/snapshot=true-8          	     154	   7461312 ns/op	       178.5 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=false-8        	       4	 279945903 ns/op	       203.5 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=true-8         	      19	  78166237 ns/op	       111.0 seg-gets/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkPutSerial/mem-8    	  239935	      7050 ns/op
+BenchmarkPutSerial/fs-8     	    4158	    280505 ns/op
+BenchmarkGet-8              	    5294	    206714 ns/op
+BenchmarkOpenRecover10k/get=0s/snapshot=false-8         	      91	  11029190 ns/op	       247.0 seg-gets/op
+BenchmarkOpenRecover10k/get=0s/snapshot=true-8          	     168	   7145669 ns/op	       185.5 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=false-8        	       4	 281102447 ns/op	       203.5 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=true-8         	      21	  78314873 ns/op	       112.0 seg-gets/op
+PASS

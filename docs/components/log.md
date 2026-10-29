@@ -212,7 +212,7 @@ box with other jobs running. Raw output is in bench/results/2026-10-29-*.
 | Commit policy, 8 writers, 2 ms PUT | 1,766 txn/s, 0.25 PUT/txn | MaxDelay 1 ms: 2,246 txn/s, 0.13 PUT/txn (default unchanged) |
 | PutSerial mem | 7.8–8.4 µs | 8.0–9.0 µs (noise) |
 | PutParallel mem / fs | 3.8–4.5 / 10.2–12.4 µs | 4.0–4.5 / 9.2–14.3 µs (noise) |
-| PutSerial fs | 333–370 µs | 428–575 µs, **unresolved**: measured during the 6 h soak, which loads the same disk. Rerun after the soak. |
+| PutSerial fs | 333–370 µs | 428–575 µs during the 6 h soak (same disk); **quiet-box rerun after the soak: 281–326 µs** (3 runs, 2026-10-30 02:14 IST, raw in bench/results/2026-10-30-kv/quiet_root_before.txt), so no regression |
 
 S3 cost after 3,400 commits, opening: 808 GETs and 6 LISTs. A
 single-request Get keeps one GET per object read (docs/s3.md).
@@ -241,8 +241,8 @@ single-request Get keeps one GET per object read (docs/s3.md).
 - **Open is still O(log) when vector or document-index lenses are in
   use.** They replay every segment because they have no snapshot yet.
   This is planned for components D and E.
-- The fs serial-put number above is still unresolved, and S3 is tested
-  only on MinIO.
+- S3 is tested only on MinIO. (The fs serial-put number was rerun on a
+  quiet box after the soak: 281–326 µs, no regression.)
 - The 6 h soak (SOAK OK, 2026-10-30 02:09 IST) and the 4-shard long sim
   (600 seeds × 2 000 steps, all OK) finished after this review; results
   in bench/results/2026-10-29-soak. Server RSS and disk grew during the
@@ -254,9 +254,8 @@ The log meets its contract above under the tested fault model: the sim,
 TLC and the fuzzers found nothing open. Defects A-D1 to A-D14 are fixed,
 each with a regression test.
 
-The component is **done for this review** with these open items:
-
-- the fs put rerun.
+The component is **done for this review**. The last open item, the fs
+put rerun, is closed (above).
 
 This is not a claim of production readiness. The residual risks above
 stand.

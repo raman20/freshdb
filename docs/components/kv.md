@@ -173,12 +173,21 @@ both versions use a map here), `-count 3`, before then after:
 | interleaved rerun, 3 pairs | 327–671 µs | 396–976 µs |
 | PutSerial mem / fs | 7.6–8.9 µs / 0.57–1.19 ms | 8.1–9.2 µs / 0.66–0.72 ms |
 | OpenRecover10k, 2 ms GET, no snapshot / snapshot | 282–289 / 98–105 ms | 286–292 / 104–105 ms |
+| **quiet box** (soak over), 3 interleaved pairs: `DB.Get` | 198–226 µs | 198–239 µs |
+| quiet: PutSerial mem / fs | 7.1–7.3 µs / 281–326 µs | 7.5–8.1 µs / 291–316 µs |
+| quiet: OpenRecover10k, no GET delay, no snapshot / snapshot | 11.0–12.9 / 7.1–7.7 ms | 11.7–15.6 / 7.8–8.1 ms |
+| quiet: OpenRecover10k, 2 ms GET, no snapshot / snapshot | 279–281 / 78–81 ms | 278–281 / 80–82 ms |
 
-The `DB.Get` gap is load noise from the soak, not the lens: a CPU profile
-of the after binary puts 95 % of `Get` in `store.Mem.Get` copying the
-segment (`memmove`) plus GC, and no KV lens frame reaches the 0.5 %
-cutoff. The fs numbers share the disk with the soak. A rerun on a quiet
-box is still owed.
+The first four rows were measured during the 6 h soak and are noisy.
+The quiet rerun (2026-10-30 02:14 IST, same binaries, after the soak
+ended; raw: bench/results/2026-10-30-kv/quiet_root_*.txt) resolves the
+soak-noise caveat: the before and after ranges overlap for `DB.Get`, fs
+puts and open with a 2 ms GET, so there is no measurable root-level
+regression there. Medians that did move: mem puts +3 %, open with no GET
+delay +5 % (snapshot) and +14 % (no snapshot, one 15.6 ms outlier). These
+are inside this box's run-to-run spread but are recorded, not waved away. A CPU profile of the after binary puts 95 % of `Get` in
+`store.Mem.Get` copying the segment (`memmove`) plus GC; no KV lens frame
+reaches the 0.5 % cutoff.
 
 ## Residual risks
 
