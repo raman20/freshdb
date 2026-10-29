@@ -1,0 +1,12 @@
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/store
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkJournalOpen/dead=200-8         	       5	 157405590 ns/op	28212969 B/op	  570717 allocs/op
+BenchmarkJournalOpen/dead=200-8         	       5	 177525619 ns/op	28212995 B/op	  570717 allocs/op
+BenchmarkJournalOpen/dead=200-8         	       5	 180688691 ns/op	28212950 B/op	  570717 allocs/op
+BenchmarkJournalOpen/dead=65536-8       	       5	 544457859 ns/op	763463977 B/op	  570717 allocs/op
+BenchmarkJournalOpen/dead=65536-8       	       5	 591740115 ns/op	763254454 B/op	  570718 allocs/op
+BenchmarkJournalOpen/dead=65536-8       	       5	 593289710 ns/op	763254432 B/op	  570717 allocs/op
+PASS
+ok  	github.com/raman20/freshdb/store	385.847s

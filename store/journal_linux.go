@@ -42,3 +42,13 @@ func nextData(f *os.File, off int64) int64 {
 	}
 	return d
 }
+
+// nextHole returns the offset of the first hole at or after off (the
+// file size if there is none), or -1 if it cannot tell.
+func nextHole(f *os.File, off int64) int64 {
+	h, err := unix.Seek(int(f.Fd()), off, unix.SEEK_HOLE)
+	if err != nil {
+		return -1
+	}
+	return h
+}

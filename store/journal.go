@@ -222,56 +222,66 @@ func (j *Journal) recover() ([]jent, error) {
 		return nil, err
 	}
 	size := st.Size()
-	live := map[string]jent{}
-	dels := map[string]int64{} // key -> offset of its last delete record
+	// Only the deletes of keys with a damaged record before them matter
+	// (a delete cut short); tracking every deleted key cost GiBs on a
+	// journal with tens of millions of dead records.
+	dels := map[string]int64{} // suspect key -> offset of its last delete record
 	var unerased []jent
 	type suspect struct {
 		e   jent
 		key string
 	}
 	var pending, middle []suspect // damaged records after / before the last valid one
+	suspects := map[string]bool{}
+	r := &jrnReader{f: j.f, hole: -1}
 	off := j.end
-	var hb [jrnHdr]byte
 	for {
-		if n, _ := j.f.ReadAt(hb[:], off); n < jrnHdr {
+		hb := r.read(off, jrnHdr)
+		if hb == nil {
 			break
 		}
 		kind, klen := hb[4], int(binary.LittleEndian.Uint16(hb[6:8]))
 		dlen := int(binary.LittleEndian.Uint32(hb[8:12]))
+		sum := binary.LittleEndian.Uint32(hb[:4])
 		if kind < recPut || kind > recDead || klen == 0 || klen > jrnMaxKey || dlen > jrnMaxData ||
 			(kind == recDel && dlen != 0) || off+int64(jrnHdr+klen+dlen) > size {
 			break
 		}
+		var tail [jrnHdr - 4]byte
+		copy(tail[:], hb[4:])
 		body := klen
 		if kind == recPut {
 			body += dlen
 		}
-		b := make([]byte, body)
-		if n, _ := j.f.ReadAt(b, off+jrnHdr); n < body {
+		b := r.read(off+jrnHdr, body)
+		if b == nil {
 			break
 		}
 		e := jent{off: off, klen: klen, dlen: dlen}
 		next := off + int64(jrnHdr+klen+dlen)
-		if binary.LittleEndian.Uint32(hb[:4]) != j.sum(off, hb[4:], b) {
+		if sum != j.sum(off, tail[:], b) {
 			if kind == recDel {
 				break
 			}
-			pending = append(pending, suspect{e, string(b[:klen])})
+			key := string(b[:klen])
+			pending = append(pending, suspect{e, key})
+			suspects[key] = true
 			off = next
 			continue
 		}
 		middle, pending = append(middle, pending...), nil
-		key := string(b[:klen])
+		key := b[:klen]
 		switch kind {
 		case recPut:
-			j.idx[key] = e
-			live[key] = e
+			j.idx[string(key)] = e
 		case recDel:
-			delete(j.idx, key)
-			dels[key] = off
-			if p, ok := live[key]; ok {
+			if suspects[string(key)] {
+				dels[string(key)] = off
+			}
+			// a put still live here was not erased: the delete was cut short
+			if p, ok := j.idx[string(key)]; ok {
 				unerased = append(unerased, p)
-				delete(live, key)
+				delete(j.idx, string(key))
 			}
 		}
 		off = next
@@ -288,6 +298,46 @@ func (j *Journal) recover() ([]jent, error) {
 		return nil, err
 	}
 	return unerased, nil
+}
+
+// jrnReader reads a journal front to back through a window, so a scan
+// costs one pread per window instead of two per record. A read past the
+// window (a skipped dead record's data, a large record) refills it at the
+// requested offset; a window ends at the next hole. The bytes returned
+// are valid until the next read.
+type jrnReader struct {
+	f    *os.File
+	buf  []byte
+	base int64 // file offset of buf[0]
+	hole int64 // offset of a hole at or after base (-1: unknown)
+}
+
+const jrnWindow = 256 << 10
+
+func (r *jrnReader) read(off int64, n int) []byte {
+	if off >= r.base && off+int64(n) <= r.base+int64(len(r.buf)) {
+		i := int(off - r.base)
+		return r.buf[i : i+n]
+	}
+	w := max(n, jrnWindow)
+	// Stop the window at the next hole: a long-lived journal is mostly
+	// punched data of dead records (235 of 244 GB after a 6 h soak), and
+	// reading through it cost more than the scan.
+	if h := r.hole; h < off || h < 0 {
+		r.hole = nextHole(r.f, off)
+	}
+	if h := r.hole - off; h >= int64(n) && h < int64(w) {
+		w = int(h)
+	}
+	if cap(r.buf) < w {
+		r.buf = make([]byte, w)
+	}
+	m, _ := r.f.ReadAt(r.buf[:w], off)
+	r.buf, r.base = r.buf[:m], off
+	if m < n {
+		return nil
+	}
+	return r.buf[:n]
 }
 
 // checkTail makes sure nothing but zeros follows j.end. Non-zero bytes

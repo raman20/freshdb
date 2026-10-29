@@ -43,7 +43,9 @@ named), **documented** (accepted limit, written down where users read).
 | id | gap | status |
 |---|---|---|
 | S2.1 | One writer per database; no replicas, no HA. A writer crash means unavailability until a new process opens (fencing makes takeover safe, not automatic). | documented |
-| S2.2 | Compaction and GC pause commits for their duration (0.87 s on the compaction bench; longer on big logs). | documented |
+| S2.2 | Compaction and GC pause commits for their duration (0.87 s on the compaction bench; longer on big logs). The 6 h soak measured it: compact p50 7.0 s (max 51 s), GC p50 8.2 s, writers paused ~30-37 % of every hour; 4,784 of its 4,809 slow client requests ended inside a compaction/GC (bench/results/2026-10-30-soak-investigation) | documented, measured; open: compaction cost already 7 s in hour 1 is not explained by topic size (to profile) |
+| S2.8 | A client that times out on `POST /v1/compact` (or `/v1/gc`, or any manifest change) cancelled the manifest put mid-flight: outcome unknown, the DB halted until restart. Found in a soak (30 s client timeout, 42 s compaction) | **fixed** (f0b1838): put and post-commit reload/sweep ignore the caller's cancel (put bounded to 2 min); `TestCompactCallerCancelDoesNotHalt` |
+| S2.9 | Journal open time and memory grow with dead records: two preads per record and a map of every deleted key. Final 6 h soak database: 54-59 s warm (89-97 s cold), 4.45 GB peak RSS, on every restart | **mitigated**: windowed scan stopping at holes, deletes tracked only for damaged keys: 6-12 s warm (23 s cold), 2.4 GB peak (the rest is the DB open). Still O(dead records) until an offline `gc --shrink` |
 | S2.3 | `serve` shutdown: `ListenAndServe` returns as soon as `Shutdown` starts, so `db.Close` races in-flight requests; open SSE streams hold `Shutdown` for its whole 5 s timeout. | fixed (item 17): listen before open, drain (`/readyz` 503, streams `event: shutdown`, long polls return), wait for in-flight requests up to `--shutdown-timeout`, then close — design 16 |
 | S2.4 | No `ReadTimeout`/`WriteTimeout`/`IdleTimeout` on the HTTP server (only `ReadHeaderTimeout`): slow clients hold goroutines. | fixed: per-request read (body) and write deadlines, renewed for streams/long polls, admin exempt; `IdleTimeout`; `TestTimeouts` |
 | S2.5 | No limits on key, value or transaction size (see S1.1), number of ops, or JSON nesting in requests. | partly fixed: transaction size and ops (S1.1), request body (S1.2); key/name size: `MaxKeyBytes` 8 KiB (item 17); JSON nesting bounded by encoding/json (10 000) — fixed |
@@ -60,7 +62,7 @@ named), **documented** (accepted limit, written down where users read).
 | S3.4 | No pprof endpoint. | fixed: `--pprof`, admin scope, refused without auth |
 | S3.5 | No backup or restore command; the documented method is copying the directory/bucket while stopped. No restore drill. | fixed: online `freshdb backup` (deletes held during the copy, incremental, digest record), `freshdb restore`, drill script + test — design 15 |
 | S3.6 | Point-in-time recovery exists only as `branch create --at LSN` / `rewind`; no way to restore a database to a log position into a new location. | fixed: `restore --at LSN` (within the history the backup holds) |
-| S3.7 | No long soak run; crash tests and the simulator run for seconds to minutes. | fixed (design 18): 6 h real-time soak **SOAK OK** (2026-10-29 20:00 → 2026-10-30 02:09 IST: 56.8 M ops, 134 kill -9 restarts, 216 full checks, 574 compactions, 271 GCs, 82 backups restored and checked, no violation) and long simulator (600 seeds × 2 000 steps, 151 k crashes, 550 k injected store faults, no violation): bench/results/2026-10-29-soak/. Server RSS and disk grew over the run (RSS to 3.3–4.5 GiB, max 6.1 GiB; disk to 9.5 GiB), not root-caused |
+| S3.7 | No long soak run; crash tests and the simulator run for seconds to minutes. | fixed (design 18): 6 h real-time soak **SOAK OK** (2026-10-29 20:00 → 2026-10-30 02:09 IST: 56.8 M ops, 134 kill -9 restarts, 216 full checks, 574 compactions, 271 GCs, 82 backups restored and checked, no violation) and long simulator (600 seeds × 2 000 steps, 151 k crashes, 550 k injected store faults, no violation): bench/results/2026-10-29-soak/. Growth over the run (RSS 405 MiB → 3.3–4.5 GiB, max 6.1 GiB; disk 2.6 → 9.5 GiB; rate 21k/s in the first 30 s → 2.6k/s average; 5,823 slow requests) investigated in bench/results/2026-10-30-soak-investigation: **proven** disk = journal dead records (S5.3), live heap = unretained topics (S5.6), open peak 4.45 GB (S2.9, mitigated), slow requests = compaction/GC pauses (S2.2), client-timeout halt (S2.8, fixed); **hypothesized** the rate decline (restart downtime, growing checks) and the 6 GiB peak; confirming soak pending |
 
 ## S4 — security (beyond docs/security.md)
 
@@ -78,7 +80,8 @@ named), **documented** (accepted limit, written down where users read).
 |---|---|---|
 | S5.1 | The key index (every key and version) lives in RAM: memory grows with keys, ~10× Pebble steady state (design 07). | open: disk-backed key index deferred (no < 1 h route that keeps the formats and tests honest); on the ROADMAP |
 | S5.2 | HNSW build is single-threaded (16 min at 1M × 128-d); after a crash, vectors since the last clean close are re-inserted on open. | documented |
-| S5.3 | The journal file only shrinks offline (`gc --shrink`). | documented |
+| S5.3 | The journal file only shrinks offline (`gc --shrink`). The 6 h soak's 9.5 GiB was this: 40.8 M dead records; shrink took 8.57 GB allocated (244 GB apparent) to 0.45 GB in 6 min 54 s | documented, measured; open: online reclaim |
+| S5.6 | Topics without retention keep every message in RAM and in every compaction and snapshot: the 6 h soak's 11.37 M messages were ~1.09 GB of live heap (~95 B each), the bulk of its RSS | documented: retention exists since component C (`--topic-max-age`, `--topic-max-messages`); topic storage outside RAM is on the ROADMAP |
 | S5.4 | S3 request cost per commit and per open is not measured. | fixed (measured): docs/s3.md — 1 PUT per serial commit, 0.06 with 32 writers, ~2 GETs per segment at open |
 | S5.5 | A snapshot is one object holding the whole key index; above 5 GiB a single S3 PUT fails (multipart is disabled). | open (not reached in tests; design 17) |
 
@@ -97,7 +100,7 @@ named), **documented** (accepted limit, written down where users read).
 Overall: **not production ready.** Nothing below is production-grade yet.
 Closest: durability and formats on the local journal store, backup/restore
 and operational safety (tested, unproven in the field). Experimental: S3,
-soak evidence (one 6 h run passed; memory growth during it not root-caused), memory bound.
+soak evidence (one 6 h run passed; its growth mostly root-caused, the rate decline still a hypothesis), memory bound.
 
 | area | verdict |
 |---|---|
@@ -106,7 +109,7 @@ soak evidence (one 6 h run passed; memory growth during it not root-caused), mem
 | observability | metrics, readiness, structured/access/slow logs and pprof exist and are tested. Not yet: tracing, shipped dashboards/alert rules, a real Prometheus scrape in CI |
 | backup / restore | online consistent backup, incremental, verified restore, PITR within retained history, drill (test + script). Not yet: S3-destination cost measured, scheduled backups, backup encryption beyond what the data already has |
 | operational safety | graceful drain + shutdown, bind-before-open, per-request timeouts, key/body/tx limits, lease records naming writers, 409 for busy maintenance; tested with the real binary. Not yet: rate limits, global in-flight cap, request-level DB deadlines |
-| soak / chaos | one 6 h soak passed (SOAK OK, 56.8 M ops, 134 kill -9 restarts, every full check and all 82 restored backups OK) and the long simulator passed (600 seeds × 2 000 steps, no violation): bench/results/2026-10-29-soak/. Not yet: a soak on S3, with network faults, longer than 6 h, or with heap profiles; server RSS and disk grew during the run and that growth is not root-caused |
+| soak / chaos | one 6 h soak passed (SOAK OK, 56.8 M ops, 134 kill -9 restarts, every full check and all 82 restored backups OK) and the long simulator passed (600 seeds × 2 000 steps, no violation): bench/results/2026-10-29-soak/. Not yet: a soak on S3, with network faults, longer than 6 h; growth root causes: disk, live heap, open peak, slow requests proven (S2.2, S2.8, S2.9, S5.3, S5.6), the rate decline hypothesized |
 | memory bound | not ready: key index and lens state in RAM (S5.1); disk-backed index deferred, on the ROADMAP |
 | S3 | experimental. MinIO only (CI): fault injection (503, resets, lost replies) with no false fences or lost acks, request cost measured, `s3check` for other endpoints. Not yet: any real cloud provider, snapshots > 5 GiB |
 | API stability / supply chain | policy written, Go API diff-gated, govulncheck + SBOM + checksums in CI. Not yet: 1.0 freeze, HTTP/CLI compatibility tests, a published signing key, reproducible builds |

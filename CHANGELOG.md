@@ -10,6 +10,14 @@ break APIs and the on-storage format.
 Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
+### Fixed (soak investigation, bench/results/2026-10-30-soak-investigation)
+
+- A caller cancel (e.g. an HTTP client timing out on `/v1/compact`) during
+  a manifest commit no longer halts the database until restart.
+- Journal open scans through a window that stops at holes and no longer
+  keeps a map of every deleted key: on the 6 h soak's database, open went
+  from 54-59 s / 4.45 GB peak to 6-12 s / 2.4 GB.
+
 ### Added (component C review: topics)
 
 - Topic retention: `CompactOptions.Topics` / `GCOptions.Topics`
