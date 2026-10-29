@@ -2,7 +2,6 @@ package freshdb
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"sort"
@@ -393,7 +392,7 @@ func (w *writer) process(batch []*commitReq) {
 	w.sinceSnap += len(accepted)
 	if w.db.opts.SnapshotEvery > 0 && w.sinceSnap >= w.db.opts.SnapshotEvery {
 		w.sinceSnap = 0
-		if err := w.db.writeSnapshot(ctx, w.l.meta.ID, w.v); err != nil {
+		if err := w.db.writeSnapshot(ctx, w.l, w.v); err != nil {
 			w.db.met.snapshotErrors.Add(1)
 			w.db.logf("freshdb: snapshot failed (non-fatal): %v", err)
 		} else {
@@ -403,65 +402,4 @@ func (w *writer) process(batch []*commitReq) {
 	for i, r := range accepted {
 		r.done <- commitRes{lsn: entries[i].LSN}
 	}
-}
-
-// ---- snapshots (KV + topic checkpoint) ----
-
-type snapshot struct {
-	lsn   uint64
-	kv    *lens.KV
-	topic *lens.Topic
-	drop  []string
-}
-
-func encodeSnapshot(lsn uint64, kv, topic []byte) []byte {
-	b := binary.LittleEndian.AppendUint64(nil, lsn)
-	b = binary.LittleEndian.AppendUint64(b, uint64(len(kv)))
-	b = append(b, kv...)
-	b = append(b, topic...)
-	return binary.LittleEndian.AppendUint32(b, format.CRC(b))
-}
-
-func (db *DB) writeSnapshot(ctx context.Context, logID string, v *view) error {
-	v.mu.RLock()
-	lsn := v.head
-	b := encodeSnapshot(lsn, v.kv.Snapshot(), v.topic.Snapshot())
-	v.mu.RUnlock()
-	key := fmt.Sprintf("snap/%s/%020d.snap", logID, lsn)
-	if err := putExactlyOnce(ctx, db.st, key, b); err != nil && !errors.Is(err, store.ErrExists) {
-		return err
-	}
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	return db.commitManifest(ctx, func(m *Manifest) error {
-		if lm := m.Logs[logID]; lm != nil && lm.SnapLSN < lsn && (lm.Base == nil || lm.Base.LSN < lsn) {
-			lm.SnapLSN, lm.SnapKey = lsn, key
-		}
-		return nil
-	})
-}
-
-func (db *DB) loadSnapshot(ctx context.Context, l *logState) *snapshot {
-	lm := db.man.Logs[l.meta.ID]
-	if lm == nil || lm.SnapKey == "" {
-		return nil
-	}
-	b, err := db.st.Get(ctx, lm.SnapKey)
-	if err != nil || len(b) < 20 || binary.LittleEndian.Uint32(b[len(b)-4:]) != format.CRC(b[:len(b)-4]) {
-		db.logf("freshdb: ignoring unreadable snapshot %s: %v", lm.SnapKey, err)
-		return nil
-	}
-	lsn := binary.LittleEndian.Uint64(b)
-	n := binary.LittleEndian.Uint64(b[8:])
-	body := b[16 : len(b)-4]
-	if n > uint64(len(body)) || lsn > l.head() || lsn < l.floor() {
-		return nil
-	}
-	kv, err1 := lens.LoadKV(body[:n], db.opts.InlineMax)
-	tp, err2 := lens.LoadTopic(body[n:])
-	if err1 != nil || err2 != nil {
-		db.logf("freshdb: ignoring corrupt snapshot %s", lm.SnapKey)
-		return nil
-	}
-	return &snapshot{lsn: lsn, kv: kv, topic: tp, drop: db.keys.shreddedList()}
 }

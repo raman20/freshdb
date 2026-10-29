@@ -3,7 +3,6 @@ package freshdb
 import (
 	"context"
 	"crypto/ed25519"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -269,10 +268,15 @@ func (db *DB) Verify(ctx context.Context) (*VerifyReport, error) {
 		}
 		for _, k := range snaps {
 			b, err := db.st.Get(ctx, k)
-			ok := err == nil && len(b) >= 20 && binary.LittleEndian.Uint32(b[len(b)-4:]) == format.CRC(b[:len(b)-4])
+			if err == nil {
+				var h snapHeader
+				if h, _, _, err = decodeSnapshot(b); err == nil && k != snapKey(h.log, h.lsn) {
+					err = fmt.Errorf("%w: it holds log %s LSN %d", errSnapshot, h.log, h.lsn)
+				}
+			}
 			r.Snapshots++
-			if !ok { // snapshots are a cache: open ignores a bad one and replays
-				r.Warnings = append(r.Warnings, fmt.Sprintf("snapshot %s is damaged (%v; open replays the log instead)", k, err))
+			if err != nil { // snapshots are a cache: open ignores a bad one and replays
+				r.Warnings = append(r.Warnings, fmt.Sprintf("snapshot %s is unusable (%v; open replays the log instead)", k, err))
 			}
 		}
 	}

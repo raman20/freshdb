@@ -164,16 +164,28 @@ writer got there first, and this one is fenced.
 
 ## Snapshot (`.snap`)
 
+Key `snap/<log>/<lsn %020d>.snap`. Version 2:
+
 ```
+8B   magic "FRSNAP2\n"
 u64  LSN covered
+32B  hash-chain head after that LSN
+u8   len(log id), then the log id
 u64  len(kv)
 kv lens snapshot bytes
 topic lens snapshot bytes
 u32  CRC32C(all of the above)
 ```
 
-A snapshot that is missing or corrupt is ignored, and the lens is rebuilt from
-the log.
+Open uses a snapshot only if its checksum holds, its log id and LSN match
+its key and the log, the LSN lies between the log's compaction floor and
+its head, and the hash-chain head equals the log's own at that LSN. So the
+bytes of another log's snapshot, or of a snapshot from a different history
+under the same name, are never loaded. Anything else (missing, damaged,
+mismatched) is ignored with a log line and the lens is rebuilt from the
+log. Version 1 snapshots (the same layout without magic, LSN chain or log
+id) are ignored by this build; builds before it read the magic as an LSN
+past the head and ignore version 2 snapshots.
 
 The KV part starts with the tag `KV2` and records the inline limit it was
 written with. A `KV1` snapshot (v0.1.0) or one written with a different
