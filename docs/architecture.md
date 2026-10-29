@@ -54,9 +54,12 @@ one concurrent opener wins. It then recovers each log it will write to:
 
 1. List and read segments in sequence order.
 2. Verify CRCs and the hash chain.
-3. If the *final* segment is torn (a power-loss partial write), copy it to
-   `quarantine/` and replace it with its valid prefix. Damage anywhere else is
-   an error (`ErrCorrupt`): acknowledged data is never silently dropped.
+3. Damage in any segment is an error (`ErrCorrupt`): every store writes
+   objects atomically, so a damaged segment is corruption and may hold
+   acknowledged commits. Only with `WithRepairTail` / `--repair-tail` is a
+   damaged *final* segment copied to `quarantine/` and replaced by its valid
+   prefix. A segment of an unknown version is `format.ErrVersion`, and a log
+   that ends before its snapshot's LSN is `ErrCorrupt` (design 12).
 4. If it sees any segment from a *newer* epoch, it stops with `ErrFenced` and
    writes nothing. TLC found this race; see [spec/RESULTS.md](../spec/RESULTS.md).
 5. It writes an empty *fence* segment with its own epoch at the next sequence

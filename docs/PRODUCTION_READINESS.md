@@ -26,15 +26,15 @@ named), **documented** (accepted limit, written down where users read).
 
 | id | gap | found by | status |
 |---|---|---|---|
-| S1.1 | A transaction whose frame exceeds `format.MaxFrameSize` (64 MiB) or 1M ops is written and acknowledged, but the decoder rejects it. Not the last segment: the DB no longer opens (`damaged segment … is not the tail`). Last segment: the next writable open "repairs" it, i.e. deletes the acknowledged commit. | probe: one 65 MiB `Put`, then reopen | open → item 13 |
-| S1.2 | HTTP request bodies are read through `io.LimitReader(64 MiB)`: a larger value is silently truncated and stored. | code read (`server.body`) | open → item 13 |
-| S1.3 | Journal: `scan` stops at the first record that does not validate and treats the rest as a torn tail. A bit flip or bad sector in the middle hides every later record, and the next append overwrites them. | code read | open → item 13 |
-| S1.4 | Damage in the last segment of a log is "repaired" on a writable open (valid prefix kept, damaged copy in `quarantine/`, one log line). Every store's put is atomic (journal CRC per record, fs temp+link, S3), so such damage is corruption of acknowledged commits, not a torn write; it is dropped without failing. | code read (`repairTail`) | open → item 13 |
-| S1.5 | A segment header with an unknown version is reported as `ErrHeader`, the same as a torn header; on the last segment the writable open replaces it with an empty segment. A newer binary's segment would be deleted by an older one. | code read (`format.DecodeHeader`) | open → items 13/14 |
-| S1.6 | Journal `Get` reports a CRC mismatch as "not found", so a damaged object reads as missing (open fails with a misleading error; other callers may treat it as absent). | code read | open → item 13 |
-| S1.7 | Losing the newest segment object(s) of a log (deleted outside freshDB, restored from an older backup) is not detected: the log just ends earlier, and the next fence reuses the sequence number. | code read | open → item 13 (cross-checks) |
-| S1.8 | No power-loss test: crash tests kill the process (`kill -9`), which keeps the page cache. Unsynced writes reordering or vanishing is not exercised; fsync placement is argued in comments only. | review | open → item 13 |
-| S1.9 | No full scrub: `verify` checks segments, chains, fencing and shred state, but not snapshots, bases, value chunks, ANN blobs or journal records that no index points to. | review | open → item 13 |
+| S1.1 | A transaction whose frame exceeds `format.MaxFrameSize` (64 MiB) or 1M ops is written and acknowledged, but the decoder rejects it. Not the last segment: the DB no longer opens (`damaged segment … is not the tail`). Last segment: the next writable open "repairs" it, i.e. deletes the acknowledged commit. | probe: one 65 MiB `Put`, then reopen | **fixed** (item 13): `ErrTooLarge` before anything is written (`MaxTxBytes`, `MaxTxOps`); segments capped at 256 MiB; test `TestTooLargeTxRefused` |
+| S1.2 | HTTP request bodies are read through `io.LimitReader(64 MiB)`: a larger value is silently truncated and stored. | code read (`server.body`) | **fixed**: `http.MaxBytesReader`, 413 (`--max-body`, default 96 MiB); `TestMaxBody` |
+| S1.3 | Journal: `scan` stops at the first record that does not validate and treats the rest as a torn tail. A bit flip or bad sector in the middle hides every later record, and the next append overwrites them. | code read; probe: 1 flipped bit hid 3 of 4 objects | **fixed**: open tells torn tail / interrupted delete / corruption apart; corruption is `store.ErrCorrupt` (offset, key), file unchanged; `TestJournalMidFileCorruptionRefusesOpen` |
+| S1.4 | Damage in the last segment of a log is "repaired" on a writable open (valid prefix kept, damaged copy in `quarantine/`, one log line). Every store's put is atomic (journal CRC per record, fs temp+link, S3), so such damage is corruption of acknowledged commits, not a torn write; it is dropped without failing. | code read (`repairTail`) | **fixed**: `ErrCorrupt` by default, segment untouched; repair only with `WithRepairTail` / `--repair-tail` |
+| S1.5 | A segment header with an unknown version is reported as `ErrHeader`, the same as a torn header; on the last segment the writable open replaces it with an empty segment. A newer binary's segment would be deleted by an older one. | code read (`format.DecodeHeader`) | **fixed**: `format.ErrVersion`, never repaired; `TestNewerSegmentVersionRefused` |
+| S1.6 | Journal `Get` reports a CRC mismatch as "not found", so a damaged object reads as missing (open fails with a misleading error; other callers may treat it as absent). | code read | **fixed**: `ErrCorrupt` for a live object failing its CRC; `TestJournalGetCorrupt` |
+| S1.7 | Losing the newest segment object(s) of a log (deleted outside freshDB, restored from an older backup) is not detected: the log just ends earlier, and the next fence reuses the sequence number. | code read | **mitigated**: detected when the manifest's snapshot LSN or a child branch point lies past the end (`TestMissingNewestSegmentsDetected`); a log with no such reference still cannot tell |
+| S1.8 | No power-loss test: crash tests kill the process (`kill -9`), which keeps the page cache. Unsynced writes reordering or vanishing is not exercised; fsync placement is argued in comments only. | review | **fixed for the journal store**: crash-point enumeration over traced writes/syncs (`store/powerloss_test.go`, design 12); fs:// and S3 not modelled |
+| S1.9 | No full scrub: `verify` checks segments, chains, fencing and shred state, but not snapshots, bases, value chunks, ANN blobs or journal records that no index points to. | review | **fixed for local stores**: verify reads every object back and CRC-checks snapshots; on S3 only referenced objects (`scrubbed: false`) |
 | S1.10 | Disk full (ENOSPC) on the journal/fs stores is not tested: whether a failed append leaves a record that later validates, and whether the writer recovers once space is freed. | review | open → item 17 |
 | S1.11 | Windows: directory fsync is a no-op (NTFS journals metadata); not power-loss tested. | code read | documented (README limits) |
 
@@ -46,7 +46,7 @@ named), **documented** (accepted limit, written down where users read).
 | S2.2 | Compaction and GC pause commits for their duration (0.87 s on the compaction bench; longer on big logs). | documented |
 | S2.3 | `serve` shutdown: `ListenAndServe` returns as soon as `Shutdown` starts, so `db.Close` races in-flight requests; open SSE streams hold `Shutdown` for its whole 5 s timeout. | open → item 17 |
 | S2.4 | No `ReadTimeout`/`WriteTimeout`/`IdleTimeout` on the HTTP server (only `ReadHeaderTimeout`): slow clients hold goroutines. | open → item 17 |
-| S2.5 | No limits on key, value or transaction size (see S1.1), number of ops, or JSON nesting in requests. | open → item 17 |
+| S2.5 | No limits on key, value or transaction size (see S1.1), number of ops, or JSON nesting in requests. | partly fixed: transaction size and ops (S1.1), request body (S1.2); key size and JSON nesting → item 17 |
 | S2.6 | Open reads every segment since the last base/snapshot; on S3 that is one GET per segment. | documented (benchmarks) |
 | S2.7 | Two writers on one fs/journal directory: the second fences the first (by design); there is no lock-file message telling an operator which process holds it. | open → item 17 |
 
@@ -94,7 +94,7 @@ named), **documented** (accepted limit, written down where users read).
 
 | area | verdict |
 |---|---|
-| durability / corruption handling | not ready (S1.1–S1.10 open) |
+| durability / corruption handling | journal store: corruption detected, never silently dropped; power-loss modelled. Still open: ENOSPC (S1.10), fs:// and S3 not power-loss modelled, no salvage tool |
 | formats / upgrades | not ready |
 | observability | not ready |
 | backup / restore | not ready |

@@ -10,7 +10,26 @@ break APIs and the on-storage format.
 Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
+### Changed (breaking)
+- A damaged final log segment now makes open fail with `ErrCorrupt` instead
+  of being truncated to its valid prefix. `WithRepairTail(true)` /
+  `--repair-tail` restores the old behaviour (damaged copy kept under
+  `quarantine/`).
+
 ### Added
+- **Durability hardening** (docs/design/12-durability.md). Transactions over
+  64 MiB encoded or 2^20 ops fail with `ErrTooLarge` (`MaxTxBytes`,
+  `MaxTxOps`) instead of being acknowledged and then breaking the next open;
+  group-commit segments stop at 256 MiB. `serve --max-body` (default 96 MiB)
+  answers 413 instead of truncating bodies at 64 MiB. The journal store
+  tells a torn append, an interrupted delete and corruption apart on open;
+  corruption is `store.ErrCorrupt` naming the offset and key (it used to hide
+  every later record). A live journal object failing its CRC reads as
+  `ErrCorrupt`, not "not found". A segment of an unknown version is
+  `format.ErrVersion`. A log ending before its snapshot is `ErrCorrupt`.
+  `verify` also CRC-checks snapshots and reads every object of a local store
+  back (`scrubbed`, `objects`, `bytes`, `warnings`). Power-loss
+  crash-point test for the journal (`store/powerloss_test.go`).
 - **Scoped tokens, rotation, certificate reload, connection caps.**
   `freshdb serve --token-file F` takes lines `SCOPE TOKEN [name=N]
   [kv:PREFIX*|topic:T|docs:C|vectors:C ...]` with scopes read, write and

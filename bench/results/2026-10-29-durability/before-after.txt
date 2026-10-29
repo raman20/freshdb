@@ -1,0 +1,26 @@
+Durability fixes (docs/design/12-durability.md), before = c0affcd, after = this change. Linux x86_64, go test, local disk.
+
+1. 65 MiB value (one Put over the 64 MiB frame limit), then a small Put, close, reopen
+   before: put: <nil>
+           reopen: freshdb: corrupt log: damaged segment log/L1/00000000000000000002.seg is not the tail: format: torn or corrupt tail
+           (the database could no longer be opened)
+   after:  put: freshdb: transaction too large: 68157502 bytes, 1 ops encoded (limits 67108864 bytes, 1048576 ops)
+           reopen: <nil>; small Put present; nothing written for the refused one
+
+2. journal.fj with 4 records, one byte flipped inside record 2's data, reopen
+   before: open err=<nil>; get k0 ok; get k1, k2, k3: store: not found
+           after one more append + reopen, get k3: store: not found (overwritten)
+   after:  open: store: corrupt: .../journal.fj: record at offset N (key "k1", 100 bytes)
+           fails its checksum and is followed by valid records up to offset M; refusing to
+           open (it would hide them). File unchanged.
+
+3. HTTP PUT with a body over the cap
+   before: body silently truncated at 64 MiB and stored
+   after:  413 (default cap 96 MiB, --max-body)
+
+4. Power-loss model (store/powerloss_test.go): per seed ~400 traced writes/syncs,
+   ~190 sync intervals, ~770 crash images (none / all / 2 random sector subsets of the
+   writes after the last sync). 6 seeds: 4,721 images, all open, all acknowledged objects
+   present, no deleted object back, no foreign bytes. 22 s.
+   With the interrupted-delete recovery disabled (mutation): fails within 1 s on every
+   seed (a torn dead-marking write reads as mid-file corruption).

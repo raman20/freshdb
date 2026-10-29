@@ -3,6 +3,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
@@ -65,17 +66,21 @@ type jent struct {
 
 const (
 	jrnMagic   = "FRESHJ1\x00"
-	jrnHead    = 32        // magic(8) salt(16) crc(4) pad(4)
-	jrnHdr     = 12        // crc(4) kind(1) pad(1) klen(2) dlen(4)
-	jrnChunk   = 8 << 20   // preallocation step (zero-filled, then fsync)
-	jrnGrowAt  = 4 << 20   // start the next chunk in the background when this little is left
-	jrnGrowBit = 256 << 10 // background zero-fill step (one writer-lock hold each)
+	jrnHead    = 32 // magic(8) salt(16) crc(4) pad(4)
+	jrnHdr     = 12 // crc(4) kind(1) pad(1) klen(2) dlen(4)
 	jrnMaxKey  = 4096
 	jrnMaxData = 1 << 30
 
 	recPut  = 1
 	recDel  = 2
 	recDead = 3 // a put whose data was erased by a later delete
+)
+
+// Preallocation sizes (vars: the power-loss test shrinks them).
+var (
+	jrnChunk   int64 = 8 << 20   // preallocation step (zero-filled, then fsync)
+	jrnGrowAt  int64 = 4 << 20   // start the next chunk in the background when this little is left
+	jrnGrowBit int64 = 256 << 10 // background zero-fill step (one writer-lock hold each)
 )
 
 var jcrc = crc32.MakeTable(crc32.Castagnoli)
@@ -158,10 +163,10 @@ func (j *Journal) open() error {
 		copy(h[:8], jrnMagic)
 		rand.Read(h[8:24])
 		binary.LittleEndian.PutUint32(h[24:28], crc32.Checksum(h[:24], jcrc))
-		if _, err := j.f.WriteAt(h[:], 0); err != nil {
+		if _, err := j.writeAt(h[:], 0); err != nil {
 			return err
 		}
-		if err := j.f.Sync(); err != nil {
+		if err := j.fsync(); err != nil {
 			return err
 		}
 		if err := syncDir(j.dir); err != nil {
@@ -176,20 +181,11 @@ func (j *Journal) open() error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	// Finish deletes a crash interrupted: a put followed by its delete
-	// record but not yet marked dead.
-	live := map[string]jent{}
-	var unerased []jent
-	j.scan(func(kind byte, key string, e jent) {
-		switch kind {
-		case recPut:
-			live[key] = e
-		case recDel:
-			if p, ok := live[key]; ok {
-				unerased = append(unerased, p)
-				delete(live, key)
-			}
-		}
-	})
+	// record but not yet marked dead (or whose header rewrite was torn).
+	unerased, err := j.recover()
+	if err != nil {
+		return err
+	}
 	for _, e := range unerased {
 		if err := j.erase(e); err != nil {
 			return err
@@ -203,6 +199,157 @@ func (j *Journal) open() error {
 		return j.sync()
 	}
 	return nil
+}
+
+// recover is open's scan (exclusive flock and j.mu held). It reads every
+// record like scan, and also tells the three ways a record can fail its
+// CRC apart, instead of stopping at the first one:
+//
+//   - torn tail: nothing valid follows. The bytes after the last valid
+//     record are zeroed (and synced), so the file again ends in zeros.
+//   - interrupted delete: a put whose dead-marking or hole punch was cut
+//     short by a crash. Its delete record (durable before erasing began)
+//     follows; the put is returned to be erased again.
+//   - corruption: a damaged record that is not one of the above, followed
+//     by a valid record. That is ErrCorrupt: opening would hide the
+//     records after it, and the next append would overwrite them.
+func (j *Journal) recover() ([]jent, error) {
+	st, err := j.f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	size := st.Size()
+	live := map[string]jent{}
+	dels := map[string]int64{} // key -> offset of its last delete record
+	var unerased []jent
+	type suspect struct {
+		e   jent
+		key string
+	}
+	var pending, middle []suspect // damaged records after / before the last valid one
+	off := j.end
+	var hb [jrnHdr]byte
+	for {
+		if n, _ := j.f.ReadAt(hb[:], off); n < jrnHdr {
+			break
+		}
+		kind, klen := hb[4], int(binary.LittleEndian.Uint16(hb[6:8]))
+		dlen := int(binary.LittleEndian.Uint32(hb[8:12]))
+		if kind < recPut || kind > recDead || klen == 0 || klen > jrnMaxKey || dlen > jrnMaxData ||
+			(kind == recDel && dlen != 0) || off+int64(jrnHdr+klen+dlen) > size {
+			break
+		}
+		body := klen
+		if kind == recPut {
+			body += dlen
+		}
+		b := make([]byte, body)
+		if n, _ := j.f.ReadAt(b, off+jrnHdr); n < body {
+			break
+		}
+		e := jent{off: off, klen: klen, dlen: dlen}
+		next := off + int64(jrnHdr+klen+dlen)
+		if binary.LittleEndian.Uint32(hb[:4]) != j.sum(off, hb[4:], b) {
+			if kind == recDel {
+				break
+			}
+			pending = append(pending, suspect{e, string(b[:klen])})
+			off = next
+			continue
+		}
+		middle, pending = append(middle, pending...), nil
+		key := string(b[:klen])
+		switch kind {
+		case recPut:
+			j.idx[key] = e
+			live[key] = e
+		case recDel:
+			delete(j.idx, key)
+			dels[key] = off
+			if p, ok := live[key]; ok {
+				unerased = append(unerased, p)
+				delete(live, key)
+			}
+		}
+		off = next
+		j.end = off
+	}
+	for _, s := range middle {
+		if d, ok := dels[s.key]; ok && d > s.e.off {
+			unerased = append(unerased, s.e) // a delete cut short: finish it
+			continue
+		}
+		return nil, fmt.Errorf("%w: %s: record at offset %d (key %q, %d bytes) fails its checksum and is followed by valid records up to offset %d; refusing to open (it would hide them). Restore from a backup", ErrCorrupt, filepath.Join(j.dir, jrnFile), s.e.off, s.key, s.e.dlen, j.end)
+	}
+	if err := j.checkTail(size); err != nil {
+		return nil, err
+	}
+	return unerased, nil
+}
+
+// checkTail makes sure nothing but zeros follows j.end. Non-zero bytes
+// there are a torn append (zeroed now) unless a valid record lies among
+// them: then a damaged record header hid it, which is ErrCorrupt.
+func (j *Journal) checkTail(size int64) error {
+	const win = 4 << 20
+	buf := make([]byte, win+jrnHdr)
+	first, last := int64(-1), int64(-1)
+	zeros := make([]byte, len(buf))
+	for at := j.end; at < size; at += win {
+		if d := nextData(j.f, at); d > at { // skip holes (sparse files)
+			at = max(j.end, (d-jrnHdr)/win*win)
+			if at >= size {
+				break
+			}
+		}
+		n, _ := j.f.ReadAt(buf, at)
+		if bytes.Equal(buf[:n], zeros[:n]) {
+			continue // no record starts here: its kind byte would be non-zero
+		}
+		for i := 0; i < n; i++ {
+			if buf[i] != 0 && at+int64(i) < size {
+				if first < 0 {
+					first = at + int64(i)
+				}
+				last = max(last, at+int64(i))
+			}
+		}
+		for i := 0; i < min(n, win) && first >= 0; i++ {
+			if p := at + int64(i); p > j.end && j.validAt(p, buf[i:n], size) {
+				return fmt.Errorf("%w: %s: damaged record at offset %d, but a valid record follows at offset %d; refusing to open (it would hide it). Restore from a backup", ErrCorrupt, filepath.Join(j.dir, jrnFile), j.end, p)
+			}
+		}
+	}
+	if first < 0 {
+		return nil
+	}
+	if err := j.zero(first, last+1-first); err != nil {
+		return err
+	}
+	return j.sync()
+}
+
+// validAt reports whether a valid record starts at p (b holds the bytes
+// from p, at least a header's worth where available).
+func (j *Journal) validAt(p int64, b []byte, size int64) bool {
+	if len(b) < jrnHdr {
+		return false
+	}
+	kind, pad, klen := b[4], b[5], int(binary.LittleEndian.Uint16(b[6:8]))
+	dlen := int(binary.LittleEndian.Uint32(b[8:12]))
+	if kind < recPut || kind > recDead || pad != 0 || klen == 0 || klen > jrnMaxKey || dlen > jrnMaxData ||
+		(kind == recDel && dlen != 0) || p+int64(jrnHdr+klen+dlen) > size {
+		return false
+	}
+	body := klen
+	if kind == recPut {
+		body += dlen
+	}
+	rb := make([]byte, body)
+	if n, _ := j.f.ReadAt(rb, p+jrnHdr); n < body {
+		return false
+	}
+	return binary.LittleEndian.Uint32(b[:4]) == j.sum(p, b[4:jrnHdr], rb)
 }
 
 // scan applies valid records from j.end onwards to the index (j.mu held).
@@ -300,7 +447,7 @@ func (j *Journal) appendRec(rec []byte) error {
 	if err := j.reserve(at + int64(len(rec))); err != nil {
 		return err
 	}
-	if _, err := j.f.WriteAt(rec, at); err != nil {
+	if _, err := j.writeAt(rec, at); err != nil {
 		return err
 	}
 	j.growAhead(at + int64(len(rec)))
@@ -342,7 +489,7 @@ func (j *Journal) grow(target int64) {
 		st, err := j.f.Stat()
 		if err == nil && st.Size() < target {
 			off, n = st.Size(), min(jrnGrowBit, target-st.Size())
-			_, err = j.f.WriteAt(zero[:n], off)
+			_, err = j.writeAt(zero[:n], off)
 		}
 		flock(j.f, syscall.LOCK_UN)
 		j.wmu.Unlock()
@@ -355,7 +502,7 @@ func (j *Journal) grow(target int64) {
 		}
 	}
 	if grew && !j.noSync && !j.stopGrow.Load() {
-		j.f.Sync()
+		j.fsync()
 	}
 }
 
@@ -374,14 +521,14 @@ func (j *Journal) reserve(upto int64) error {
 	zero := make([]byte, 1<<20)
 	for off := size; off < newSize; off += int64(len(zero)) {
 		n := min(int64(len(zero)), newSize-off)
-		if _, err := j.f.WriteAt(zero[:n], off); err != nil {
+		if _, err := j.writeAt(zero[:n], off); err != nil {
 			return err
 		}
 	}
 	if j.noSync {
 		return nil
 	}
-	return j.f.Sync() // size changed: full sync, once per chunk
+	return j.fsync() // size changed: full sync, once per chunk
 }
 
 // Sync makes every record appended so far durable, even with
@@ -392,7 +539,7 @@ func (j *Journal) Sync() error {
 		return err
 	}
 	defer unlock()
-	if err := j.f.Sync(); err != nil {
+	if err := j.fsync(); err != nil {
 		return err
 	}
 	return syncDir(j.dir)
@@ -435,7 +582,7 @@ func (j *Journal) sync() error {
 	if j.noSync {
 		return nil
 	}
-	return datasync(j.f)
+	return j.traced(datasync(j.f))
 }
 
 func checkKey(key string) error {
@@ -524,6 +671,10 @@ func (j *Journal) Get(ctx context.Context, key string) ([]byte, error) {
 			return b[jrnHdr+e.klen:], nil
 		}
 		// Deleted by another process meanwhile (or corrupt): look again.
+		if attempt == 1 && j.live(e, key) {
+			// still the live put of key: its bytes are damaged
+			return nil, fmt.Errorf("%w: %s: object %s at offset %d fails its checksum", ErrCorrupt, filepath.Join(j.dir, jrnFile), key, e.off)
+		}
 	}
 	return nil, fmt.Errorf("%w: %s", ErrNotFound, key)
 }
@@ -610,10 +761,10 @@ func (j *Journal) erase(e jent) error {
 	}
 	h[4] = recDead
 	binary.LittleEndian.PutUint32(h[:4], j.sum(e.off, h[4:jrnHdr], h[jrnHdr:]))
-	if _, err := j.f.WriteAt(h, e.off); err != nil {
+	if _, err := j.writeAt(h, e.off); err != nil {
 		return err
 	}
-	return punch(j.f, e.off+int64(len(h)), int64(e.dlen))
+	return j.punch(e.off+int64(len(h)), int64(e.dlen))
 }
 
 func flock(f *os.File, how int) error {
@@ -636,4 +787,48 @@ func zeroRange(f *os.File, off, n int64) error {
 		off, n = off+k, n-k
 	}
 	return nil
+}
+
+// jtrace, when set (power-loss tests only), sees every mutation of a
+// journal file in order: writes (punches as writes of zeros) and syncs,
+// after they succeed. Callers hold the writer locks, so the order is real.
+var jtrace func(ev jev)
+
+type jev struct {
+	kind byte // 'w' write, 's' sync (a barrier for every earlier write)
+	off  int64
+	data []byte
+}
+
+func (j *Journal) writeAt(b []byte, off int64) (int, error) {
+	n, err := j.f.WriteAt(b, off)
+	if jtrace != nil && n > 0 {
+		jtrace(jev{kind: 'w', off: off, data: append([]byte(nil), b[:n]...)})
+	}
+	return n, err
+}
+
+func (j *Journal) traced(err error) error {
+	if jtrace != nil && err == nil {
+		jtrace(jev{kind: 's'})
+	}
+	return err
+}
+
+func (j *Journal) fsync() error { return j.traced(j.f.Sync()) }
+
+func (j *Journal) punch(off, n int64) error {
+	err := punch(j.f, off, n)
+	if jtrace != nil && err == nil && n > 0 {
+		jtrace(jev{kind: 'w', off: off, data: make([]byte, n)})
+	}
+	return err
+}
+
+func (j *Journal) zero(off, n int64) error {
+	err := zeroRange(j.f, off, n)
+	if jtrace != nil && err == nil && n > 0 {
+		jtrace(jev{kind: 'w', off: off, data: make([]byte, n)})
+	}
+	return err
 }

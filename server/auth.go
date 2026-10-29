@@ -27,7 +27,14 @@ type Options struct {
 	// long-polls (?wait= > 0); over the cap the request gets 503 with
 	// Retry-After. 0 = the defaults (1024, 4096), < 0 = no cap.
 	MaxStreams, MaxWaiters int
+	// MaxBody caps a request body in bytes (default DefaultMaxBody); a
+	// larger one is refused with 413.
+	MaxBody int
 }
+
+// DefaultMaxBody is the default request body cap: one transaction's limit
+// (freshdb.MaxTxBytes) plus room for JSON/base64 encoding.
+const DefaultMaxBody = 96 << 20
 
 // Scope is what a token may do: read < write < admin.
 type Scope int

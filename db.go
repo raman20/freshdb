@@ -47,6 +47,13 @@ type Options struct {
 	// 0 = default: 1/16 of the memory limit (cgroup v2, else MemTotal),
 	// between 16 and 256 MiB; negative = no cache.
 	ValueCacheBytes int
+	// RepairTail lets open repair a damaged final segment by keeping its
+	// valid prefix (the damaged object is copied to quarantine/ first).
+	// Every supported store writes objects atomically, so a damaged tail is
+	// corruption, not a torn write, and may hold acknowledged commits: by
+	// default open refuses with ErrCorrupt and changes nothing. Set it (CLI:
+	// --repair-tail) only to salvage a database you cannot restore.
+	RepairTail bool
 }
 
 type Option func(*Options)
@@ -58,6 +65,7 @@ func WithSnapshotEvery(n int) Option         { return func(o *Options) { o.Snaps
 func WithLogf(f func(string, ...any)) Option { return func(o *Options) { o.Logf = f } }
 func WithInlineMax(n int) Option             { return func(o *Options) { o.InlineMax = n } }
 func WithValueCacheBytes(n int) Option       { return func(o *Options) { o.ValueCacheBytes = n } }
+func WithRepairTail(on bool) Option          { return func(o *Options) { o.RepairTail = on } }
 
 const (
 	defaultInlineMax  = 64
@@ -324,6 +332,11 @@ func (db *DB) loadLog(ctx context.Context, id string, writable bool) (*logState,
 	}
 	if err := db.recoverLog(ctx, l, writable); err != nil {
 		return nil, err
+	}
+	if meta.SnapLSN > l.head() {
+		// The snapshot was written after a commit at SnapLSN was durable:
+		// the log's newest segments are gone.
+		return nil, fmt.Errorf("%w: log %s ends at LSN %d but its snapshot is at LSN %d: newest segments are missing", ErrCorrupt, id, l.head(), meta.SnapLSN)
 	}
 	db.logs[id] = l
 	return l, nil

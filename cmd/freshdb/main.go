@@ -50,6 +50,7 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
         [--tls-cert F --tls-key F]            serve HTTPS (or FRESHDB_TLS_CERT/_KEY); reloaded when renewed
         [--max-streams 1024] [--max-waiters 4096]   caps on SSE streams and long-polls (503 over it)
         [--insecure-no-auth]                  allow a non-loopback --listen without a token
+        [--max-body 100663296]                request body cap in bytes (413 over it)
   freshdb put KEY VALUE [--subject S]         write a key
   freshdb get KEY [--at LSN]                  read a key (time travel with --at)
   freshdb del KEY
@@ -81,6 +82,9 @@ Every command takes --branch B (default main). Use --addr http://host:7070
 --token / FRESHDB_TOKEN is sent as the bearer token.
 Key-encryption key: --kek-file F or FRESHDB_KEK (64 hex chars or base64 of
 32 bytes). Without one the DB runs in dev-key mode (key stored in the bucket).
+A damaged final log segment makes open fail (ErrCorrupt); --repair-tail
+(with serve or any local command) keeps its valid prefix instead and copies
+the damaged object to quarantine/. Prefer restoring from a backup.
 `
 
 type cli struct {
@@ -93,7 +97,7 @@ type cli struct {
 func parse(argv []string) ([]string, map[string]string) {
 	var args []string
 	flags := map[string]string{}
-	bools := map[string]bool{"follow": true, "help": true, "h": true, "exact": true, "insecure-no-auth": true, "shrink": true}
+	bools := map[string]bool{"follow": true, "help": true, "h": true, "exact": true, "insecure-no-auth": true, "shrink": true, "repair-tail": true}
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
 		if strings.HasPrefix(a, "-") && len(a) > 1 && !isNumberish(a) {
@@ -257,7 +261,7 @@ func serve(dbURL string, flags map[string]string) {
 	if err != nil {
 		log.Fatalf("freshdb: open %s: %v", dbURL, err)
 	}
-	opts := server.Options{Token: token, Auth: auth, MaxStreams: intFlag(flags, "max-streams"), MaxWaiters: intFlag(flags, "max-waiters")}
+	opts := server.Options{Token: token, Auth: auth, MaxStreams: intFlag(flags, "max-streams"), MaxWaiters: intFlag(flags, "max-waiters"), MaxBody: intFlag(flags, "max-body")}
 	srv := &http.Server{Addr: listen, Handler: server.New(db, opts), ReadHeaderTimeout: 10 * time.Second,
 		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}}
 	var certs *server.Certs
@@ -341,13 +345,17 @@ func secret(flags map[string]string, name string) string {
 // keyOpts picks the KEK source: --kek-file, else $FRESHDB_KEK, else none
 // (dev mode).
 func keyOpts(flags map[string]string) []freshdb.Option {
+	var o []freshdb.Option
+	if flags["repair-tail"] != "" {
+		o = append(o, freshdb.WithRepairTail(true))
+	}
 	if f := flags["kek-file"]; f != "" {
-		return []freshdb.Option{freshdb.WithKeyProvider(freshdb.KeyFromFile(f))}
+		return append(o, freshdb.WithKeyProvider(freshdb.KeyFromFile(f)))
 	}
 	if os.Getenv("FRESHDB_KEK") != "" {
-		return []freshdb.Option{freshdb.WithKeyProvider(freshdb.KeyFromEnv("FRESHDB_KEK"))}
+		return append(o, freshdb.WithKeyProvider(freshdb.KeyFromEnv("FRESHDB_KEK")))
 	}
-	return nil
+	return o
 }
 
 // isLoopback reports whether a listen address binds only loopback. An

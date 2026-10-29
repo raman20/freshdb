@@ -15,6 +15,9 @@ import (
 var (
 	ErrExists   = errors.New("store: object already exists") // create-only conflict (S3 412)
 	ErrNotFound = errors.New("store: not found")
+	// ErrCorrupt: stored bytes fail their checksum (or the file holds
+	// damaged records followed by valid ones). Never repaired silently.
+	ErrCorrupt = errors.New("store: corrupt")
 )
 
 // Store is a minimal object store.

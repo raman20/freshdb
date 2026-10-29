@@ -235,10 +235,11 @@ func (l *logState) entryAt(ctx context.Context, lsn uint64) (*lens.Entry, error)
 	return x.entry(frames[lsn-s.first]), nil
 }
 
-// recoverLog reads a log's segments. For the writable (lease-holding) log
-// it also repairs a torn final segment: the damaged object is copied to
-// quarantine/ and replaced by its valid prefix. Damage anywhere else is an
-// error: we never silently drop acknowledged data.
+// recoverLog reads a log's segments. A damaged segment is an error
+// (ErrCorrupt): we never silently drop acknowledged data. Only with
+// Options.RepairTail, and only for the final segment of the writable
+// (lease-holding) log, is the damaged object copied to quarantine/ and
+// replaced by its valid prefix.
 func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error {
 	st := db.st
 	l.mu.Lock()
@@ -261,13 +262,16 @@ func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error 
 			return fmt.Errorf("%w: log %s: missing segment %d (found %d)", ErrCorrupt, l.meta.ID, expectSeq, seq)
 		}
 		data, err := st.Get(ctx, k)
+		if errors.Is(err, store.ErrCorrupt) {
+			return fmt.Errorf("%w: %w", ErrCorrupt, err)
+		}
 		if err != nil {
 			return err
 		}
 		h, frames, valid, derr := format.DecodeSegment(data)
 		last := k == keys[len(keys)-1]
 		if derr != nil && !(errors.Is(derr, format.ErrTorn) || errors.Is(derr, format.ErrHeader)) {
-			return derr
+			return fmt.Errorf("%s: %w", k, derr)
 		}
 		if derr == nil || errors.Is(derr, format.ErrTorn) {
 			if h.Seq != seq {
@@ -280,6 +284,9 @@ func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error 
 		if derr != nil {
 			if !last {
 				return fmt.Errorf("%w: damaged segment %s is not the tail: %v", ErrCorrupt, k, derr)
+			}
+			if !db.opts.RepairTail {
+				return fmt.Errorf("%w: final segment %s of log %s is damaged (%v; %d valid frames in the first %d of %d bytes). Store writes are atomic, so this is corruption and may hide acknowledged commits; the segment was left as is. Restore from a backup, or open with WithRepairTail (CLI: --repair-tail) to keep the valid prefix (the damaged object is kept under quarantine/)", ErrCorrupt, k, l.meta.ID, derr, len(frames), valid, len(data))
 			}
 			if !writable {
 				// read-only view: use the valid prefix, ignore the tail

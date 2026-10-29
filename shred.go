@@ -3,6 +3,7 @@ package freshdb
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -140,7 +141,18 @@ type VerifyReport struct {
 	EncryptedValues int               `json:"encrypted_values"`
 	Unreadable      int               `json:"unreadable_shredded_values"`
 	SweptDEKs       int               `json:"swept_late_deks,omitempty"`
-	Problems        []string          `json:"problems,omitempty"`
+	Snapshots       int               `json:"snapshots"`
+	// Objects and Bytes count what the store-level scrub read back (every
+	// object of a local store, each checked against the store's own
+	// checksum where it has one); Scrubbed is false when the store cannot
+	// enumerate its keys (S3: only referenced objects are read).
+	Scrubbed bool     `json:"scrubbed"`
+	Objects  int      `json:"objects"`
+	Bytes    int64    `json:"bytes"`
+	Problems []string `json:"problems,omitempty"`
+	// Warnings do not fail verification (e.g. quarantined objects from
+	// an earlier repair, damaged objects that are only a cache).
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // Verify re-reads everything from storage and checks manifest monotonicity
@@ -241,6 +253,41 @@ func (db *DB) Verify(ctx context.Context) (*VerifyReport, error) {
 				bad("log %s: %v", id, err)
 			}
 			r.ChainHeads[name] = fmt.Sprintf("%d:%s", h, hex.EncodeToString(c[:8]))
+		}
+	}
+	// Snapshots.
+	for _, id := range sortedMapKeys(last.Logs) {
+		snaps, err := db.st.List(ctx, "snap/"+id+"/")
+		if err != nil {
+			bad("list snapshots of %s: %v", id, err)
+			continue
+		}
+		for _, k := range snaps {
+			b, err := db.st.Get(ctx, k)
+			ok := err == nil && len(b) >= 20 && binary.LittleEndian.Uint32(b[len(b)-4:]) == format.CRC(b[:len(b)-4])
+			r.Snapshots++
+			if !ok { // snapshots are a cache: open ignores a bad one and replays
+				r.Warnings = append(r.Warnings, fmt.Sprintf("snapshot %s is damaged (%v; open replays the log instead)", k, err))
+			}
+		}
+	}
+	// Store-level scrub: read every object back.
+	if all, err := store.Keys(ctx, db.st); err == nil {
+		r.Scrubbed = true
+		for _, k := range all {
+			b, err := db.st.Get(ctx, k)
+			if err != nil {
+				if errors.Is(err, store.ErrNotFound) {
+					continue // deleted meanwhile (GC, a concurrent writer)
+				}
+				bad("object %s: %v", k, err)
+				continue
+			}
+			r.Objects++
+			r.Bytes += int64(len(b))
+			if strings.HasPrefix(k, "quarantine/") {
+				r.Warnings = append(r.Warnings, fmt.Sprintf("quarantined object %s (kept by an earlier --repair-tail)", k))
+			}
 		}
 	}
 	deks, _ := db.st.List(ctx, "keys/dek/")

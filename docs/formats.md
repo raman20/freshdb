@@ -18,7 +18,7 @@ payload's bytes canonical, which the hash chain relies on.
   manifest/<id:%020d>.mf             JSON manifest, create-only, dense ids from 1
   log/<logID>/<seq:%020d>.seg        segment = one group commit (or a fence), create-only, dense seq from 1
   snap/<logID>/<lsn:%020d>.snap      optional KV+topic checkpoint (cache, never truth)
-  quarantine/<logID>/<seq>-<epoch>.seg  original bytes of a repaired torn tail segment
+  quarantine/<logID>/<seq>-<epoch>.seg  original bytes of a tail segment repaired by --repair-tail
   base/<logID>/<lsn:%020d>-e<epoch>-<nonce>.base         compaction base image (main only)
   base/<logID>/<lsn:%020d>-e<epoch>-<nonce>.<n:%06d>.val value chunk of that base, ≤ 64 MiB
   keys/_kek                          dev-mode key-encryption key (see SECURITY.md)
@@ -48,9 +48,12 @@ objects and their bytes are the same in both.
   - The record CRC is CRC-32C over the salt, the record's own offset, the
     header, the key and the data. A dead record's CRC covers only its
     header and key.
-  - Scanning stops at the first invalid record, so a torn tail is never
-    read as data. The salt keeps bytes from an older file at the same
-    offset from passing the CRC.
+  - A torn tail is never read as data. On open, a record failing its CRC
+    is a torn append if nothing valid follows (its bytes are zeroed), an
+    interrupted delete if its delete record follows (the delete is
+    finished), and otherwise corruption (`store.ErrCorrupt`, file left
+    unchanged). The salt keeps bytes from an older file at the same offset
+    from passing the CRC.
   - Deleting an object appends a delete record. The put record is then
     marked dead and its data is hole-punched (or zeroed).
   - The file grows in 8 MiB zero-filled, fsynced chunks.

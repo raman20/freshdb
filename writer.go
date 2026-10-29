@@ -67,6 +67,11 @@ type writer struct {
 
 const recentMax = 8192
 
+// maxSegBytes caps one group-commit segment: transactions that would push
+// a segment past it wait for the next one (the journal store takes objects
+// up to 1 GiB; one transaction alone is at most MaxTxBytes).
+var maxSegBytes = 256 << 20 // var: tests shrink it
+
 func newWriter(db *DB, l *logState, v *view) *writer {
 	w := &writer{db: db, l: l, v: v, ch: make(chan *commitReq, 1024), done: make(chan struct{})}
 	w.head = l.head()
@@ -294,8 +299,22 @@ func (w *writer) process(batch []*commitReq) {
 			ts = now
 		}
 		f := &format.Frame{LSN: lsn, TS: ts, Prev: chain, Ops: ops}
-		var payload []byte
-		seg, payload = format.AppendFrame(seg, f)
+		prev := len(seg)
+		seg2, payload := format.AppendFrame(seg, f)
+		if len(payload) > format.MaxFrameSize || len(ops) > format.MaxOps {
+			// The decoder rejects such a frame: writing it would make the
+			// log unreadable (docs/design/13-durability.md).
+			seg = seg2[:prev]
+			r.done <- commitRes{err: fmt.Errorf("%w: %d bytes, %d ops encoded (limits %d bytes, %d ops)",
+				ErrTooLarge, len(payload), len(ops), format.MaxFrameSize, format.MaxOps)}
+			continue
+		}
+		if len(seg2) > maxSegBytes && len(accepted) > 0 {
+			seg = seg2[:prev] // full: commit it in the next segment
+			w.carry = append(w.carry, r)
+			continue
+		}
+		seg = seg2
 		chain = format.ChainNext(chain, payload)
 		head = lsn
 		accepted = append(accepted, r)

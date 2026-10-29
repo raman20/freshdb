@@ -39,6 +39,7 @@ otherwise; the latest release is
 | [design/09-journal-prealloc.md](design/09-journal-prealloc.md) | design: growing the journal file off the commit path |
 | [design/10-hnsw-persist.md](design/10-hnsw-persist.md) | design: persisting HNSW graphs, validated restore and catch-up |
 | [design/11-auth-scopes.md](design/11-auth-scopes.md) | design: scoped tokens, rotation, certificate reload, stream/long-poll caps |
+| [design/12-durability.md](design/12-durability.md) | design: size limits, journal corruption vs torn tail, repair opt-in, power-loss crash-point test |
 
 ## Evidence and numbers
 

@@ -30,6 +30,15 @@ var (
 	// ErrWrongKEK: the key-encryption key does not match the one this
 	// database was created with.
 	ErrWrongKEK = errors.New("freshdb: wrong key-encryption key for this database")
+	// ErrTooLarge: the transaction does not fit in one log frame
+	// (MaxTxBytes encoded, MaxTxOps ops). Nothing was written.
+	ErrTooLarge = errors.New("freshdb: transaction too large")
+)
+
+// Size limits of one transaction, checked at commit (after encryption).
+const (
+	MaxTxBytes = format.MaxFrameSize
+	MaxTxOps   = format.MaxOps
 )
 
 // Op re-exports the log op type for advanced users (Entries).

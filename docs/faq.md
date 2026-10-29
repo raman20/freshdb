@@ -45,10 +45,12 @@ or agent), or run `freshdb serve` and send writes through it.
 
 **What happens if my process crashes mid-commit?**
 Acked transactions survive. A transaction that wasn't acked either fully
-appears after recovery or doesn't appear at all. A torn final segment is
-repaired to its valid prefix, and the damaged original is kept in
-`quarantine/`. This is checked by the FreshLog spec, the simulator and the
-kill -9 crash test.
+appears after recovery or doesn't appear at all. This is checked by the
+FreshLog spec, the simulator, the kill -9 crash test and, for the journal
+store, a power-loss test that enumerates torn and reordered writes
+(docs/design/12-durability.md). Damaged data (a bit flip, a bad sector) is
+reported as `ErrCorrupt`, never silently skipped; `--repair-tail` keeps the
+valid prefix of a damaged final segment if you cannot restore a backup.
 
 **What exactly does shred guarantee?**
 After `Shred(s)` returns, freshDB will not return any value written with

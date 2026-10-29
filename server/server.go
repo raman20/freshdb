@@ -39,6 +39,7 @@ type Server struct {
 	DB *freshdb.DB
 
 	streams, waiters chan struct{} // nil: no cap
+	maxBody          int64
 }
 
 func newServer(db *freshdb.DB, o Options) *Server {
@@ -53,6 +54,10 @@ func newServer(db *freshdb.DB, o Options) *Server {
 		return make(chan struct{}, n)
 	}
 	s.streams, s.waiters = mk(o.MaxStreams, 1024), mk(o.MaxWaiters, 4096)
+	s.maxBody = int64(o.MaxBody)
+	if s.maxBody <= 0 {
+		s.maxBody = DefaultMaxBody
+	}
 	return s
 }
 
@@ -75,6 +80,9 @@ func (s *Server) routes() http.Handler {
 			if err := permit(r, scope, k, n); err != nil {
 				fail(w, err)
 				return
+			}
+			if r.Body != nil {
+				r.Body = http.MaxBytesReader(w, r.Body, s.maxBody)
 			}
 			f(w, r)
 		})
@@ -144,6 +152,8 @@ func fail(w http.ResponseWriter, err error) {
 		code = http.StatusConflict
 	case errors.Is(err, freshdb.ErrShredded), errors.Is(err, freshdb.ErrCompacted):
 		code = http.StatusGone
+	case errors.As(err, new(*http.MaxBytesError)), errors.Is(err, freshdb.ErrTooLarge):
+		code = http.StatusRequestEntityTooLarge
 	case errors.Is(err, freshdb.ErrBadLSN), errors.Is(err, errBad):
 		code = http.StatusBadRequest
 	case errors.Is(err, freshdb.ErrFenced), errors.Is(err, errBusy):
@@ -208,7 +218,9 @@ func update(r *http.Request, fn func(*freshdb.Tx) error) (uint64, error) {
 	return br(r).UpdateLSN(r.Context(), fn)
 }
 
-func body(r *http.Request) ([]byte, error) { return io.ReadAll(io.LimitReader(r.Body, 64<<20)) }
+// body reads the request body; the route wrapper caps it (MaxBody), and
+// a larger body is an error (413), never a silent truncation.
+func body(r *http.Request) ([]byte, error) { return io.ReadAll(r.Body) }
 
 // ---- KV ----
 
@@ -295,7 +307,7 @@ func (s *Server) tx(w http.ResponseWriter, r *http.Request) {
 	r = s.with(r)
 	var ops []TxOp
 	if err := json.NewDecoder(r.Body).Decode(&ops); err != nil {
-		fail(w, fmt.Errorf("%w: %v", errBad, err))
+		fail(w, fmt.Errorf("%w: %w", errBad, err))
 		return
 	}
 	for _, o := range ops {
@@ -699,7 +711,7 @@ func (s *Server) vecSearch(w http.ResponseWriter, r *http.Request) {
 		Ef     int       `json:"ef"`    // HNSW beam width (0 = the collection's)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
-		fail(w, fmt.Errorf("%w: %v", errBad, err))
+		fail(w, fmt.Errorf("%w: %w", errBad, err))
 		return
 	}
 	if q.K == 0 {
@@ -736,7 +748,7 @@ func (s *Server) vecANN(w http.ResponseWriter, r *http.Request) {
 	var o freshdb.ANNOptions
 	if r.ContentLength != 0 {
 		if err := json.NewDecoder(r.Body).Decode(&o); err != nil {
-			fail(w, fmt.Errorf("%w: %v", errBad, err))
+			fail(w, fmt.Errorf("%w: %w", errBad, err))
 			return
 		}
 	}
@@ -750,7 +762,7 @@ func (s *Server) vecANN(w http.ResponseWriter, r *http.Request) {
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	var q struct{ Coll, Field string }
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
-		fail(w, fmt.Errorf("%w: %v", errBad, err))
+		fail(w, fmt.Errorf("%w: %w", errBad, err))
 		return
 	}
 	if err := s.DB.RegisterIndex(r.Context(), q.Coll, q.Field); err != nil {
@@ -773,7 +785,7 @@ func (s *Server) branchCreate(w http.ResponseWriter, r *http.Request) {
 		At         uint64
 	}
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
-		fail(w, fmt.Errorf("%w: %v", errBad, err))
+		fail(w, fmt.Errorf("%w: %w", errBad, err))
 		return
 	}
 	if q.From == "" {
@@ -789,7 +801,7 @@ func (s *Server) branchCreate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) rewind(w http.ResponseWriter, r *http.Request) {
 	var q struct{ LSN uint64 }
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
-		fail(w, fmt.Errorf("%w: %v", errBad, err))
+		fail(w, fmt.Errorf("%w: %w", errBad, err))
 		return
 	}
 	if err := s.DB.Rewind(r.Context(), r.PathValue("b"), q.LSN); err != nil {
@@ -810,7 +822,7 @@ func (s *Server) branchDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) promote(w http.ResponseWriter, r *http.Request) {
 	var q struct{ To string }
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
-		fail(w, fmt.Errorf("%w: %v", errBad, err))
+		fail(w, fmt.Errorf("%w: %w", errBad, err))
 		return
 	}
 	if err := s.DB.Promote(r.Context(), r.PathValue("b"), q.To); err != nil {
@@ -907,7 +919,7 @@ func (s *Server) compact(w http.ResponseWriter, r *http.Request) {
 func (s *Server) gc(w http.ResponseWriter, r *http.Request) {
 	o, err := ParseGCOptions(r.URL.Query().Get, 5*time.Minute)
 	if err != nil {
-		fail(w, fmt.Errorf("%w: %v", errBad, err))
+		fail(w, fmt.Errorf("%w: %w", errBad, err))
 		return
 	}
 	st, err := s.DB.GC(r.Context(), o)

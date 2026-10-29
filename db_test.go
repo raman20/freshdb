@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"testing"
 
@@ -131,7 +133,8 @@ func TestRegressionVectorsDeleteAndRestart(t *testing.T) {
 }
 
 // Regression for previous-prototype bug #4: one partial/torn index file bricked open.
-// Here: a torn tail segment is repaired, a corrupt snapshot is ignored.
+// Here: a damaged tail segment refuses open unless WithRepairTail, which
+// repairs it; a corrupt snapshot is ignored.
 func TestRegressionTornFilesDoNotBlockOpen(t *testing.T) {
 	st := store.NewMem()
 	db := mustOpen(t, st, WithSnapshotEvery(3))
@@ -151,7 +154,31 @@ func TestRegressionTornFilesDoNotBlockOpen(t *testing.T) {
 		o[m.Logs["L1"].SnapKey] = []byte("garbage")
 		o[lastSeg] = o[lastSeg][:len(o[lastSeg])/2]
 	})
-	db = mustOpen(t, st)
+	// by default a damaged tail is corruption: refuse, change nothing
+	dump := func() string {
+		var b strings.Builder
+		st.Raw(func(o map[string][]byte) {
+			ks := make([]string, 0, len(o))
+			for k := range o {
+				if !strings.HasPrefix(k, "manifest/") { // open takes a new epoch first
+					ks = append(ks, k)
+				}
+			}
+			sort.Strings(ks)
+			for _, k := range ks {
+				fmt.Fprintf(&b, "%s=%x;", k, o[k])
+			}
+		})
+		return b.String()
+	}
+	before := dump()
+	if _, err := OpenStore(ctx, st); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("open with damaged tail: %v, want ErrCorrupt", err)
+	}
+	if dump() != before {
+		t.Fatal("refused open changed log data")
+	}
+	db = mustOpen(t, st, WithRepairTail(true))
 	defer db.Close()
 	if _, err := db.Get(ctx, "k0"); err != nil {
 		t.Fatal(err)

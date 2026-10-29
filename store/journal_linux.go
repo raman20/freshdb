@@ -27,3 +27,18 @@ func punch(f *os.File, off, n int64) error {
 	}
 	return zeroRange(f, off, n)
 }
+
+// nextData returns the offset of the first data (non-hole) byte at or
+// after off, size if there is none, or off if it cannot tell.
+func nextData(f *os.File, off int64) int64 {
+	d, err := unix.Seek(int(f.Fd()), off, unix.SEEK_DATA)
+	if err == unix.ENXIO {
+		if st, err := f.Stat(); err == nil {
+			return st.Size()
+		}
+	}
+	if err != nil {
+		return off
+	}
+	return d
+}

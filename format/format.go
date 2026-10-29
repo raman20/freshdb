@@ -71,13 +71,16 @@ const (
 	SegHeaderSize = 8 + 2 + 2 + 8 + 8 + 4
 	FrameHdrSize  = 8
 	MaxFrameSize  = 64 << 20
-	maxOps        = 1 << 20
+	MaxOps        = 1 << 20
 )
 
 var (
 	ErrTorn    = errors.New("format: torn or corrupt tail")
 	ErrHeader  = errors.New("format: bad segment header")
 	ErrCorrupt = errors.New("format: corrupt frame")
+	// ErrVersion: an intact header (CRC ok) with a version this build does
+	// not read, e.g. written by a newer freshdb. Never repaired.
+	ErrVersion = errors.New("format: unsupported segment version")
 )
 
 // SegHeader is the fixed header of a segment object.
@@ -104,7 +107,7 @@ func DecodeHeader(b []byte) (SegHeader, error) {
 		return SegHeader{}, ErrHeader
 	}
 	if v := binary.LittleEndian.Uint16(b[8:]); v != SegVersion {
-		return SegHeader{}, fmt.Errorf("%w: unsupported version %d (refusing to guess)", ErrHeader, v)
+		return SegHeader{}, fmt.Errorf("%w %d (this build reads %d; written by a newer freshdb? upgrade the binary)", ErrVersion, v, SegVersion)
 	}
 	return SegHeader{Epoch: binary.LittleEndian.Uint64(b[12:]), Seq: binary.LittleEndian.Uint64(b[20:])}, nil
 }
@@ -208,7 +211,7 @@ func DecodePayload(p []byte) (*Frame, error) {
 	copy(f.Prev[:], r.b[:32])
 	r.b = r.b[32:]
 	n := r.uv()
-	if r.err || n > maxOps || n > uint64(len(r.b)) {
+	if r.err || n > MaxOps || n > uint64(len(r.b)) {
 		return nil, ErrCorrupt
 	}
 	f.Ops = make([]Op, 0, n)
