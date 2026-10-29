@@ -32,9 +32,10 @@ VARIABLES
   ws,        \* per-writer volatile state
   acked,     \* txns acknowledged to clients
   used,      \* txns ever submitted (clients never resubmit an ambiguous txn)
-  corrupt    \* recovery found damage it must refuse (ErrCorrupt)
+  corrupt,   \* recovery found damage it must refuse (ErrCorrupt)
+  notes      \* object store: seqs with a repair note (log/<id>/<seq>.repair)
 
-vars == <<segs, mans, inflight, ws, acked, used, corrupt>>
+vars == <<segs, mans, inflight, ws, acked, used, corrupt, notes>>
 
 Present(s) == segs[s] # NoSeg
 DenseLen == CHOOSE n \in 0..MaxSeq :
@@ -52,6 +53,7 @@ TypeOK ==
   /\ ws \in [Writers -> WS]
   /\ acked \subseteq Txns /\ used \subseteq Txns
   /\ corrupt \in BOOLEAN
+  /\ notes \subseteq Seqs
 
 Init ==
   /\ segs = [s \in Seqs |-> NoSeg]
@@ -60,12 +62,13 @@ Init ==
   /\ ws = [w \in Writers |-> Idle]
   /\ acked = {} /\ used = {}
   /\ corrupt = FALSE
+  /\ notes = {}
 
 \* ---- open: acquire the write lease by creating manifest m+1 ----
 ReadManifest(w) ==
   /\ ws[w].mode = "down"
   /\ ws' = [ws EXCEPT ![w] = [Idle EXCEPT !.mode = "acq", !.pend = Len(mans)]]
-  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt>>
+  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt, notes>>
 
 PutManifest(w) ==
   /\ ws[w].mode = "acq"
@@ -75,7 +78,7 @@ PutManifest(w) ==
           /\ ws' = [ws EXCEPT ![w].mode = "scan", ![w].epoch = LatestEpoch + 1]
      ELSE /\ mans' = mans                \* 412: someone else won; retry
           /\ ws' = [ws EXCEPT ![w] = Idle]
-  /\ UNCHANGED <<segs, inflight, acked, used, corrupt>>
+  /\ UNCHANGED <<segs, inflight, acked, used, corrupt, notes>>
 
 \* ---- recovery: scan dense prefix, repair torn tail, then fence ----
 Superseded(w, n) == \E s \in 1..n : segs[s].epoch > ws[w].epoch
@@ -89,17 +92,17 @@ Scan(w) ==
      /\ n < MaxSeq
      /\ IF Superseded(w, n)
         THEN /\ ws' = [ws EXCEPT ![w].mode = "dead"]       \* ErrFenced
-             /\ UNCHANGED <<segs, corrupt>>
-        ELSE IF \E s \in 1..n : segs[s].torn /\ s < n
+             /\ UNCHANGED <<segs, corrupt, notes>>
+        ELSE IF \E s \in 1..n : segs[s].torn /\ s < n /\ s \notin notes
         THEN /\ corrupt' = TRUE                             \* damage below the tail
              /\ ws' = [ws EXCEPT ![w].mode = "dead"]
-             /\ segs' = segs
+             /\ UNCHANGED notes
         ELSE /\ corrupt' = corrupt
-             /\ segs' = IF n > 0 /\ segs[n].torn          \* repair torn tail
-                        THEN [segs EXCEPT ![n].torn = FALSE]
-                        ELSE segs
+             /\ notes' = IF n > 0 /\ segs[n].torn         \* repair torn tail: note it,
+                         THEN notes \cup {n}                \* never rewrite (damagedSeg)
+                         ELSE notes
              /\ ws' = [ws EXCEPT ![w].mode = "fence", ![w].next = n + 1]
-  /\ UNCHANGED <<mans, inflight, acked, used>>
+  /\ UNCHANGED <<segs, mans, inflight, acked, used>>
 
 Fence(w) ==
   /\ ws[w].mode = "fence"
@@ -110,7 +113,7 @@ Fence(w) ==
           /\ ws' = [ws EXCEPT ![w].mode = "open", ![w].next = s + 1]
      ELSE /\ segs' = segs                               \* lost race: rescan
           /\ ws' = [ws EXCEPT ![w].mode = "scan"]
-  /\ UNCHANGED <<mans, inflight, acked, used, corrupt>>
+  /\ UNCHANGED <<mans, inflight, acked, used, corrupt, notes>>
 
 \* ---- group commit ----
 Send(w) ==
@@ -123,20 +126,20 @@ Send(w) ==
           IN /\ inflight' = inflight \cup {m}
              /\ ws' = [ws EXCEPT ![w].mode = "wait", ![w].out = m]
        /\ used' = used \cup B
-  /\ UNCHANGED <<segs, mans, acked, corrupt>>
+  /\ UNCHANGED <<segs, mans, acked, corrupt, notes>>
 
 \* the store executes a request (create-only)
 Land(m) ==
   /\ m \in inflight
   /\ segs' = IF Present(m.seq) THEN segs ELSE [segs EXCEPT ![m.seq] = m.rec]
   /\ inflight' = inflight \ {m}
-  /\ UNCHANGED <<mans, ws, acked, used, corrupt>>
+  /\ UNCHANGED <<mans, ws, acked, used, corrupt, notes>>
 
 \* the request is lost
 Drop(m) ==
   /\ m \in inflight
   /\ inflight' = inflight \ {m}
-  /\ UNCHANGED <<segs, mans, ws, acked, used, corrupt>>
+  /\ UNCHANGED <<segs, mans, ws, acked, used, corrupt, notes>>
 
 \* power loss while a crashed writer's PUT is being written (local FS only)
 LandTorn(m) ==
@@ -146,7 +149,7 @@ LandTorn(m) ==
   /\ \E keep \in SUBSET m.rec.batch :
        segs' = [segs EXCEPT ![m.seq] = [m.rec EXCEPT !.batch = keep, !.torn = TRUE]]
   /\ inflight' = inflight \ {m}
-  /\ UNCHANGED <<mans, ws, acked, used, corrupt>>
+  /\ UNCHANGED <<mans, ws, acked, used, corrupt, notes>>
 
 \* putExactlyOnce: response arrives / read-back after a 412 or timeout
 Reply(w) ==
@@ -162,18 +165,18 @@ Reply(w) ==
                /\ UNCHANGED <<acked, inflight>>
           ELSE /\ inflight' = inflight \cup {m}          \* lost: retry same bytes
                /\ UNCHANGED <<ws, acked>>
-  /\ UNCHANGED <<segs, mans, used, corrupt>>
+  /\ UNCHANGED <<segs, mans, used, corrupt, notes>>
 
 \* retries exhausted while the PUT may still be in flight: ErrUnknownOutcome
 GiveUp(w) ==
   /\ ws[w].mode = "wait"
   /\ ws' = [ws EXCEPT ![w].mode = "dead"]
-  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt>>
+  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt, notes>>
 
 Crash(w) ==
   /\ ws[w].mode # "down"
   /\ ws' = [ws EXCEPT ![w] = Idle]
-  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt>>
+  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt, notes>>
 
 Next ==
   \/ \E w \in Writers : ReadManifest(w) \/ PutManifest(w) \/ Scan(w) \/ Fence(w)
@@ -203,5 +206,7 @@ ManifestMonotone == \A i \in 1..Len(mans) : i > 1 => mans[i] > mans[i-1]
 
 \* temporal: acked is never retracted, segments are immutable once written
 AckedStable == [][acked \subseteq acked']_vars
-Immutable == [][\A s \in Seqs : Present(s) => (segs'[s] = segs[s] \/ (segs[s].torn /\ segs'[s] = [segs[s] EXCEPT !.torn = FALSE]))]_vars
+Immutable == [][\A s \in Seqs : Present(s) => segs'[s] = segs[s]]_vars
+\* a repair note is only ever written for a torn segment
+NotesTorn == \A s \in notes : Present(s) /\ segs[s].torn
 =============================================================================

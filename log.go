@@ -2,6 +2,7 @@ package freshdb
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sort"
@@ -238,8 +239,12 @@ func (l *logState) entryAt(ctx context.Context, lsn uint64) (*lens.Entry, error)
 // recoverLog reads a log's segments. A damaged segment is an error
 // (ErrCorrupt): we never silently drop acknowledged data. Only with
 // Options.RepairTail, and only for the final segment of the writable
-// (lease-holding) log, is the damaged object copied to quarantine/ and
-// replaced by its valid prefix.
+// (lease-holding) log, is the damage accepted: a create-only repair note
+// (repairKey) records the segment's exact bytes and how many frames are
+// kept, and the fence that follows makes it a non-tail segment. Nothing is
+// deleted or rewritten, so a crash or a racing zombie cannot lose the valid
+// prefix or swap in other frames. A damaged non-tail segment is accepted
+// only with a note that matches its bytes.
 func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error {
 	st := db.st
 	l.mu.Lock()
@@ -252,6 +257,12 @@ func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error 
 	expectSeq := l.nextSeq
 	if expectSeq == 0 {
 		expectSeq = 1
+	}
+	var lastSeq uint64 // the tail; other keys (repair notes) do not count
+	for _, k := range keys {
+		if seq, ok := parseNum(k, "log/"+l.meta.ID+"/", ".seg"); ok {
+			lastSeq = max(lastSeq, seq)
+		}
 	}
 	for _, k := range keys {
 		seq, ok := parseNum(k, "log/"+l.meta.ID+"/", ".seg")
@@ -269,7 +280,6 @@ func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error 
 			return err
 		}
 		h, frames, valid, derr := format.DecodeSegment(data)
-		last := k == keys[len(keys)-1]
 		if derr != nil && !(errors.Is(derr, format.ErrTorn) || errors.Is(derr, format.ErrHeader)) {
 			return fmt.Errorf("%s: %w", k, derr)
 		}
@@ -282,29 +292,12 @@ func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error 
 			}
 		}
 		if derr != nil {
-			if !last {
-				return fmt.Errorf("%w: damaged segment %s is not the tail: %v", ErrCorrupt, k, derr)
+			stop, err := db.damagedSeg(ctx, l, k, seq, seq == lastSeq, writable, data, h, len(frames), valid, derr)
+			if err != nil {
+				return err
 			}
-			if !db.opts.RepairTail {
-				return fmt.Errorf("%w: final segment %s of log %s is damaged (%v; %d valid frames in the first %d of %d bytes). Store writes are atomic, so this is corruption and may hide acknowledged commits; the segment was left as is. Restore from a backup, or open with WithRepairTail (CLI: --repair-tail) to keep the valid prefix (the damaged object is kept under quarantine/)", ErrCorrupt, k, l.meta.ID, derr, len(frames), valid, len(data))
-			}
-			if !writable {
-				// read-only view: use the valid prefix, ignore the tail
-				if errors.Is(derr, format.ErrHeader) {
-					break
-				}
-			} else {
-				if l.lastEp > db.epoch || h.Epoch > db.epoch {
-					return fmt.Errorf("%w: log %s superseded (epoch %d)", ErrFenced, l.meta.ID, max(l.lastEp, h.Epoch))
-				}
-				if err := db.repairTail(ctx, l, k, seq, data, h, frames, valid, derr); err != nil {
-					return err
-				}
-				if errors.Is(derr, format.ErrHeader) {
-					frames = nil
-				}
-				h.Epoch = max(h.Epoch, db.epoch)
-				l.repairs++
+			if stop {
+				break
 			}
 		}
 		if len(frames) > 0 {
@@ -337,22 +330,54 @@ func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error 
 	return nil
 }
 
-func (db *DB) repairTail(ctx context.Context, l *logState, k string, seq uint64, data []byte, h format.SegHeader, frames []format.Decoded, valid int, derr error) error {
-	q := fmt.Sprintf("quarantine/%s/%020d-%d.seg", l.meta.ID, seq, db.epoch)
-	if err := db.st.PutIfAbsent(ctx, q, data); err != nil && !errors.Is(err, store.ErrExists) {
-		return err
+// damagedSeg decides whether recovery may use the valid prefix (nframes
+// frames, valid bytes) of damaged segment k. stop: a read-only view ends
+// the log before k. Otherwise nil means "use the prefix".
+func (db *DB) damagedSeg(ctx context.Context, l *logState, k string, seq uint64, tail, writable bool, data []byte, h format.SegHeader, nframes, valid int, derr error) (stop bool, err error) {
+	note := repairNote(seq, data, nframes, valid)
+	switch got, err := db.st.Get(ctx, repairKey(l.meta.ID, seq)); {
+	case err == nil && string(got) == string(note):
+		return false, nil // repaired by an earlier open
+	case err == nil:
+		return false, fmt.Errorf("%w: segment %s does not match its repair note (damaged again?)", ErrCorrupt, k)
+	case !errors.Is(err, store.ErrNotFound):
+		return false, err
 	}
-	if err := db.st.Delete(ctx, k); err != nil {
-		return err
+	if !tail {
+		return false, fmt.Errorf("%w: damaged segment %s is not the tail: %v", ErrCorrupt, k, derr)
 	}
-	var fixed []byte
-	if errors.Is(derr, format.ErrHeader) {
-		fixed = format.EncodeHeader(format.SegHeader{Epoch: db.epoch, Seq: seq})
-	} else {
-		fixed = append([]byte{}, data[:valid]...)
+	if !db.opts.RepairTail {
+		return false, fmt.Errorf("%w: final segment %s of log %s is damaged (%v; %d valid frames in the first %d of %d bytes). Store writes are atomic, so this is corruption and may hide acknowledged commits; the segment was left as is. Restore from a backup, or open with WithRepairTail (CLI: --repair-tail) to keep the valid prefix (the damaged object stays in place)", ErrCorrupt, k, l.meta.ID, derr, nframes, valid, len(data))
 	}
-	db.logf("freshdb: repaired torn tail of %s (%d valid frames kept, damaged copy at %s)", k, len(frames), q)
-	return putExactlyOnce(ctx, db.st, k, fixed)
+	if !writable {
+		// read-only view: use the valid prefix, or stop before an
+		// unreadable header
+		return errors.Is(derr, format.ErrHeader), nil
+	}
+	if l.lastEp > db.epoch || h.Epoch > db.epoch {
+		return false, fmt.Errorf("%w: log %s superseded (epoch %d)", ErrFenced, l.meta.ID, max(l.lastEp, h.Epoch))
+	}
+	if err := putExactlyOnce(ctx, db.st, repairKey(l.meta.ID, seq), note); err != nil {
+		if errors.Is(err, store.ErrExists) {
+			return false, fmt.Errorf("%w: segment %s: a different repair note exists", ErrCorrupt, k)
+		}
+		return false, err
+	}
+	l.repairs++
+	db.logf("freshdb: repaired damaged tail %s: %d valid frames kept, frames after byte %d dropped (note %s)", k, nframes, valid, repairKey(l.meta.ID, seq))
+	return false, nil
+}
+
+// repairKey names the repair note of segment seq (see recoverLog).
+func repairKey(log string, seq uint64) string {
+	return fmt.Sprintf("log/%s/%020d.repair", log, seq)
+}
+
+// repairNote is the exact content of a repair note: deterministic in the
+// segment bytes, so racing openers write identical notes, and a segment
+// that changes after its repair no longer matches.
+func repairNote(seq uint64, data []byte, nframes, valid int) []byte {
+	return fmt.Appendf(nil, "freshdb-repair v1 seq=%d frames=%d valid=%d size=%d sha256=%x\n", seq, nframes, valid, len(data), sha256.Sum256(data))
 }
 
 // fence writes an empty segment with our epoch at the next sequence number.

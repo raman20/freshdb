@@ -291,7 +291,10 @@ func (db *DB) Verify(ctx context.Context) (*VerifyReport, error) {
 			r.Objects++
 			r.Bytes += int64(len(b))
 			if strings.HasPrefix(k, "quarantine/") {
-				r.Warnings = append(r.Warnings, fmt.Sprintf("quarantined object %s (kept by an earlier --repair-tail)", k))
+				r.Warnings = append(r.Warnings, fmt.Sprintf("quarantined object %s (kept by an older --repair-tail)", k))
+			}
+			if strings.HasPrefix(k, "log/") && strings.HasSuffix(k, ".repair") {
+				r.Warnings = append(r.Warnings, fmt.Sprintf("repaired segment: %s (frames after the damage were dropped by --repair-tail)", strings.TrimSpace(string(b))))
 			}
 		}
 	}

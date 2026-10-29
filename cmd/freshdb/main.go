@@ -97,8 +97,8 @@ Every command takes --branch B (default main). Use --addr http://host:7070
 Key-encryption key: --kek-file F or FRESHDB_KEK (64 hex chars or base64 of
 32 bytes). Without one the DB runs in dev-key mode (key stored in the bucket).
 A damaged final log segment makes open fail (ErrCorrupt); --repair-tail
-(with serve or any local command) keeps its valid prefix instead and copies
-the damaged object to quarantine/. Prefer restoring from a backup.
+(with serve or any local command) keeps its valid prefix instead, leaving
+the damaged object in place with a repair note. Prefer restoring from a backup.
 `
 
 type cli struct {

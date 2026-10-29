@@ -50,7 +50,8 @@ type Options struct {
 	// between 16 and 256 MiB; negative = no cache.
 	ValueCacheBytes int
 	// RepairTail lets open repair a damaged final segment by keeping its
-	// valid prefix (the damaged object is copied to quarantine/ first).
+	// valid prefix. The damaged object stays in place; a create-only
+	// repair note (log/<id>/<seq>.repair) records which prefix is kept.
 	// Every supported store writes objects atomically, so a damaged tail is
 	// corruption, not a torn write, and may hold acknowledged commits: by
 	// default open refuses with ErrCorrupt and changes nothing. Set it (CLI:
@@ -194,18 +195,31 @@ func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
 	if o.ValueCacheBytes == 0 {
 		o.ValueCacheBytes = defaultValueCacheBytes()
 	}
-	var err error
 	db := &DB{st: &holdStore{Store: st}, opts: o, vcache: newValueCache(o.ValueCacheBytes), logs: map[string]*logState{}, views: map[string]*view{}, writers: map[string]*writer{}, annStats: map[string]lens.ANNLoadStats{}}
-	if err := db.acquire(ctx); err != nil {
+	if err := db.start(ctx, st); err != nil {
+		// Writers of branches opened before the failure are running, and
+		// the value cache holds memory: stop both without further writes.
+		db.Crash()
 		return nil, err
+	}
+	return db, nil
+}
+
+// start takes the write lease, opens the keyring and starts a writer per
+// branch (OpenStore).
+func (db *DB) start(ctx context.Context, st store.Store) error {
+	o := db.opts
+	if err := db.acquire(ctx); err != nil {
+		return err
 	}
 	kek := o.KEK
 	if o.Keys != nil {
+		var err error
 		if kek, err = o.Keys.KEK(ctx); err != nil {
-			return nil, err
+			return err
 		}
 		if len(kek) != 32 {
-			return nil, fmt.Errorf("freshdb: key provider returned %d bytes, want 32", len(kek))
+			return fmt.Errorf("freshdb: key provider returned %d bytes, want 32", len(kek))
 		}
 	}
 	db.devKEK = kek == nil
@@ -214,16 +228,17 @@ func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
 			db.logf("freshdb: WARNING: dev-mode key: the key-encryption key is stored in the bucket at keys/_kek; anyone with a copy of the bucket can read unshredded data. Supply a KEK (WithKeyProvider, FRESHDB_KEK, --kek-file) in production.")
 		})
 	}
+	var err error
 	if db.keys, err = openKeyring(ctx, st, o.Rand, kek); err != nil {
-		return nil, err
+		return err
 	}
 	db.env = env{db.keys}
 	for _, name := range sortedMapKeys(db.man.Refs) {
 		if _, err := db.openWritable(ctx, db.man.Refs[name]); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return db, nil
+	return nil
 }
 
 // devKEKWarn: Open warns once per process (through Logf) in dev-key mode.
@@ -274,8 +289,9 @@ func (db *DB) acquire(ctx context.Context) error {
 }
 
 // commitManifest applies change to a copy of the manifest and creates the
-// next manifest. ErrExists => a newer writer exists => we are fenced.
-// Caller holds db.mu.
+// next manifest. ErrExists => a newer writer exists => we are fenced; the
+// error also wraps ErrUnknownOutcome when the change may still be committed
+// (putManifest). Any failure halts the DB until reopen. Caller holds db.mu.
 func (db *DB) commitManifest(ctx context.Context, change func(m *Manifest) error) error {
 	if db.failed != nil {
 		return db.failed
@@ -291,6 +307,9 @@ func (db *DB) commitManifest(ctx context.Context, change func(m *Manifest) error
 	err := putManifest(ctx, db.st, next)
 	if errors.Is(err, store.ErrExists) {
 		db.failed = db.fenced()
+		if errors.Is(err, ErrUnknownOutcome) {
+			return fmt.Errorf("%w (change may be committed: %w)", db.failed, err)
+		}
 		return db.failed
 	}
 	if err != nil {
@@ -346,8 +365,9 @@ func (db *DB) loadLog(ctx context.Context, id string, writable bool) (*logState,
 	return l, nil
 }
 
-// openWritable recovers, fences and starts the writer for a log.
-// Caller must not hold db.mu (Open) or must (branch ops) — see callers.
+// openWritable recovers, fences and starts the writer for a log. Caller
+// holds db.mu, except OpenStore: the DB is not shared yet, so no writer it
+// started has requests and nothing else touches the maps.
 func (db *DB) openWritable(ctx context.Context, id string) (*writer, error) {
 	if w, ok := db.writers[id]; ok {
 		return w, nil
@@ -456,8 +476,8 @@ func (db *DB) Epoch() uint64 { return db.epoch }
 
 // Manifest returns a copy of the current manifest.
 func (db *DB) Manifest() *Manifest {
-	db.mu.Lock()
-	defer db.mu.Unlock()
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 	return db.man.clone()
 }
 

@@ -193,18 +193,23 @@ func loadLatestManifest(ctx context.Context, st store.Store) (*Manifest, error) 
 // id; we delete it). GC never deletes the newest manifests, so a free
 // slot below the latest always comes with a higher id
 // (spec/FreshGC.tla, NoZombie; the mutant without this check loses data).
+//
+// That higher id may also be a newer opener that read OUR manifest and
+// carried its change forward, so a loss found after our put landed wraps
+// both store.ErrExists (we are fenced) and ErrUnknownOutcome (the change
+// may be committed); so does a failed List after the put.
 func putManifest(ctx context.Context, st store.Store, m *Manifest) error {
 	if err := putExactlyOnce(ctx, st, manifestKey(m.ID), encodeManifest(m)); err != nil {
 		return err
 	}
 	keys, err := st.List(ctx, "manifest/")
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: manifest %d created, check for a newer one failed: %w", ErrUnknownOutcome, m.ID, err)
 	}
 	for _, k := range keys {
 		if n, ok := parseNum(k, "manifest/", ".mf"); ok && n > m.ID {
 			_ = st.Delete(ctx, manifestKey(m.ID))
-			return store.ErrExists
+			return fmt.Errorf("%w: manifest %d created, then found below %d: %w", store.ErrExists, m.ID, n, ErrUnknownOutcome)
 		}
 	}
 	return nil
@@ -213,32 +218,51 @@ func putManifest(ctx context.Context, st store.Store, m *Manifest) error {
 // putExactlyOnce creates key with data, retrying transient errors. Because
 // the write is create-only and the bytes are fixed, retries are idempotent:
 // ErrExists followed by a byte-identical read-back means an earlier attempt
-// (whose response was lost) succeeded. Different bytes => store.ErrExists.
+// (whose response was lost) succeeded.
+//
+// Result: nil = key holds data; store.ErrExists = key holds other bytes
+// (proven by a read, so "not ours" is certain); anything else wraps
+// ErrUnknownOutcome and never store.ErrExists, because callers read
+// ErrExists as "definitely not committed".
 func putExactlyOnce(ctx context.Context, st store.Store, key string, data []byte) error {
 	var err error
-	for attempt := 0; attempt < 4; attempt++ {
-		err = st.PutIfAbsent(ctx, key, data)
-		if err == nil {
+	for attempt := 0; attempt < 4 && ctx.Err() == nil; attempt++ {
+		if err = st.PutIfAbsent(ctx, key, data); err == nil {
 			return nil
 		}
-		if errors.Is(err, store.ErrExists) {
-			for r := 0; r < 4; r++ {
-				b, gerr := st.Get(ctx, key)
-				if gerr == nil {
-					if string(b) == string(data) {
-						return nil
-					}
-					return store.ErrExists
-				}
-				if errors.Is(gerr, store.ErrNotFound) {
-					break // cannot happen with a correct store; retry the put
-				}
-			}
+		if !errors.Is(err, store.ErrExists) {
 			continue
 		}
-		if ctx.Err() != nil {
-			return err
+		var mine bool
+		if mine, err = readBackIs(ctx, st, key, data); err == nil {
+			if mine {
+				return nil
+			}
+			return store.ErrExists
 		}
 	}
+	if err == nil {
+		err = ctx.Err()
+	}
 	return fmt.Errorf("%w: %w", ErrUnknownOutcome, err)
+}
+
+// readBackIs reports whether key holds exactly data, retrying failed reads.
+// A NotFound after the store said "exists" cannot happen on a correct store;
+// it is returned as an error so the caller retries the put.
+func readBackIs(ctx context.Context, st store.Store, key string, data []byte) (bool, error) {
+	var err error
+	for r := 0; r < 4 && ctx.Err() == nil; r++ {
+		var b []byte
+		if b, err = st.Get(ctx, key); err == nil {
+			return string(b) == string(data), nil
+		}
+		if errors.Is(err, store.ErrNotFound) {
+			return false, err
+		}
+	}
+	if err == nil {
+		err = ctx.Err()
+	}
+	return false, err
 }

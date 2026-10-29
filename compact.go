@@ -632,7 +632,11 @@ func (db *DB) deleteGarbage(ctx context.Context, g Garbage) (int, error) {
 			return 0, err
 		}
 		for _, k := range all {
-			if n, ok := parseNum(k, dir, suf); ok && n < g.Below {
+			n, ok := parseNum(k, dir, suf)
+			if !ok && g.Kind == "segs" {
+				n, ok = parseNum(k, dir, ".repair") // a repair note goes with its segment
+			}
+			if ok && n < g.Below {
 				keys = append(keys, k)
 			}
 		}
