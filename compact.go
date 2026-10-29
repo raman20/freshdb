@@ -248,8 +248,12 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 	defer func() { db.annCarry, db.annTainted = nil, false }()
 	db.logs, db.views, db.writers = map[string]*logState{}, map[string]*view{}, map[string]*writer{}
 	db.bw.Store(nil)
+	// The manifest is committed: the reload (and the sweep) finish even
+	// if the caller gave up; a failed reload would halt the DB, and an
+	// error here would report a committed compaction as failed.
+	rctx := context.WithoutCancel(ctx)
 	for _, name := range sortedMapKeys(db.man.Refs) {
-		if _, rerr := db.openWritable(ctx, db.man.Refs[name]); rerr != nil {
+		if _, rerr := db.openWritable(rctx, db.man.Refs[name]); rerr != nil {
 			if db.failed == nil {
 				db.failed = rerr
 			}
@@ -262,7 +266,7 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 		}
 	}
 	if err == nil {
-		err = db.sweepLocked(ctx, &stats)
+		err = db.sweepLocked(rctx, &stats)
 	}
 	return stats, err
 }

@@ -57,6 +57,8 @@ var (
 	backupE  = flag.Duration("backup-every", 90*time.Second, "backup period")
 	keys     = flag.Int("keys", 64, "keys per worker")
 	seed     = flag.Int64("seed", time.Now().UnixNano(), "random seed")
+	profE    = flag.Duration("profile-every", 0, "save heap and goroutine profiles and /metrics to DIR/prof this often (0: off; starts the server with --pprof)")
+	retain   = flag.String("compact-params", "", "extra query parameters for /v1/compact and /v1/gc, e.g. topic-max-messages=10000")
 )
 
 const token = "soak-admin-token"
@@ -173,7 +175,11 @@ func (h *harness) startServer() error {
 	if err != nil {
 		return err
 	}
-	h.cmd = exec.Command(*bin, "serve", "--db", h.db, "--listen", fmt.Sprintf("127.0.0.1:%d", port), "--token", token, "--log-format", "json")
+	args := []string{"serve", "--db", h.db, "--listen", fmt.Sprintf("127.0.0.1:%d", port), "--token", token, "--log-format", "json"}
+	if *profE > 0 {
+		args = append(args, "--pprof")
+	}
+	h.cmd = exec.Command(*bin, args...)
 	h.cmd.Stdout, h.cmd.Stderr = lf, lf
 	if err := h.cmd.Start(); err != nil {
 		return err
@@ -248,19 +254,22 @@ func (h *harness) run() error {
 		}()
 	}
 	bg(*compactE, func() {
-		if c, b, err := h.do("POST", "/v1/compact?grace=10s", nil); err == nil && c == 200 {
+		if c, b, err := h.do("POST", "/v1/compact?grace=10s"+extra(), nil); err == nil && c == 200 {
 			h.compacts.Add(1)
 		} else if err == nil && c != 503 && c != 409 {
 			h.fail(fmt.Errorf("compact: %d %s", c, b))
 		}
 	})
 	bg(*gcE, func() {
-		if c, b, err := h.do("POST", "/v1/gc?grace=10s&keep-for=30s", nil); err == nil && c == 200 {
+		if c, b, err := h.do("POST", "/v1/gc?grace=10s&keep-for=30s"+extra(), nil); err == nil && c == 200 {
 			h.gcs.Add(1)
 		} else if err == nil && c != 503 && c != 409 {
 			h.fail(fmt.Errorf("gc: %d %s", c, b))
 		}
 	})
+	if *profE > 0 {
+		bg(*profE, h.profile)
+	}
 	nextKill := time.Now().Add(h.killGap())
 	nextBackup := time.Now().Add(*backupE)
 	nextStatus := time.Now().Add(30 * time.Second)
@@ -295,6 +304,36 @@ func (h *harness) run() error {
 	}
 	h.status()
 	return err
+}
+
+func extra() string {
+	if *retain == "" {
+		return ""
+	}
+	return "&" + *retain
+}
+
+// profile saves the server's heap and goroutine profiles and its metrics
+// under DIR/prof, named by elapsed seconds.
+func (h *harness) profile() {
+	pd := filepath.Join(*dir, "prof")
+	if err := os.MkdirAll(pd, 0o755); err != nil {
+		log.Printf("profile: %v", err)
+		return
+	}
+	t := int(time.Since(h.start).Seconds())
+	for name, path := range map[string]string{
+		"heap": "/debug/pprof/heap", "goroutine": "/debug/pprof/goroutine", "metrics": "/metrics",
+	} {
+		c, b, err := h.do("GET", path, nil)
+		if err != nil || c != 200 {
+			log.Printf("profile %s: %d %v", name, c, err)
+			continue
+		}
+		if err := os.WriteFile(filepath.Join(pd, fmt.Sprintf("%s-%05d", name, t)), b, 0o644); err != nil {
+			log.Printf("profile: %v", err)
+		}
+	}
 }
 
 func (h *harness) killGap() time.Duration {
@@ -428,7 +467,7 @@ func (h *harness) readLive() reader {
 					return nil, err
 				}
 				for _, m := range ms {
-					out = append(out, m.Value)
+					out = append(out, fmt.Sprintf("%s@%d", m.Value, m.Offset))
 				}
 				if len(ms) < 1000 {
 					return out, nil
@@ -465,7 +504,7 @@ func readDB(db *freshdb.DB) reader {
 			err := db.View(ctx, func(tx *freshdb.Tx) error {
 				ms, err := tx.Topic(t).Read(uint64(from), 1<<30)
 				for _, m := range ms {
-					out = append(out, string(m.Value))
+					out = append(out, fmt.Sprintf("%s@%d", m.Value, m.Offset))
 				}
 				return err
 			})
@@ -556,19 +595,28 @@ func (h *harness) checkWorker(r reader, w *worker, lo, hi bounds, when string, l
 	if err != nil {
 		return err
 	}
-	for _, s := range ms {
-		n, err := strconv.Atoi(s)
+	prev := ""
+	for _, s := range ms { // "value@offset"
+		v, _, _ := strings.Cut(s, "@")
+		n, err := strconv.Atoi(v)
 		if err != nil || n <= last {
-			return fmt.Errorf("%s: topic t%d: message %q after %d (duplicate or out of order)", when, w.id, s, last)
+			return fmt.Errorf("%s: topic t%d (read from %d): message %q after %d (%q) (duplicate or out of order)", when, w.id, from, s, last, prev)
 		}
-		last = n
+		last, prev = n, s
 	}
 	l, u := lo.topics[w.id], hi.topics[w.id]
 	if last < l[0] || last > u[1] {
 		return fmt.Errorf("%s: topic t%d: last message %d, acked %d, tried %d", when, w.id, last, l[0], u[1])
 	}
-	if live {
-		w.topic.verified += len(ms)
+	if live && len(ms) > 0 {
+		// next offset to verify: offsets, not a count, since retention
+		// can start a read above from.
+		_, o, _ := strings.Cut(ms[len(ms)-1], "@")
+		off, err := strconv.Atoi(o)
+		if err != nil {
+			return fmt.Errorf("%s: topic t%d: bad offset in %q", when, w.id, ms[len(ms)-1])
+		}
+		w.topic.verified = off + 1
 		w.topic.lastSeen = last
 	}
 	return nil

@@ -313,6 +313,10 @@ func (db *DB) acquire(ctx context.Context) error {
 	return errors.New("freshdb: could not acquire write lease (manifest contention)")
 }
 
+// manifestPutTimeout bounds a manifest commit, which ignores the
+// caller's cancellation once started (commitManifest).
+const manifestPutTimeout = 2 * time.Minute
+
 // commitManifest applies change to a copy of the manifest and creates the
 // next manifest. ErrExists => a newer writer exists => we are fenced; the
 // error also wraps ErrUnknownOutcome when the change may still be committed
@@ -329,7 +333,16 @@ func (db *DB) commitManifest(ctx context.Context, change func(m *Manifest) error
 		return err
 	}
 	next.ID = db.man.ID + 1
-	err := putManifest(ctx, db.st, next)
+	// A caller that has given up gets nothing committed and no halt. Once
+	// the put starts it runs to the end on its own deadline: a cancel in
+	// the middle would leave the outcome unknown, which halts the DB (an
+	// HTTP client timing out on /v1/compact did, in a soak).
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	pctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), manifestPutTimeout)
+	defer cancel()
+	err := putManifest(pctx, db.st, next)
 	if errors.Is(err, store.ErrExists) {
 		db.failed = db.fenced()
 		if errors.Is(err, ErrUnknownOutcome) {
