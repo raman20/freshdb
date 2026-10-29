@@ -20,6 +20,15 @@ type FaultProbs struct {
 	Dup        float64 // effect applied, client sees a duplicated-retry 412
 	ReadFail   float64 // Get/List fails
 	Torn       float64 // segment/snapshot put: a random PREFIX is stored, then error (crash mid-write)
+
+	// Read-path faults. They are transient: the stored object is unchanged
+	// and a re-read may return the right bytes. They hit only the log's
+	// objects (readFaultable); other prefixes join as their components are
+	// reviewed (docs/components/log.md).
+	BitFlip   float64 // Get returns the object with one bit flipped
+	Misdirect float64 // Get returns another object of the same directory
+	ShortRead float64 // the transfer is cut short: ErrShortRead (Store.Get contract)
+	StaleList float64 // List of log/ omits the newest one or two keys
 }
 
 // Faulty wraps a Store with a seeded fault injector. With a single caller
@@ -103,7 +112,33 @@ func (f *Faulty) Get(ctx context.Context, key string) ([]byte, error) {
 	if f.roll(f.P.ReadFail) {
 		return nil, ErrInjected
 	}
-	return f.Inner.Get(ctx, key)
+	b, err := f.Inner.Get(ctx, key)
+	if err != nil || !readFaultable(key) {
+		return b, err
+	}
+	switch {
+	case len(b) > 0 && f.roll(f.P.BitFlip):
+		c := append([]byte{}, b...)
+		bit := f.rng.Intn(len(c) * 8)
+		c[bit/8] ^= 1 << (bit % 8)
+		f.Trace = append(f.Trace, fmt.Sprintf("get-bitflip %s %d", key, bit))
+		return c, nil
+	case f.roll(f.P.Misdirect):
+		dir := key[:strings.LastIndex(key, "/")+1]
+		keys, lerr := f.Inner.List(ctx, dir)
+		if lerr == nil && len(keys) > 1 {
+			other := keys[f.rng.Intn(len(keys))]
+			if other != key {
+				f.Trace = append(f.Trace, fmt.Sprintf("get-misdirect %s -> %s", key, other))
+				return f.Inner.Get(ctx, other)
+			}
+		}
+	case len(b) > 0 && f.roll(f.P.ShortRead):
+		n := f.rng.Intn(len(b))
+		f.Trace = append(f.Trace, fmt.Sprintf("get-short %s %d/%d", key, n, len(b)))
+		return nil, fmt.Errorf("%w: %s: got %d of %d bytes", ErrShortRead, key, n, len(b))
+	}
+	return b, nil
 }
 
 func (f *Faulty) List(ctx context.Context, prefix string) ([]string, error) {
@@ -112,7 +147,21 @@ func (f *Faulty) List(ctx context.Context, prefix string) ([]string, error) {
 	if f.roll(f.P.ReadFail) {
 		return nil, ErrInjected
 	}
-	return f.Inner.List(ctx, prefix)
+	keys, err := f.Inner.List(ctx, prefix)
+	if err == nil && strings.HasPrefix(prefix, "log/") && len(keys) > 0 && f.roll(f.P.StaleList) {
+		n := len(keys) - 1 - f.rng.Intn(min(2, len(keys))) // omit the newest 1 or 2
+		f.Trace = append(f.Trace, fmt.Sprintf("list-stale %s %d/%d", prefix, n, len(keys)))
+		keys = keys[:n]
+	}
+	return keys, err
+}
+
+// readFaultable: the objects read-path faults hit. LIST staleness is only
+// injected under log/: fencing (putManifest) needs a LIST of manifest/
+// that reflects every completed create, which S3, the journal and the
+// filesystem all provide.
+func readFaultable(key string) bool {
+	return strings.HasPrefix(key, "log/") || strings.HasPrefix(key, "manifest/")
 }
 
 func (f *Faulty) Delete(ctx context.Context, key string) error {

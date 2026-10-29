@@ -100,6 +100,11 @@ func (s *S3) Get(ctx context.Context, key string) ([]byte, error) {
 	if err != nil {
 		return nil, mapNF(err)
 	}
+	// net/http already fails a body shorter than Content-Length; check the
+	// object size too, so a truncated transfer can never pass as an object.
+	if info, err := o.Stat(); err == nil && info.Size != int64(len(b)) {
+		return nil, fmt.Errorf("%w: %s: got %d of %d bytes", ErrShortRead, key, len(b), info.Size)
+	}
 	return b, nil
 }
 

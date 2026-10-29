@@ -20,6 +20,9 @@ var (
 	// ErrCorrupt: stored bytes fail their checksum (or the file holds
 	// damaged records followed by valid ones). Never repaired silently.
 	ErrCorrupt = errors.New("store: corrupt")
+	// ErrShortRead: a transfer ended before the whole object arrived.
+	// Transient: retry the read.
+	ErrShortRead = errors.New("store: short read")
 	// ErrVersion: a journal file of a format this build does not know.
 	ErrVersion = format.ErrVersion
 )
@@ -29,6 +32,10 @@ type Store interface {
 	// PutIfAbsent atomically creates key with data, or fails with ErrExists.
 	// Readers never observe a partially written object.
 	PutIfAbsent(ctx context.Context, key string, data []byte) error
+	// Get returns the whole object or an error: a store must detect a
+	// truncated transfer (ErrShortRead) and never return a silent prefix,
+	// because a prefix that ends on a frame boundary is indistinguishable
+	// from a shorter object.
 	Get(ctx context.Context, key string) ([]byte, error)
 	// List returns the sorted keys directly under prefix (prefix must end in "/").
 	List(ctx context.Context, prefix string) ([]string, error)
