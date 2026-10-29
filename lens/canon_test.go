@@ -31,6 +31,8 @@ func TestCanonicalJSONNumbers(t *testing.T) {
 		{json.Number("18446744073709551616"), json.Number("18446744073709551617")},
 		{json.Number("0.1"), json.Number("0.10000000000000001")},
 		{json.Number("1"), "1"},
+		{json.Number("-1"), json.Number("1")},
+		{json.Number("-2.5"), 2.5},
 		{json.Number("1"), true},
 		{json.Number("1e9223372036854775807"), json.Number("1e9223372036854775806")},
 	}
@@ -69,4 +71,25 @@ func FuzzCanonNumber(f *testing.F) {
 func isNumber(s string) bool {
 	var n json.Number
 	return json.Unmarshal([]byte(s), &n) == nil && json.Valid([]byte(s)) && s != "" && (s[0] == '-' || (s[0] >= '0' && s[0] <= '9'))
+}
+
+// FuzzDocField: any stored bytes (the decoder the index runs on every
+// replayed document): no panic; a found field is valid JSON and already
+// canonical (canonicalising it again is the identity).
+func FuzzDocField(f *testing.F) {
+	for _, s := range []string{`{"a":1}`, `{"a":1.50,"b":[1e2,{"z":0,"y":-0.0}]}`, `{"a":"x"}`, `[1]`, `{"a":1e99999999999999999999}`, `{`, ``} {
+		f.Add([]byte(s), "a")
+	}
+	f.Fuzz(func(t *testing.T, doc []byte, field string) {
+		c, ok := DocField(doc, field)
+		if !ok {
+			return
+		}
+		if !json.Valid([]byte(c)) {
+			t.Fatalf("%q: field %q -> %q: not JSON", doc, field, c)
+		}
+		if c2, ok := CanonicalJSON(json.RawMessage(c)); !ok || c2 != c {
+			t.Fatalf("%q -> %q -> %q: not idempotent", doc, c, c2)
+		}
+	})
 }

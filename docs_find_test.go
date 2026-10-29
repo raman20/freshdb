@@ -3,6 +3,7 @@ package freshdb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"testing"
@@ -225,4 +226,33 @@ func TestDocIndexAfterCompactAndReopen(t *testing.T) {
 	db = mustOpen(t, st)
 	defer db.Close()
 	check(db, "after reopen")
+}
+
+// Bad input is refused with ErrBadValue (HTTP 400), and a second
+// RegisterIndex of the same index is a no-op.
+func TestDocBadValues(t *testing.T) {
+	db := mustOpen(t, store.NewMem())
+	defer db.Close()
+	for i := 0; i < 2; i++ {
+		if err := db.RegisterIndex(ctx, "c", "f"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := len(db.Manifest().Indexes); n != 1 {
+		t.Fatalf("%d index declarations, want 1", n)
+	}
+	err := db.Update(ctx, func(tx *Tx) error {
+		for _, doc := range []any{[]int{1}, "s", 1, nil, json.RawMessage(`[1]`), make(chan int)} {
+			if err := tx.Doc("c").Put("x", doc); !errors.Is(err, ErrBadValue) {
+				t.Errorf("Put(%#v) = %v, want ErrBadValue", doc, err)
+			}
+		}
+		if _, err := tx.Doc("c").Find("f", make(chan int)); !errors.Is(err, ErrBadValue) {
+			t.Errorf("Find(chan) = %v, want ErrBadValue", err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }

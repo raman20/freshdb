@@ -58,6 +58,17 @@ func TestHTTPAPI(t *testing.T) {
 	if got := do("GET", "/v1/docs/notes?field=user&value=alice", "", 200); !strings.Contains(got, "n1") {
 		t.Fatal(got)
 	}
+	if got := do("GET", "/v1/docs/notes/n1", "", 200); !strings.Contains(got, "likes tea") {
+		t.Fatal(got)
+	}
+	do("GET", "/v1/docs/notes/nope", "", 404)
+	do("PUT", "/v1/docs/notes/bad", `[1,2]`, 400) // not an object
+	do("PUT", "/v1/docs/notes/bad", `{"a":`, 400) // not JSON
+	do("POST", "/v1/indexes", `{`, 400)
+	do("POST", "/v1/indexes", `{"coll":"notes","field":"user"}`, 200) // again: no-op
+	if got := strings.TrimSpace(do("GET", "/v1/docs/notes?field=user&value=bob", "", 200)); got != "[]" {
+		t.Fatalf("no match: %s", got)
+	}
 	// numbers by exact value (no float64 rounding of the query)
 	do("PUT", "/v1/docs/nums/a", `{"n":12345678901234567891}`, 200)
 	do("PUT", "/v1/docs/nums/b", `{"n":1.0}`, 200)

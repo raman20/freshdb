@@ -2,6 +2,7 @@ package freshdb
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/raman20/freshdb/store"
@@ -78,5 +79,22 @@ func BenchmarkDocRegisterIndex100k(b *testing.B) {
 		if err := db.RegisterIndex(ctx, "c", fmt.Sprintf("f%d", i)); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// Heap held per document by an index (live heap with minus without, over
+// 100k documents with 100 distinct values; ids "d0000000").
+func BenchmarkDocIndexMemory(b *testing.B) {
+	heap := func(indexed bool) uint64 {
+		db := docsDB(b, 100_000, indexed)
+		defer db.Close()
+		var m runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&m)
+		return m.HeapAlloc
+	}
+	for i := 0; i < b.N; i++ {
+		without, with := heap(false), heap(true)
+		b.ReportMetric((float64(with)-float64(without))/100_000, "B/doc")
 	}
 }

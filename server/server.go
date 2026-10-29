@@ -224,7 +224,7 @@ func fail(w http.ResponseWriter, err error) {
 		code = http.StatusRequestEntityTooLarge
 	case errors.Is(err, os.ErrDeadlineExceeded):
 		code = http.StatusRequestTimeout // --read-timeout while reading the body
-	case errors.Is(err, freshdb.ErrBadLSN), errors.Is(err, freshdb.ErrBadName), errors.Is(err, errBad):
+	case errors.Is(err, freshdb.ErrBadLSN), errors.Is(err, freshdb.ErrBadName), errors.Is(err, freshdb.ErrBadValue), errors.Is(err, errBad):
 		code = http.StatusBadRequest
 	case errors.Is(err, freshdb.ErrFenced), errors.Is(err, errBusy):
 		code = http.StatusServiceUnavailable

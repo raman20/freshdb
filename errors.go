@@ -46,6 +46,10 @@ var (
 	// group name with a NUL byte), or a message acked in another topic's
 	// group.
 	ErrBadName = errors.New("freshdb: invalid name")
+
+	// ErrBadValue: a value the API refuses: a document that is not a JSON
+	// object, or a Find value that cannot be encoded as JSON. HTTP 400.
+	ErrBadValue = errors.New("freshdb: invalid value")
 )
 
 // Size limits of one transaction, checked at commit (after encryption).

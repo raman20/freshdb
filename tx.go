@@ -203,10 +203,10 @@ func (tx *Tx) Doc(coll string) DocTx { return DocTx{tx, coll} }
 func (d DocTx) Put(id string, doc any, opts ...WriteOpt) error {
 	b, err := json.Marshal(doc)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrBadValue, err)
 	}
 	if !json.Valid(b) || len(b) == 0 || b[0] != '{' {
-		return fmt.Errorf("freshdb: document must be a JSON object")
+		return fmt.Errorf("%w: document must be a JSON object", ErrBadValue)
 	}
 	return d.tx.write(format.Op{Kind: format.OpPut, Space: docSpace(d.coll), Key: id, Value: b}, opts)
 }
@@ -226,7 +226,7 @@ func (d DocTx) Get(id string) (json.RawMessage, error) { return d.tx.get(docSpac
 func (d DocTx) Find(field string, value any) ([]string, error) {
 	canon, ok := lens.CanonicalJSON(value)
 	if !ok {
-		return nil, fmt.Errorf("freshdb: unindexable value")
+		return nil, fmt.Errorf("%w: Find value is not JSON", ErrBadValue)
 	}
 	v, err := d.tx.lensView()
 	if err != nil {
