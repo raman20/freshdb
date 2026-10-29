@@ -44,6 +44,85 @@ type CompactOptions struct {
 	// them, so readers holding an older manifest (another process, a
 	// read-only open, a backup) can finish. 0 deletes them right away.
 	Grace time.Duration
+	// Topics removes old topic messages from the new bases (see
+	// TopicRetention). The zero value keeps every message.
+	Topics TopicRetention
+}
+
+// TopicRetention bounds what a compaction base keeps of each topic. A
+// topic is cut at an offset: messages below it are not copied into the
+// base, so they leave storage with the replaced objects and leave RAM
+// when the branch is reloaded from the base. Offsets never change: the
+// next message keeps its number, Read from below the cut starts at the
+// cut, and Len still counts every message ever published.
+//
+// The cut is the highest that both limits allow (MaxMessages kept; the
+// oldest messages up to the first one younger than MaxAge, by commit
+// time), lowered to the smallest cursor any consumer group on that
+// branch has committed for the topic unless IgnoreGroups is set, so a
+// group never misses a message it has not acked. A group created later,
+// or one on another branch, starts at the cut. Retention applies only
+// when a log gets a new base: Compact gives one to a log whose base is
+// already at its head only if retention would cut a topic there.
+type TopicRetention struct {
+	MaxAge       time.Duration // 0 = no age limit
+	MaxMessages  uint64        // 0 = no count limit
+	IgnoreGroups bool          // cut past unacked group messages
+}
+
+func (r TopicRetention) zero() bool { return r.MaxAge <= 0 && r.MaxMessages == 0 }
+
+// topicCuts returns, for each topic space of v whose retention cut at
+// head is above its current start, that cut. Caller holds v.mu (read).
+// now is called (once) only for MaxAge.
+func topicCuts(v *view, head uint64, now func() int64, r TopicRetention) map[string]uint64 {
+	if r.zero() {
+		return nil
+	}
+	var mins map[string]uint64 // topic space -> smallest group cursor
+	if !r.IgnoreGroups {
+		mins = map[string]uint64{}
+		for _, p := range v.kv.Scan(spaceCursor, "", head) {
+			_, topic, ok := strings.Cut(p.Key, "\x00")
+			c := uint64(0) // a cursor we cannot read keeps everything
+			if !ok {
+				continue
+			}
+			if !p.Ref() && len(p.Val) == 8 {
+				c = binary.LittleEndian.Uint64(p.Val)
+			}
+			if old, seen := mins[topicSpace(topic)]; !seen || c < old {
+				mins[topicSpace(topic)] = c
+			}
+		}
+	}
+	cuts := map[string]uint64{}
+	var limit int64
+	if r.MaxAge > 0 {
+		limit = now() - int64(r.MaxAge)
+	}
+	for _, space := range v.topic.Spaces() {
+		st := v.topic.Start(space)
+		ms := v.topic.Read(space, st, 0, head)
+		cut := st
+		if n := uint64(len(ms)); r.MaxMessages > 0 && n > r.MaxMessages {
+			cut = st + n - r.MaxMessages
+		}
+		if r.MaxAge > 0 {
+			i := 0
+			for i < len(ms) && ms[i].TS < limit {
+				i++
+			}
+			cut = max(cut, st+uint64(i))
+		}
+		if c, ok := mins[space]; ok && c < cut {
+			cut = max(c, st)
+		}
+		if cut > st {
+			cuts[space] = cut
+		}
+	}
+	return cuts
 }
 
 // CompactStats reports what Compact did.
@@ -51,6 +130,7 @@ type CompactStats struct {
 	Logs      int   `json:"logs"`       // logs given a new base
 	Keys      int   `json:"keys"`       // live keys written into bases
 	Messages  int   `json:"messages"`   // topic messages written into bases
+	Trimmed   int   `json:"trimmed"`    // topic messages removed by TopicRetention
 	BaseBytes int64 `json:"base_bytes"` // bytes written (images + value chunks)
 	Deleted   int   `json:"deleted"`    // objects deleted by sweeps
 	Pending   int   `json:"pending"`    // garbage items still waiting for their grace period
@@ -74,7 +154,7 @@ func baseMsgAAD(log, space string, m lens.Msg) []byte {
 // Compact compacts every log (see above). Commits wait while it runs;
 // reads continue. It is a no-op for logs unchanged since their base.
 func (db *DB) Compact(ctx context.Context, o CompactOptions) (CompactStats, error) {
-	return db.runCompaction(ctx, GCOptions{Grace: o.Grace}, false)
+	return db.runCompaction(ctx, GCOptions{Grace: o.Grace, Topics: o.Topics}, false)
 }
 
 // runCompaction is Compact (gc false) or GC (gc true).
@@ -222,22 +302,30 @@ func (db *DB) compactLocked(ctx context.Context, o GCOptions, gc bool, stats *Co
 		var bm *BaseMeta
 		if c.head {
 			head := l.head()
-			if l.meta.Base != nil && l.meta.Base.LSN == head {
-				continue
-			}
 			v := db.views[id]
+			if l.meta.Base != nil && l.meta.Base.LSN == head {
+				if v == nil || v.head != head {
+					continue
+				}
+				v.mu.RLock()
+				n := len(topicCuts(v, head, db.opts.Clock, o.Topics))
+				v.mu.RUnlock()
+				if n == 0 {
+					continue
+				}
+			}
 			if v == nil || v.head != head {
 				if v, err = db.buildView(ctx, l, head, db.man.Indexes, db.loadSnapshot(ctx, l)); err != nil {
 					return false, err
 				}
 			}
-			bm, err = db.writeBase(ctx, l, v, head, nil, stats)
+			bm, err = db.writeBase(ctx, l, v, head, nil, o.Topics, stats)
 		} else {
 			var v *view
 			if v, err = db.buildView(ctx, l, c.k, db.man.Indexes, nil); err != nil {
 				return false, err
 			}
-			bm, err = db.writeBase(ctx, l, v, c.k, &c, stats)
+			bm, err = db.writeBase(ctx, l, v, c.k, &c, o.Topics, stats)
 		}
 		if err != nil {
 			return false, err
@@ -320,7 +408,8 @@ func (db *DB) compactLocked(ctx context.Context, o GCOptions, gc bool, stats *Co
 // writeBase writes the base of log l at head from its view v.
 // at is nil for a base at the log's head; for a retention cut below the
 // head it gives the segment after the cut and the cut frame's time.
-func (db *DB) writeBase(ctx context.Context, l *logState, v *view, head uint64, at *cutInfo, stats *CompactStats) (*BaseMeta, error) {
+// r is the topic retention to apply.
+func (db *DB) writeBase(ctx context.Context, l *logState, v *view, head uint64, at *cutInfo, r TopicRetention, stats *CompactStats) (*BaseMeta, error) {
 	nonce, err := db.keys.randBytes(4)
 	if err != nil {
 		return nil, err
@@ -378,8 +467,14 @@ func (db *DB) writeBase(ctx context.Context, l *logState, v *view, head uint64, 
 	if err != nil {
 		return nil, err
 	}
+	cuts := topicCuts(v, head, db.opts.Clock, r)
 	for _, space := range v.topic.Spaces() {
 		src := v.topic.All(space)
+		start := v.topic.Start(space)
+		if c, ok := cuts[space]; ok {
+			stats.Trimmed += int(c - start)
+			src, start = src[c-start:], c
+		}
 		ms := make([]lens.Msg, 0, len(src))
 		for _, m := range src {
 			if m.LSN > head {
@@ -402,7 +497,7 @@ func (db *DB) writeBase(ctx context.Context, l *logState, v *view, head uint64, 
 			}
 			ms = append(ms, nm)
 		}
-		tp.SetAll(space, ms)
+		tp.SetAll(space, start, ms)
 		stats.Messages += len(ms)
 	}
 	if err := cw.flush(ctx); err != nil {

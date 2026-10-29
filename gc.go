@@ -32,6 +32,11 @@ type GCOptions struct {
 	KeepReflog int
 	// KeepManifests keeps the newest this-many manifests (0 = 16).
 	KeepManifests int
+	// Topics removes old topic messages from the bases GC writes (see
+	// TopicRetention), cut as of the base's LSN. GC writes a base only
+	// where the history window moves, so it never trims a log on its own:
+	// use Compact for that.
+	Topics TopicRetention
 }
 
 // GC compacts every log at its retention cut (see GCOptions), drops logs

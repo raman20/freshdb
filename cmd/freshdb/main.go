@@ -43,6 +43,8 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
 
   freshdb serve [--listen :7070]              run the HTTP API
         [--compact-every 1h] [--compact-grace 5m]   optional background compaction
+        [--topic-max-age 168h] [--topic-max-messages N] [--topic-ignore-groups]
+                                              topic retention for compaction and GC (see compact)
         [--gc-every 1h] [--keep-for 24h] [--keep-commits N] ...   or background GC (see gc)
         [--token T]                           admin token: "Authorization: Bearer T" (or FRESHDB_TOKEN)
         [--token-file F]                      scoped tokens, one per line: SCOPE TOKEN [name=N] [kv:PFX*|topic:T|docs:C|vectors:C ...]
@@ -76,6 +78,10 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
   freshdb compact [--grace 0s]                drop overwritten/deleted/shredded data and the
                                               history below each branch head (no time travel
                                               below it afterwards); --grace delays deletion
+        [--topic-max-age 168h] [--topic-max-messages N] [--topic-ignore-groups]
+                                              also drop topic messages older than the age / beyond
+                                              the newest N, never past a consumer group's cursor
+                                              unless --topic-ignore-groups (gc takes these too)
   freshdb gc [--keep-for 24h] [--keep-commits N] [--keep-reflog 64] [--keep-manifests 16] [--grace 0s] [--shrink]
                                               compact keeping a history window, drop logs no branch
                                               or kept reflog entry reaches, prune the reflog, delete
@@ -111,7 +117,7 @@ type cli struct {
 func parse(argv []string) ([]string, map[string]string) {
 	var args []string
 	flags := map[string]string{}
-	bools := map[string]bool{"follow": true, "help": true, "h": true, "exact": true, "insecure-no-auth": true, "shrink": true, "repair-tail": true, "access-log": true, "pprof": true}
+	bools := map[string]bool{"follow": true, "help": true, "h": true, "exact": true, "insecure-no-auth": true, "shrink": true, "repair-tail": true, "access-log": true, "pprof": true, "topic-ignore-groups": true}
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
 		if strings.HasPrefix(a, "-") && len(a) > 1 && !isNumberish(a) {
@@ -374,7 +380,7 @@ func serve(dbURL string, flags map[string]string) {
 		close(stopped)
 	}()
 	if every := flags["compact-every"]; every != "" {
-		startCompactor(db, every, flags["compact-grace"])
+		startCompactor(db, every, flags)
 	}
 	if every := flags["gc-every"]; every != "" {
 		startGC(db, every, flags)
@@ -458,8 +464,17 @@ func isLoopback(listen string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// topicRetentionFlags are passed to compact and gc as they are.
+var topicRetentionFlags = []string{"topic-max-age", "topic-max-messages", "topic-ignore-groups"}
+
 // startCompactor compacts every interval in the background.
-func startCompactor(db *freshdb.DB, every, grace string) {
+// The topic-* flags set topic retention (server.ParseTopicRetention).
+func startCompactor(db *freshdb.DB, every string, flags map[string]string) {
+	grace := flags["compact-grace"]
+	tr, err := server.ParseTopicRetention(func(k string) string { return flags[k] })
+	if err != nil {
+		log.Fatalf("freshdb: %v", err)
+	}
 	d, err := time.ParseDuration(every)
 	if err != nil || d <= 0 {
 		log.Fatalf("freshdb: --compact-every %q: want a positive duration like 1h", every)
@@ -472,7 +487,7 @@ func startCompactor(db *freshdb.DB, every, grace string) {
 	}
 	go func() {
 		for range time.Tick(d) {
-			st, err := db.Compact(context.Background(), freshdb.CompactOptions{Grace: g})
+			st, err := db.Compact(context.Background(), freshdb.CompactOptions{Grace: g, Topics: tr})
 			if errors.Is(err, freshdb.ErrClosed) {
 				return
 			}
@@ -701,11 +716,17 @@ func (c *cli) run() int {
 		if g == "" {
 			g = "0s"
 		}
-		st, _ = c.call("POST", "/v1/compact?grace="+url.QueryEscape(g), nil, false)
+		q := url.Values{"grace": {g}}
+		for _, k := range topicRetentionFlags {
+			if v := c.flags[k]; v != "" {
+				q.Set(k, v)
+			}
+		}
+		st, _ = c.call("POST", "/v1/compact?"+q.Encode(), nil, false)
 	case "gc":
 		q := url.Values{}
 		q.Set("grace", "0s")
-		for _, k := range []string{"grace", "keep-for", "keep-commits", "keep-reflog", "keep-manifests"} {
+		for _, k := range append([]string{"grace", "keep-for", "keep-commits", "keep-reflog", "keep-manifests"}, topicRetentionFlags...) {
 			if v := c.flags[k]; v != "" {
 				q.Set(k, v)
 			}

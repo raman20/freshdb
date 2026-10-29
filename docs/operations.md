@@ -362,6 +362,33 @@ headers and hole edges; +0.33 MiB per cycle here) and its apparent size
 only grows, so run `gc --shrink` during maintenance windows.
 
 
+### Topic retention
+
+Topics keep every message (in RAM and in each base) until compaction is
+told to drop old ones:
+
+```sh
+freshdb compact --topic-max-age 168h --topic-max-messages 1000000
+freshdb serve --compact-every 1h --topic-max-age 168h       # background
+curl -XPOST '127.0.0.1:7070/v1/compact?topic-max-age=168h'
+```
+
+- Each topic is cut at the highest offset both limits allow (keep the
+  newest N; drop the oldest messages up to the first one younger than the
+  age, by commit time), then lowered to the smallest cursor any consumer
+  group on that branch has committed for the topic, so a group never
+  loses a message it has not acked (`spec/FreshRetain.tla`).
+  `--topic-ignore-groups` cuts past them; a lagging group then resumes at
+  the cut. A group that never committed a cursor does not hold anything.
+- Offsets never change: `Len` still counts every message ever published,
+  `Start` (Go) is the first kept offset, and a read from below it starts
+  at it.
+- The cut happens when a log gets a new base. `compact` writes one when
+  retention would cut, even with no new commits; `gc` applies the same
+  options only to the bases it writes for its history window.
+- Messages leave RAM when the branch reloads from the new base (right
+  after compaction) and leave storage after the grace period.
+
 ## Health checks and monitoring
 
 - `GET /healthz`: the process is up (liveness). No token.

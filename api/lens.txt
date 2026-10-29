@@ -71,10 +71,10 @@ func (l *Topic) DropSubject(s string)
 func (l *Topic) Len(space string, at uint64) uint64
 func (*Topic) Name() string
 func (l *Topic) Read(space string, from uint64, max int, at uint64) []Msg
-func (l *Topic) SetAll(space string, ms []Msg)
+func (l *Topic) SetAll(space string, start uint64, ms []Msg)
 func (l *Topic) Snapshot() []byte
 func (l *Topic) Spaces() []string
-func (l *Topic) Topics(prefix string) []string
+func (l *Topic) Start(space string) uint64
 type Vector struct {
 func NewVector() *Vector
 func (l *Vector) ANN(coll string, u []float32, k, ef, minN int) ([]Hit, bool)

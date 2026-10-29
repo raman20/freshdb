@@ -41,6 +41,11 @@ var (
 	// ErrBusy: a compaction or GC is already running on this database;
 	// retry later. HTTP 409.
 	ErrBusy = errors.New("freshdb: compaction already running")
+
+	// ErrBadName: a name the API cannot store unambiguously (a consumer
+	// group name with a NUL byte), or a message acked in another topic's
+	// group.
+	ErrBadName = errors.New("freshdb: invalid name")
 )
 
 // Size limits of one transaction, checked at commit (after encryption).

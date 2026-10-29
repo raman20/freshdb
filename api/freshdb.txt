@@ -23,6 +23,7 @@ var (
 	ErrWrongKEK = errors.New("freshdb: wrong key-encryption key for this database")
 	ErrTooLarge = errors.New("freshdb: transaction too large")
 	ErrBusy = errors.New("freshdb: compaction already running")
+	ErrBadName = errors.New("freshdb: invalid name")
 var LatencyBounds = []float64{0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
 func Formats() string
 func HolderName() string
@@ -79,10 +80,12 @@ type CommitPolicy struct {
 	TargetBytes int
 type CompactOptions struct {
 	Grace time.Duration
+	Topics TopicRetention
 type CompactStats struct {
 	Logs      int   `json:"logs"`
 	Keys      int   `json:"keys"`
 	Messages  int   `json:"messages"`
+	Trimmed   int   `json:"trimmed"`
 	BaseBytes int64 `json:"base_bytes"`
 	Deleted   int   `json:"deleted"`
 	Pending   int   `json:"pending"`
@@ -137,6 +140,7 @@ type GCOptions struct {
 	KeepCommits uint64
 	KeepReflog int
 	KeepManifests int
+	Topics TopicRetention
 type Garbage struct {
 	Kind   string `json:"kind"`
 	Log    string `json:"log,omitempty"`
@@ -254,11 +258,16 @@ type Stats struct {
 	ValueCacheBytes  int64     `json:"value_cache_bytes"`
 	Heads map[string]uint64 `json:"heads"`
 	Halted string `json:"halted,omitempty"`
+type TopicRetention struct {
+	MaxAge       time.Duration
+	MaxMessages  uint64
+	IgnoreGroups bool
 type TopicTx struct {
 func (t TopicTx) Group(name string) Group
 func (t TopicTx) Len() uint64
 func (t TopicTx) Publish(val []byte, opts ...WriteOpt) error
 func (t TopicTx) Read(from uint64, max int) ([]Message, error)
+func (t TopicTx) Start() uint64
 type Tx struct {
 func (tx *Tx) At() uint64
 func (tx *Tx) Delete(key string) error

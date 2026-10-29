@@ -77,12 +77,12 @@ agents. That is the same bet SQLite made. Read the
 | | What you get | Notes |
 |---|---|---|
 | **KV** | get/put/delete, prefix scan, MVCC history | values over 64 B are read from the log through an off-heap cache (`WithValueCacheBytes`, default 256 MiB) |
-| **Topics** | publish, consumer groups, exactly-once consume+write+ack; push via `WaitHead`, HTTP long-poll (`?wait=`) and SSE | no topic retention; no limit on concurrent waiters/streams |
+| **Topics** | publish, consumer groups, exactly-once consume+write+ack; push via `WaitHead`, HTTP long-poll (`?wait=`) and SSE | retention only at compaction (`--topic-max-age`, `--topic-max-messages`; never past a group's cursor unless told); every kept message is in RAM; no limit on concurrent waiters/streams |
 | **Documents** | JSON documents, secondary indexes added at any time (built by replaying the log) | equality lookups only |
 | **Vectors** | cosine search, exact (recall 1.0, parallel scan) or opt-in HNSW (`vec ann`) | the HNSW graph is in RAM; saved on close and reloaded on open (10 s at 1M), recall@10 0.92 at 1M with the default ef |
 | **Transactions** | serializable OCC across all lenses; hot keys cannot starve | single writer per database |
 | **History** | time travel to any LSN, zero-copy branches, rewind, promote, reflog | after `compact`, history below each branch head is gone (`410`); `gc` keeps a window |
-| **Compaction / GC** | `freshdb compact` drops overwritten, deleted and shredded data; `freshdb gc --keep-for 24h` keeps a history window and also deletes old manifests, retired logs and pruned reflog; `--shrink` rewrites the journal file | new on `main`; commits pause while it runs; shrink is offline; no topic retention |
+| **Compaction / GC** | `freshdb compact` drops overwritten, deleted and shredded data; `freshdb gc --keep-for 24h` keeps a history window and also deletes old manifests, retired logs and pruned reflog; `--shrink` rewrites the journal file | new on `main`; commits pause while it runs; shrink is offline; topic retention is opt-in and runs only at compaction |
 | **Deletion** | per-subject crypto-shred, signed certificate, `verify` | covers subject-tagged values only |
 | **Storage** | local directory (journal layout on Linux/macOS/BSD), S3-compatible stores, in-memory | only MinIO is tested among object stores |
 | **Interfaces** | Go library, JSON/HTTP server, CLI — one binary | `serve` has bearer tokens scoped read/write/admin (optionally per collection), reloaded without restart, and optional TLS with cert reload |
@@ -268,14 +268,14 @@ verify: ok=true
 |---|---|
 | `GET/PUT/DELETE /v1/kv/{key}`, `GET /v1/kv?prefix=` | KV |
 | `POST /v1/tx` | atomic batch of `put`, `del`, `pub`, `ack`, `doc`, `vec` ops |
-| `POST /v1/topics/{t}`, `GET /v1/topics/{t}?from=&max=&wait=30s`, `POST /v1/topics/{t}/groups/{g}/next?wait=30s` | topics, consumer groups (`wait`: long-poll, max 60 s) |
+| `POST /v1/topics/{t}`, `GET /v1/topics/{t}?from=&max=&wait=30s`, `POST /v1/topics/{t}/groups/{g}/next?wait=30s` | topics, consumer groups (`wait`: long-poll, max 60 s; `max` defaults to 1000 for reads and 10 for `next`, capped at 1000 per response) |
 | `GET /v1/topics/{t}/stream?from=` | Server-Sent Events: one `message` event per message, `id` = offset, resumes from `Last-Event-ID` |
 | `GET /healthz` | liveness; never needs the token |
 | `PUT/GET /v1/docs/{c}/{id}`, `GET /v1/docs/{c}?field=&value=`, `POST /v1/indexes` | documents, secondary indexes |
 | `PUT/DELETE /v1/vectors/{c}/{id}`, `POST /v1/vectors/{c}/search` | vectors |
 | `GET/POST /v1/branches`, `DELETE /v1/branches/{b}`, `POST /v1/branches/{b}/rewind`, `POST /v1/branches/{b}/promote` | branches |
 | `GET /v1/log`, `POST /v1/shred/{subject}`, `GET /v1/verify` | raw log, forget, audit |
-| `POST /v1/compact?grace=5m`, `POST /v1/gc?keep-for=24h` | compaction, GC (see [operations](docs/operations.md#gc-and-retention)) |
+| `POST /v1/compact?grace=5m&topic-max-age=168h&topic-max-messages=N`, `POST /v1/gc?keep-for=24h` | compaction with optional topic retention, GC (see [operations](docs/operations.md#gc-and-retention)) |
 
 Errors: `404` not found, `409` conflict (retry), `410` subject shredded or history compacted away, `503` fenced by a newer writer.
 
@@ -597,8 +597,9 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
 
 **Still true:**
 - Keys, KV version history, topics, documents and vectors live in RAM.
-  History is only trimmed when you run compaction, which is new and keeps
-  every topic message (no retention).
+  History is only trimmed when you run compaction, which is new; topic
+  messages are dropped only by compaction with topic retention set
+  (off by default).
   Snapshots are off by default and don't speed up open yet.
 - The HNSW vector index is opt-in and lives in RAM. It is saved only on a
   clean close; after a crash, vectors newer than the last save are

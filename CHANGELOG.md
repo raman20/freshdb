@@ -10,6 +10,40 @@ break APIs and the on-storage format.
 Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
+### Added (component C review: topics)
+
+- Topic retention: `CompactOptions.Topics` / `GCOptions.Topics`
+  (`TopicRetention{MaxAge, MaxMessages, IgnoreGroups}`), `--topic-max-age`,
+  `--topic-max-messages`, `--topic-ignore-groups` on `compact`, `gc` and
+  `serve`, and the same query parameters on `/v1/compact` and `/v1/gc`.
+  Compaction drops the oldest messages of each topic from the new base,
+  never past the smallest committed cursor of a consumer group unless
+  told to (model: `spec/FreshRetain.tla`). Offsets do not change;
+  `TopicTx.Start` reports the first kept offset. Bases of trimmed topics
+  use a new `TOPIC2` lens encoding; untrimmed ones are byte-identical to
+  before. Off by default.
+
+### Changed (component C review: topics)
+
+- Shredding a subject touches only that subject's topic messages (an
+  index in the topic lens) instead of scanning every message.
+- HTTP `GET /v1/topics/{t}` without `max` (or with `max=0`) returns at
+  most 1000 messages instead of the whole topic, and `.../next?max=0`
+  fetches and acks at most 1000 instead of the whole topic; larger `max`
+  values are capped at 1000.
+
+### Fixed (component C review: topics)
+
+- A topic snapshot or base with topics out of order or repeated, LSNs
+  going back, or a redacted message with a value or no subject loaded
+  silently (wrong offsets or reads); now `ErrBadSnapshot`.
+- `Group.Ack` of an earlier message after a later one moved the cursor
+  back (redelivery); it now never moves back (`Seek` still does). Acking
+  a message of another topic moved this group's cursor; now `ErrBadName`.
+- A group name containing NUL could address another group's cursor;
+  now `ErrBadName` (HTTP 400). A cursor value that is not 8 bytes read as
+  0 (redelivery from the start); now `ErrCorrupt`.
+
 ### Changed (component B review: KV)
 
 - The KV lens keeps all but its newest versions in immutable compressed

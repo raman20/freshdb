@@ -68,12 +68,13 @@ func TestSimulation(t *testing.T) {
 		tot.Rewinds += r.Rewinds
 		tot.Compacts += r.Compacts
 		tot.GCs += r.GCs
+		tot.TopicTrims += r.TopicTrims
 		tot.Faults += r.Faults
 		tot.CalmOpens += r.CalmOpens
 		tot.ReadFaultCorrupt += r.ReadFaultCorrupt
 	}
-	t.Logf("%d seeds × %d steps OK: %d acked txns, %d ambiguous, %d crashes (%d clean closes, %d ann restores), %d takeovers, %d shreds, %d rewinds, %d compactions (%d gc), %d injected store faults, %d calm opens, %d corrupt-under-read-faults",
-		n, steps, tot.Acked, tot.Ambiguous, tot.Crashes, tot.Closes, tot.ANNRestores, tot.Takeovers, tot.Shreds, tot.Rewinds, tot.Compacts, tot.GCs, tot.Faults, tot.CalmOpens, tot.ReadFaultCorrupt)
+	t.Logf("%d seeds × %d steps OK: %d acked txns, %d ambiguous, %d crashes (%d clean closes, %d ann restores), %d takeovers, %d shreds, %d rewinds, %d compactions (%d gc, %d topic trims), %d injected store faults, %d calm opens, %d corrupt-under-read-faults",
+		n, steps, tot.Acked, tot.Ambiguous, tot.Crashes, tot.Closes, tot.ANNRestores, tot.Takeovers, tot.Shreds, tot.Rewinds, tot.Compacts, tot.GCs, tot.TopicTrims, tot.Faults, tot.CalmOpens, tot.ReadFaultCorrupt)
 }
 
 // TestDeterminism: the same seed produces a bit-identical trace.

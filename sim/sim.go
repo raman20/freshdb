@@ -58,6 +58,7 @@ type Result struct {
 	Rewinds          int
 	Compacts         int
 	GCs              int
+	TopicTrims       int // checks that saw topic retention move the start
 	Faults           int
 	TraceHash        [32]byte
 }
@@ -70,20 +71,24 @@ type mop struct {
 }
 
 type sim struct {
-	ctx     context.Context
-	rng     *rand.Rand
-	seed    int64
-	mem     *store.Mem
-	st      *store.Faulty
-	db      *freshdb.DB
-	clock   atomic.Int64
-	rnd     *lockedRand
-	txs     map[int][]mop  // all issued txns
-	acked   map[int]uint64 // tx id -> lsn
-	amb     map[int]bool
-	shred   map[string]bool // subject -> definitely shredded
-	shredQ  map[string]bool // shred outcome unknown
-	rewindQ uint64          // ambiguous rewind target (+1), 0 = none
+	ctx    context.Context
+	rng    *rand.Rand
+	seed   int64
+	mem    *store.Mem
+	st     *store.Faulty
+	db     *freshdb.DB
+	clock  atomic.Int64
+	rnd    *lockedRand
+	txs    map[int][]mop  // all issued txns
+	acked  map[int]uint64 // tx id -> lsn
+	amb    map[int]bool
+	shred  map[string]bool // subject -> definitely shredded
+	shredQ map[string]bool // shred outcome unknown
+	// topicStart: the topic's retention start at the last check (it
+	// never goes back); retained: a compaction with retention was tried.
+	topicStart uint64
+	retained   bool
+	rewindQ    uint64 // ambiguous rewind target (+1), 0 = none
 	// prefix: tx ids (and LSNs) in each compaction base, by "log@LSN";
 	// the log only has entries above the base
 	prefix map[string]txPrefix
@@ -485,7 +490,12 @@ func (s *sim) compact() error {
 		op = "gc"
 		_, err = s.db.GC(s.ctx, freshdb.GCOptions{KeepReflog: 1, KeepManifests: 1 + s.rng.Intn(3)})
 	} else {
-		_, err = s.db.Compact(s.ctx, freshdb.CompactOptions{})
+		var o freshdb.CompactOptions
+		if s.rng.Intn(2) == 0 { // topic retention (no groups in the sim)
+			o.Topics.MaxMessages = uint64(s.rng.Intn(8))
+			s.retained = s.retained || o.Topics.MaxMessages > 0
+		}
+		_, err = s.db.Compact(s.ctx, o)
 	}
 	s.log("%s @%d=%v", op, head, err)
 	if err == nil {
@@ -567,6 +577,7 @@ func (s *sim) check() error {
 	got := map[string]string{}
 	gotVec := map[string]string{}
 	var gotTopic []string
+	var start, n uint64
 	err = s.db.View(s.ctx, func(tx *freshdb.Tx) error {
 		kvs, err := tx.Scan("")
 		if err != nil {
@@ -582,6 +593,7 @@ func (s *sim) check() error {
 		for _, h := range hs {
 			gotVec[h.ID] = ""
 		}
+		start, n = tx.Topic("t").Start(), tx.Topic("t").Len()
 		ms, err := tx.Topic("t").Read(0, 0)
 		for _, m := range ms {
 			if m.Redacted {
@@ -607,8 +619,17 @@ func (s *sim) check() error {
 	if err := s.db.CheckANN("main"); err != nil {
 		return s.fail("%v", err)
 	}
-	if strings.Join(topic, ",") != strings.Join(gotTopic, ",") {
-		return s.fail("topic lens != model fold\n  want %v\n  got  %v", topic, gotTopic)
+	// retention may have removed a prefix: never past the end, never
+	// back, never without a retention compaction; offsets unchanged.
+	if n != uint64(len(topic)) || start > n || start < s.topicStart || (start > 0 && !s.retained) {
+		return s.fail("topic start %d len %d: want len %d, start in [%d, len] (retention used: %v)", start, n, len(topic), s.topicStart, s.retained)
+	}
+	if start > s.topicStart {
+		s.res.TopicTrims++
+	}
+	s.topicStart = start
+	if strings.Join(topic[start:], ",") != strings.Join(gotTopic, ",") {
+		return s.fail("topic lens != model fold from %d\n  want %v\n  got  %v", start, topic[start:], gotTopic)
 	}
 	d1, _, err := s.db.LensDigests("main")
 	if err != nil {

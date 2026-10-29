@@ -6,6 +6,7 @@ const DefaultSlowOp = time.Second
 func Handler(db *freshdb.DB) http.Handler
 func New(db *freshdb.DB, o Options) http.Handler
 func ParseGCOptions(get func(string) string, grace time.Duration) (freshdb.GCOptions, error)
+func ParseTopicRetention(get func(string) string) (freshdb.TopicRetention, error)
 type Auth struct {
 func LoadTokenFile(path string) (*Auth, error)
 func NewAuth(t *Tokens) *Auth

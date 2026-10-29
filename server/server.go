@@ -223,7 +223,7 @@ func fail(w http.ResponseWriter, err error) {
 		code = http.StatusRequestEntityTooLarge
 	case errors.Is(err, os.ErrDeadlineExceeded):
 		code = http.StatusRequestTimeout // --read-timeout while reading the body
-	case errors.Is(err, freshdb.ErrBadLSN), errors.Is(err, errBad):
+	case errors.Is(err, freshdb.ErrBadLSN), errors.Is(err, freshdb.ErrBadName), errors.Is(err, errBad):
 		code = http.StatusBadRequest
 	case errors.Is(err, freshdb.ErrFenced), errors.Is(err, errBusy):
 		code = http.StatusServiceUnavailable
@@ -473,6 +473,7 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	max, _, _ := u64(r, "max")
+	max = capMax(max)
 	_, timeTravel, _ := u64(r, "at")
 	wait, err := waitParam(r)
 	if err != nil {
@@ -557,6 +558,18 @@ func (s *Server) waitHead(ctx context.Context, r *http.Request, seen uint64) (bo
 	return false, err
 }
 
+// maxMessages bounds one topic read or group fetch over HTTP; max=0 (or
+// none, for reads) means this many. Without it one request could make the
+// server materialize, and a group fetch acknowledge, a whole topic.
+const maxMessages = 1000
+
+func capMax(max uint64) uint64 {
+	if max == 0 || max > maxMessages {
+		return maxMessages
+	}
+	return max
+}
+
 // next fetches up to max messages for a consumer group and advances its
 // cursor in the same transaction (at-most-once delivery to the HTTP client;
 // embed freshdb and use Fetch/Ack inside your own Update for exactly-once).
@@ -566,6 +579,7 @@ func (s *Server) next(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		max = 10
 	}
+	max = capMax(max)
 	wait, err := waitParam(r)
 	if err != nil {
 		fail(w, err)
@@ -977,9 +991,15 @@ func (s *Server) shred(w http.ResponseWriter, r *http.Request) {
 }
 
 // compact runs a compaction; ?grace=DURATION (default 5m) delays deleting
-// replaced objects for readers of older manifests.
+// replaced objects for readers of older manifests; topic-max-age,
+// topic-max-messages and topic-ignore-groups set topic retention.
 func (s *Server) compact(w http.ResponseWriter, r *http.Request) {
 	o := freshdb.CompactOptions{Grace: 5 * time.Minute}
+	var err error
+	if o.Topics, err = ParseTopicRetention(r.URL.Query().Get); err != nil {
+		fail(w, fmt.Errorf("%w: %w", errBad, err))
+		return
+	}
 	if g := r.URL.Query().Get("grace"); g != "" {
 		d, err := time.ParseDuration(g)
 		if err != nil || d < 0 {
@@ -1022,7 +1042,8 @@ func (s *Server) backup(w http.ResponseWriter, r *http.Request) {
 }
 
 // gc runs GC with retention: ?grace= (default 5m), keep-for=DURATION,
-// keep-commits=N, keep-reflog=N, keep-manifests=N (see freshdb.GCOptions).
+// keep-commits=N, keep-reflog=N, keep-manifests=N and the topic retention
+// options (see freshdb.GCOptions, ParseTopicRetention).
 func (s *Server) gc(w http.ResponseWriter, r *http.Request) {
 	o, err := ParseGCOptions(r.URL.Query().Get, 5*time.Minute)
 	if err != nil {
@@ -1037,8 +1058,38 @@ func (s *Server) gc(w http.ResponseWriter, r *http.Request) {
 	reply(w, st)
 }
 
+// ParseTopicRetention reads topic-max-age (a duration),
+// topic-max-messages (a count) and topic-ignore-groups (true/false)
+// through get ("" = default: no retention).
+func ParseTopicRetention(get func(string) string) (freshdb.TopicRetention, error) {
+	var r freshdb.TopicRetention
+	if v := get("topic-max-age"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d < 0 {
+			return r, fmt.Errorf("topic-max-age %q: want a duration like 168h", v)
+		}
+		r.MaxAge = d
+	}
+	if v := get("topic-max-messages"); v != "" {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return r, fmt.Errorf("topic-max-messages %q: want a number", v)
+		}
+		r.MaxMessages = n
+	}
+	if v := get("topic-ignore-groups"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return r, fmt.Errorf("topic-ignore-groups %q: want true or false", v)
+		}
+		r.IgnoreGroups = b
+	}
+	return r, nil
+}
+
 // ParseGCOptions reads GC options named grace, keep-for, keep-commits,
-// keep-reflog and keep-manifests through get ("" = default).
+// keep-reflog, keep-manifests and the ParseTopicRetention options through
+// get ("" = default).
 func ParseGCOptions(get func(string) string, grace time.Duration) (freshdb.GCOptions, error) {
 	o := freshdb.GCOptions{Grace: grace}
 	dur := func(name string, d *time.Duration) error {
@@ -1069,7 +1120,9 @@ func ParseGCOptions(get func(string) string, grace time.Duration) (freshdb.GCOpt
 		}
 	}
 	o.KeepReflog, o.KeepManifests = int(min(reflog, 1<<30)), int(min(mans, 1<<30))
-	return o, nil
+	var err error
+	o.Topics, err = ParseTopicRetention(get)
+	return o, err
 }
 
 func (s *Server) verify(w http.ResponseWriter, r *http.Request) {

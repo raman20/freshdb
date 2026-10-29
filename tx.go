@@ -430,7 +430,7 @@ func (db *DB) openMsg(l *logState, space string, m lens.Msg) ([]byte, error) {
 		return nil, err
 	}
 	for i, op := range e.Ops {
-		if op.Kind == format.OpAppend && bytes.Equal(op.Value, m.Val) {
+		if op.Kind == format.OpAppend && op.Space == space && bytes.Equal(op.Value, m.Val) {
 			if p, ok := db.env.Open(e, i); ok {
 				return p, nil
 			}
@@ -439,7 +439,18 @@ func (db *DB) openMsg(l *logState, space string, m lens.Msg) ([]byte, error) {
 	return nil, ErrShredded
 }
 
-// Len returns the number of committed messages in the topic.
+// Start returns the first offset still stored: 0 unless compaction with
+// TopicRetention removed the older messages. Read from below it starts
+// at it.
+func (t TopicTx) Start() uint64 {
+	t.tx.v.mu.RLock()
+	defer t.tx.v.mu.RUnlock()
+	return t.tx.v.topic.Start(topicSpace(t.topic))
+}
+
+// Len returns the offset the next message will get: the number of
+// messages ever committed to the topic, including any removed by
+// retention.
 func (t TopicTx) Len() uint64 {
 	t.tx.v.mu.RLock()
 	defer t.tx.v.mu.RUnlock()
@@ -456,14 +467,30 @@ func (t TopicTx) Group(name string) Group { return Group{t.tx, name, t.topic} }
 
 func cursorKey(group, topic string) string { return group + "\x00" + topic }
 
+// key is the group's cursor key. A group name may not contain a NUL byte:
+// "a\x00b" in topic "c" and "a" in topic "b\x00c" would share a cursor.
+func (g Group) key() (string, error) {
+	if strings.IndexByte(g.name, 0) >= 0 {
+		return "", fmt.Errorf("%w: group name %q contains a NUL byte", ErrBadName, g.name)
+	}
+	return cursorKey(g.name, g.topic), nil
+}
+
 // Cursor returns the next offset the group will consume.
 func (g Group) Cursor() (uint64, error) {
-	b, err := g.tx.get(spaceCursor, cursorKey(g.name, g.topic))
+	k, err := g.key()
+	if err != nil {
+		return 0, err
+	}
+	b, err := g.tx.get(spaceCursor, k)
 	if errors.Is(err, ErrNotFound) {
 		return 0, nil
 	}
-	if err != nil || len(b) != 8 {
+	if err != nil {
 		return 0, err
+	}
+	if len(b) != 8 {
+		return 0, fmt.Errorf("%w: cursor of group %q on topic %q is %d bytes, want 8", ErrCorrupt, g.name, g.topic, len(b))
 	}
 	return binary.LittleEndian.Uint64(b), nil
 }
@@ -480,11 +507,30 @@ func (g Group) Fetch(max int) ([]Message, error) {
 }
 
 // Ack commits the cursor past msg, atomically with the rest of the tx.
-func (g Group) Ack(msg Message) error { return g.Seek(msg.Offset + 1) }
+// It never moves the cursor back: acking a message at or below the
+// cursor (already consumed) changes nothing. msg must be from the
+// group's topic.
+func (g Group) Ack(msg Message) error {
+	if msg.Topic != g.topic {
+		return fmt.Errorf("%w: message of topic %q acked in group %q of topic %q", ErrBadName, msg.Topic, g.name, g.topic)
+	}
+	c, err := g.Cursor()
+	if err != nil {
+		return err
+	}
+	if msg.Offset < c {
+		return nil
+	}
+	return g.Seek(msg.Offset + 1)
+}
 
-// Seek sets the group's cursor.
+// Seek sets the group's cursor, forwards or back.
 func (g Group) Seek(offset uint64) error {
-	return g.tx.write(format.Op{Kind: format.OpPut, Space: spaceCursor, Key: cursorKey(g.name, g.topic),
+	k, err := g.key()
+	if err != nil {
+		return err
+	}
+	return g.tx.write(format.Op{Kind: format.OpPut, Space: spaceCursor, Key: k,
 		Value: binary.LittleEndian.AppendUint64(nil, offset)}, nil)
 }
 
