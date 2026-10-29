@@ -28,7 +28,7 @@
     <p class="eyebrow">Open source · Apache-2.0 · Go · pre-1.0 prototype</p>
     <h1>One log. One binary.<br><span class="grad">One API.</span></h1>
     <p class="lede">KV, streams, documents, vectors and transactions are <strong>lenses over a single append-only log</strong> on object storage or a local disk. Branch it, rewind it, and provably forget a user, from one Go binary with no other services.</p>
-    <p class="banner"><b>Pre-1.0 prototype — not for production.</b> The core is model-checked and simulation-tested. Compaction, the HNSW index, auth/TLS and push consumers are new; larger-than-RAM state, a persisted ANN index and KMS clients are not done yet. Latest release: v0.1.0; this page describes unreleased <code>main</code>.</p>
+    <p class="banner"><b>Pre-1.0 prototype — not for production.</b> The core is model-checked and simulation-tested. Compaction, the HNSW index, auth/TLS, push consumers, backup/restore, metrics and graceful shutdown are new; larger-than-RAM state, KMS clients and testing on real cloud object stores are not done yet. Readiness per area: <a href="https://github.com/raman20/freshdb/blob/main/docs/PRODUCTION_READINESS.md">PRODUCTION_READINESS.md</a>. Latest release: v0.1.0; this page describes unreleased <code>main</code>.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/raman20/freshdb">★ View on GitHub</a>
       <a class="btn" href="#install">Install</a>
@@ -186,7 +186,7 @@ db.Update(ctx, <span class="k">func</span>(tx *freshdb.Tx) error {
         <li>Keys, KV history, topics, documents and vectors live in RAM. Old versions are only dropped by <code>freshdb compact</code> / <code>freshdb gc</code> (new; GC keeps a configurable time-travel window), which keep every topic message; the journal file shrinks only offline (<code>gc --shrink</code>).</li>
         <li>The opt-in HNSW vector index is saved on a clean close and reloaded on open (10 s at 1M vectors, was 17 min); after a crash, newer vectors are re-inserted, and building it is single-threaded.</li>
         <li>One writer per database, with no HA and no read replicas yet.</li>
-        <li>Only MinIO is tested. AWS S3 and R2 support the needed conditional writes but are untested.</li>
+        <li>Only MinIO is tested (with fault injection). AWS S3 and R2 document the needed conditional writes but are untested; <code>freshdb s3check</code> probes an endpoint.</li>
         <li>The journal layout is new; its 8 MiB growth step stalls the commit path briefly.</li>
       </ul>
       <ul class="lim">

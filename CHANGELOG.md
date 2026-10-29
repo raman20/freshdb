@@ -53,6 +53,9 @@ in its "Changes since v0.1.0" section.
   `server.Options.Drain/ReadTimeout/WriteTimeout`.
 - `bench/cmd/freshdb-soak`: real-time soak/chaos harness (mixed workload,
   periodic kill -9, concurrent compaction/GC/backup, invariant checker).
+- Simulator: `-steps` / `FRESHDB_SIM_STEPS` and `FRESHDB_SIM_FIRST` for long
+  sharded runs; after 100 failed recovery opens under a read-fault storm the
+  storm passes (counted as `calm opens`) instead of failing the seed.
 - Observability: `GET /metrics` (Prometheus text format, admin scope:
   commits, conflicts, errors, commit/segment/compaction latency histograms,
   value-cache hits, HTTP requests by route and code, runtime gauges),

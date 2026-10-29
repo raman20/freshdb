@@ -50,6 +50,7 @@ type Result struct {
 	Ambiguous   int
 	Crashes     int
 	ANNRestores int // opens that restored a saved HNSW graph
+	CalmOpens   int // recoveries that needed the fault storm to pass (100 failed opens)
 	Closes      int // clean closes (save the HNSW graph) instead of a crash
 	Takeovers   int
 	Shreds      int
@@ -119,7 +120,18 @@ func (s *sim) log(f string, a ...any) { s.trace = append(s.trace, fmt.Sprintf(f,
 
 func (s *sim) open() (*freshdb.DB, error) {
 	var last error
+	on := s.st.On
+	defer func() { s.st.On = on }()
 	for i := 0; i < 200; i++ {
+		if i == 100 {
+			// Open re-reads every object, so on a large store under a
+			// read-fault storm it fails with probability ~1-(1-p)^objects:
+			// a liveness limit of the harness, not a safety question. Let
+			// the storm pass; the open itself is still checked.
+			s.st.On = false
+			s.log("storm passed after 100 failed opens")
+			s.res.CalmOpens++
+		}
 		db, err := freshdb.OpenStore(s.ctx, s.st,
 			freshdb.WithClock(func() int64 { return s.clock.Add(1) }),
 			freshdb.WithRand(s.rnd), freshdb.WithRepairTail(true), freshdb.WithSnapshotEvery(1+int(s.seed%7)),

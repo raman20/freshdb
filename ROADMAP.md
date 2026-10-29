@@ -24,7 +24,14 @@ bug reports). Everything must respect the [design principles](docs/design-princi
   certificate reload without restart, stream/long-poll caps (unreleased)
 - [ ] Test on AWS S3 and Cloudflare R2 (only MinIO is tested today)
 - [x] `--kek-file` / `FRESHDB_KEK` and a `KeyProvider` interface (unreleased)
-- [ ] Prebuilt binaries for every release, and checksums
+- [ ] Prebuilt binaries for every release, and checksums (`scripts/release.sh`
+  now writes checksums, an SPDX SBOM and an optional SSH signature; no
+  signing key is published yet)
+- [x] Production-readiness pass (unreleased): durability and disk-full
+  handling, format versioning, observability, backup/restore + PITR,
+  operational safety, soak/chaos harness, S3 fault injection and
+  `s3check`, API/security policy. Per-area verdicts in
+  docs/PRODUCTION_READINESS.md
 
 ## Next — v0.2–v0.4: make it last
 
@@ -36,7 +43,9 @@ bug reports). Everything must respect the [design principles](docs/design-princi
   checkpoint, and recovery still scans every segment. The goal is open time
   proportional to the tail, not to history.
 - **Disk-backed / mmap lenses.** Lens state is entirely in RAM today, which caps
-  database size at memory.
+  database size at memory. The key index is the first target (gap S5.1 in
+  docs/PRODUCTION_READINESS.md; deferred from the readiness pass, with a
+  10M-key memory benchmark as its acceptance test).
 - **ANN index follow-ups.** The HNSW graph is now saved on close and
   reloaded on open (unreleased `main`). Still open: periodic saves (a crash
   re-inserts everything since the last close), faster build, disk-backed

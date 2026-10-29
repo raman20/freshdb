@@ -32,9 +32,13 @@ on object storage or a local disk, with branching, rewind and provable deletion.
 > release is v0.1.0; `main` has unreleased changes (journal storage by
 > default, values read from the log, faster vectors, no OCC give-ups, and a
 > first version of compaction). The correctness core is model-checked and
-> simulation-tested. Still missing: larger-than-RAM lens state, built-in KMS clients, and testing on
-> AWS S3 or R2 (only MinIO is tested). The on-storage format may change
-> before 1.0. See [Status and limitations](#status-and-limitations).
+> simulation-tested; `main` also has online backup/restore, metrics,
+> graceful shutdown and S3 fault-injection tests. Still missing:
+> larger-than-RAM lens state, built-in KMS clients, and testing on AWS S3 or
+> R2 (only MinIO is tested; `freshdb s3check` probes other endpoints). The
+> on-storage format may change before 1.0. Readiness per area, with what is
+> and is not tested: [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md).
+> Stable-track vs experimental surfaces: [docs/api-stability.md](docs/api-stability.md).
 
 ---
 
@@ -580,7 +584,15 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
   `KeyProvider`, and a wrong key fails at open.
 - Push consumers: `WaitHead`, HTTP long-poll and SSE replace polling
   (`sub --follow` no longer sleeps 500 ms between fetches).
-- The Windows build works again.
+- The Windows build works again (it broke once more during this work and
+  CI's cross-build loop hid it; both fixed).
+- Operations: online consistent backup and `restore` (also to a log
+  position), `/metrics`, `/readyz`, structured and slow-request logs,
+  graceful drain on SIGTERM, per-request timeouts, an 8 KiB key limit,
+  and lease records that name which process fenced which.
+- S3: fault injection (503s, resets, lost replies) with no false fences or
+  lost acks on MinIO; request cost per operation measured
+  ([docs/s3.md](docs/s3.md)); `freshdb s3check` for other endpoints.
 - A v0.1.0 bug where returned or passed value slices aliased internal state.
 
 **Still true:**
@@ -599,7 +611,9 @@ and [docs/benchmarks.md](docs/benchmarks.md)):
 - Server auth is bearer tokens with read/write/admin scopes (no mTLS, no
   per-branch rights); there is no rekey from the dev key to a real KEK, and
   no built-in KMS client.
-- Only MinIO is tested; AWS S3 and R2 are not.
+- Only MinIO is tested; AWS S3 and R2 are not. Run `freshdb s3check`
+  against an endpoint before using it. A snapshot is one object, so a key
+  index over 5 GiB cannot be snapshotted on AWS S3 (not reached in tests).
 - The journal layout is new and has less mileage than the files layout; its
   file grows in 8 MiB chunks (zero-filled in the background), and it only
   shrinks with an offline `freshdb gc --shrink` (compaction punches holes).

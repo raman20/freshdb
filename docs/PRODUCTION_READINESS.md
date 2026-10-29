@@ -60,7 +60,7 @@ named), **documented** (accepted limit, written down where users read).
 | S3.4 | No pprof endpoint. | fixed: `--pprof`, admin scope, refused without auth |
 | S3.5 | No backup or restore command; the documented method is copying the directory/bucket while stopped. No restore drill. | fixed: online `freshdb backup` (deletes held during the copy, incremental, digest record), `freshdb restore`, drill script + test — design 15 |
 | S3.6 | Point-in-time recovery exists only as `branch create --at LSN` / `rewind`; no way to restore a database to a log position into a new location. | fixed: `restore --at LSN` (within the history the backup holds) |
-| S3.7 | No long soak run; crash tests and the simulator run for seconds to minutes. | open → item 18 |
+| S3.7 | No long soak run; crash tests and the simulator run for seconds to minutes. | partly fixed (design 18): long deterministic simulator run recorded (bench/results/2026-10-29-soak/); 6 h real-time soak **in progress, result pending** — it ends ~02:00 IST 2026-10-30 and its last line (`SOAK OK:` / `SOAK FAIL:`) is in `/workspace/soak6h.out` on the test box (server log `/workspace/soak6h/server.log`); copy it to the results directory when it ends |
 
 ## S4 — security (beyond docs/security.md)
 
@@ -76,7 +76,7 @@ named), **documented** (accepted limit, written down where users read).
 
 | id | gap | status |
 |---|---|---|
-| S5.1 | The key index (every key and version) lives in RAM: memory grows with keys, ~10× Pebble steady state (design 07). | open → item 19 |
+| S5.1 | The key index (every key and version) lives in RAM: memory grows with keys, ~10× Pebble steady state (design 07). | open: disk-backed key index deferred (no < 1 h route that keeps the formats and tests honest); on the ROADMAP |
 | S5.2 | HNSW build is single-threaded (16 min at 1M × 128-d); after a crash, vectors since the last clean close are re-inserted on open. | documented |
 | S5.3 | The journal file only shrinks offline (`gc --shrink`). | documented |
 | S5.4 | S3 request cost per commit and per open is not measured. | fixed (measured): docs/s3.md — 1 PUT per serial commit, 0.06 with 32 writers, ~2 GETs per segment at open |
