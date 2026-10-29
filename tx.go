@@ -217,9 +217,12 @@ func (d DocTx) Delete(id string) error {
 // Get returns the raw JSON of a document.
 func (d DocTx) Get(id string) (json.RawMessage, error) { return d.tx.get(docSpace(d.coll), id) }
 
-// Find returns ids of documents whose field equals value. Uses the
-// secondary-index lens if one is registered, else scans the collection.
-// Results reflect committed state at the lens head (not this tx's writes).
+// Find returns the sorted ids of documents whose field equals value, at
+// the transaction's snapshot and including its own writes. It uses the
+// secondary-index lens if one is registered, else scans the collection;
+// both give the same answer. In a read-write transaction Find reads the
+// whole collection for conflict checking: any concurrent write to the
+// collection makes the commit retry (no phantoms).
 func (d DocTx) Find(field string, value any) ([]string, error) {
 	canon, ok := lens.CanonicalJSON(value)
 	if !ok {
@@ -229,29 +232,47 @@ func (d DocTx) Find(field string, value any) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	space := docSpace(d.coll)
 	v.mu.RLock()
 	ix := v.idx[idxKey(d.coll, field)]
+	var ids []string
 	if ix != nil {
-		ids := ix.Lookup(canon)
-		v.mu.RUnlock()
-		return ids, nil
+		ids = ix.Lookup(canon)
 	}
 	v.mu.RUnlock()
-	all, err := d.tx.scan(docSpace(d.coll), "")
-	if err != nil {
-		return nil, err
-	}
-	var ids []string
-	for _, kv := range all {
-		var m map[string]any
-		dec := json.NewDecoder(bytes.NewReader(kv.Value))
-		dec.UseNumber()
-		if dec.Decode(&m) == nil {
-			if fv, ok := m[field]; ok {
-				if c, ok := lens.CanonicalJSON(fv); ok && c == canon {
-					ids = append(ids, kv.Key)
-				}
+	if ix == nil {
+		all, err := d.tx.scan(space, "")
+		if err != nil {
+			return nil, err
+		}
+		for _, kv := range all {
+			if c, ok := lens.DocField(kv.Value, field); ok && c == canon {
+				ids = append(ids, kv.Key)
 			}
+		}
+		return ids, nil
+	}
+	if !d.tx.writable {
+		return ids, nil // the view is at the snapshot (lensView)
+	}
+	// The index is at the branch head, which may be past the snapshot: the
+	// collection read makes any such difference a conflict at commit.
+	d.tx.prefixes = append(d.tx.prefixes, rkey{space, ""})
+	set := map[string]bool{}
+	for _, id := range ids {
+		set[id] = true
+	}
+	for k, l := range d.tx.local {
+		if k.space != space {
+			continue
+		}
+		c, ok := lens.DocField(l.val, field)
+		set[k.key] = !l.del && ok && c == canon
+	}
+	ids = ids[:0]
+	for _, id := range sortedMapKeys(set) {
+		if set[id] {
+			ids = append(ids, id)
 		}
 	}
 	return ids, nil

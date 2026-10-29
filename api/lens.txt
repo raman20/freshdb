@@ -3,6 +3,7 @@ var Castagnoli = crc32.MakeTable(crc32.Castagnoli)
 var ErrBadSnapshot = errors.New("lens: bad snapshot")
 func CanonicalJSON(v any) (string, bool)
 func DecodeVec(b []byte) ([]float32, bool)
+func DocField(doc []byte, field string) (string, bool)
 func EncodeVec(v []float32) []byte
 func Normalize(q []float32) ([]float32, bool)
 func SortHits(h []Hit)

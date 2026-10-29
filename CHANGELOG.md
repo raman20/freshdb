@@ -10,6 +10,16 @@ break APIs and the on-storage format.
 Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
+### Fixed (component D review: documents, in progress)
+
+- `Find` with an index now includes the transaction's own writes and is
+  part of its read set (a concurrent matching insert conflicts), like the
+  unindexed scan.
+- `Find` compares numbers by exact value: a stored `1.0` matches `1`, and
+  `GET /v1/docs/{c}?value=` no longer rounds large integers through
+  float64. New `lens.DocField`.
+- Shredding a subject no longer walks every indexed document.
+
 ### Fixed (soak investigation, bench/results/2026-10-30-soak-investigation)
 
 - A caller cancel (e.g. an HTTP client timing out on `/v1/compact`) during

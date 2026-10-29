@@ -58,6 +58,14 @@ func TestHTTPAPI(t *testing.T) {
 	if got := do("GET", "/v1/docs/notes?field=user&value=alice", "", 200); !strings.Contains(got, "n1") {
 		t.Fatal(got)
 	}
+	// numbers by exact value (no float64 rounding of the query)
+	do("PUT", "/v1/docs/nums/a", `{"n":12345678901234567891}`, 200)
+	do("PUT", "/v1/docs/nums/b", `{"n":1.0}`, 200)
+	for q, want := range map[string]string{"12345678901234567891": `["a"]`, "12345678901234567890": `[]`, "1": `["b"]`} {
+		if got := strings.TrimSpace(do("GET", "/v1/docs/nums?field=n&value="+q, "", 200)); got != want {
+			t.Fatalf("value=%s: %s, want %s", q, got, want)
+		}
+	}
 	do("POST", "/v1/branches", `{"name":"exp","from":"main","at":0}`, 200)
 	do("PUT", "/v1/kv/pref?branch=exp&subject=alice", "coffee", 200)
 	if got := do("GET", "/v1/kv/pref", "", 200); got != "tea" {

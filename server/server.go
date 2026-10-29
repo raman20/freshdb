@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/raman20/freshdb"
@@ -755,7 +756,9 @@ func (s *Server) docFind(w http.ResponseWriter, r *http.Request) {
 	r = s.with(r)
 	var val any
 	raw := r.URL.Query().Get("value")
-	if json.Unmarshal([]byte(raw), &val) != nil {
+	d := json.NewDecoder(strings.NewReader(raw))
+	d.UseNumber() // exact: a float64 would round 12345678901234567891
+	if d.Decode(&val) != nil || d.More() {
 		val = raw // bare strings are allowed
 	}
 	var ids []string

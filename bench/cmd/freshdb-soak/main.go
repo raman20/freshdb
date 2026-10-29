@@ -185,10 +185,12 @@ func (h *harness) startServer() error {
 		return err
 	}
 	go h.cmd.Wait()
+	t0 := time.Now()
 	for i := 0; i < 300; i++ {
 		if r, err := h.client.Get(h.addr + "/readyz"); err == nil {
 			r.Body.Close()
 			if r.StatusCode == 200 {
+				log.Printf("server ready in %.2fs", time.Since(t0).Seconds())
 				return nil
 			}
 		}

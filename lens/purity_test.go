@@ -14,7 +14,7 @@ import (
 func TestPurityImports(t *testing.T) {
 	allowed := map[string]bool{
 		"bytes": true, "crypto/sha256": true, "encoding/binary": true, "encoding/json": true,
-		"errors": true, "hash/crc32": true, "math": true, "sort": true, "strings": true,
+		"errors": true, "hash/crc32": true, "math": true, "sort": true, "strconv": true, "strings": true,
 		"github.com/raman20/freshdb/format": true,
 	}
 	ents, _ := os.ReadDir(".")
