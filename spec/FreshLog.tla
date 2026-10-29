@@ -13,7 +13,11 @@
 (*    a writer may give up (ErrUnknownOutcome) while its PUT is in flight  *)
 (*  - power loss: a crashed writer's in-flight PUT may land TORN (a subset *)
 (*    of its frames: CRC framing keeps a prefix; subset over-approximates) *)
-(*    Recovery repairs a torn TAIL in place; a torn non-tail = corruption  *)
+(*    Recovery accepts a torn TAIL via a repair note (never rewritten);    *)
+(*    a torn non-tail without a note = corruption                          *)
+(*  - segment-index checkpoints (checkpoint.go): a writer records "the log *)
+(*    up to my last commit k is verified"; recovery may start its damage  *)
+(*    checks after any intact checkpointed k (CkptSound says it is safe)  *)
 (*  - two writer processes racing (zombie + new opener)                   *)
 (***************************************************************************)
 EXTENDS Naturals, FiniteSets, Sequences, TLC
@@ -33,9 +37,10 @@ VARIABLES
   acked,     \* txns acknowledged to clients
   used,      \* txns ever submitted (clients never resubmit an ambiguous txn)
   corrupt,   \* recovery found damage it must refuse (ErrCorrupt)
-  notes      \* object store: seqs with a repair note (log/<id>/<seq>.repair)
+  notes,     \* object store: seqs with a repair note (log/<id>/<seq>.repair)
+  ckpt       \* object store: seqs with a segment-index checkpoint (<seq>.idx)
 
-vars == <<segs, mans, inflight, ws, acked, used, corrupt, notes>>
+vars == <<segs, mans, inflight, ws, acked, used, corrupt, notes, ckpt>>
 
 Present(s) == segs[s] # NoSeg
 DenseLen == CHOOSE n \in 0..MaxSeq :
@@ -54,6 +59,7 @@ TypeOK ==
   /\ acked \subseteq Txns /\ used \subseteq Txns
   /\ corrupt \in BOOLEAN
   /\ notes \subseteq Seqs
+  /\ ckpt \subseteq Seqs
 
 Init ==
   /\ segs = [s \in Seqs |-> NoSeg]
@@ -63,12 +69,13 @@ Init ==
   /\ acked = {} /\ used = {}
   /\ corrupt = FALSE
   /\ notes = {}
+  /\ ckpt = {}
 
 \* ---- open: acquire the write lease by creating manifest m+1 ----
 ReadManifest(w) ==
   /\ ws[w].mode = "down"
   /\ ws' = [ws EXCEPT ![w] = [Idle EXCEPT !.mode = "acq", !.pend = Len(mans)]]
-  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt, notes>>
+  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt, notes, ckpt>>
 
 PutManifest(w) ==
   /\ ws[w].mode = "acq"
@@ -78,7 +85,7 @@ PutManifest(w) ==
           /\ ws' = [ws EXCEPT ![w].mode = "scan", ![w].epoch = LatestEpoch + 1]
      ELSE /\ mans' = mans                \* 412: someone else won; retry
           /\ ws' = [ws EXCEPT ![w] = Idle]
-  /\ UNCHANGED <<segs, inflight, acked, used, corrupt, notes>>
+  /\ UNCHANGED <<segs, inflight, acked, used, corrupt, notes, ckpt>>
 
 \* ---- recovery: scan dense prefix, repair torn tail, then fence ----
 Superseded(w, n) == \E s \in 1..n : segs[s].epoch > ws[w].epoch
@@ -92,7 +99,7 @@ Scan(w) ==
      /\ n < MaxSeq
      /\ IF Superseded(w, n)
         THEN /\ ws' = [ws EXCEPT ![w].mode = "dead"]       \* ErrFenced
-             /\ UNCHANGED <<segs, corrupt, notes>>
+             /\ UNCHANGED <<segs, corrupt, notes, ckpt>>
         ELSE IF \E s \in 1..n : segs[s].torn /\ s < n /\ s \notin notes
         THEN /\ corrupt' = TRUE                             \* damage below the tail
              /\ ws' = [ws EXCEPT ![w].mode = "dead"]
@@ -102,7 +109,7 @@ Scan(w) ==
                          THEN notes \cup {n}                \* never rewrite (damagedSeg)
                          ELSE notes
              /\ ws' = [ws EXCEPT ![w].mode = "fence", ![w].next = n + 1]
-  /\ UNCHANGED <<segs, mans, inflight, acked, used>>
+  /\ UNCHANGED <<segs, mans, inflight, acked, used, ckpt>>
 
 Fence(w) ==
   /\ ws[w].mode = "fence"
@@ -113,7 +120,7 @@ Fence(w) ==
           /\ ws' = [ws EXCEPT ![w].mode = "open", ![w].next = s + 1]
      ELSE /\ segs' = segs                               \* lost race: rescan
           /\ ws' = [ws EXCEPT ![w].mode = "scan"]
-  /\ UNCHANGED <<mans, inflight, acked, used, corrupt, notes>>
+  /\ UNCHANGED <<mans, inflight, acked, used, corrupt, notes, ckpt>>
 
 \* ---- group commit ----
 Send(w) ==
@@ -126,20 +133,20 @@ Send(w) ==
           IN /\ inflight' = inflight \cup {m}
              /\ ws' = [ws EXCEPT ![w].mode = "wait", ![w].out = m]
        /\ used' = used \cup B
-  /\ UNCHANGED <<segs, mans, acked, corrupt, notes>>
+  /\ UNCHANGED <<segs, mans, acked, corrupt, notes, ckpt>>
 
 \* the store executes a request (create-only)
 Land(m) ==
   /\ m \in inflight
   /\ segs' = IF Present(m.seq) THEN segs ELSE [segs EXCEPT ![m.seq] = m.rec]
   /\ inflight' = inflight \ {m}
-  /\ UNCHANGED <<mans, ws, acked, used, corrupt, notes>>
+  /\ UNCHANGED <<mans, ws, acked, used, corrupt, notes, ckpt>>
 
 \* the request is lost
 Drop(m) ==
   /\ m \in inflight
   /\ inflight' = inflight \ {m}
-  /\ UNCHANGED <<segs, mans, ws, acked, used, corrupt, notes>>
+  /\ UNCHANGED <<segs, mans, ws, acked, used, corrupt, notes, ckpt>>
 
 \* power loss while a crashed writer's PUT is being written (local FS only)
 LandTorn(m) ==
@@ -149,7 +156,7 @@ LandTorn(m) ==
   /\ \E keep \in SUBSET m.rec.batch :
        segs' = [segs EXCEPT ![m.seq] = [m.rec EXCEPT !.batch = keep, !.torn = TRUE]]
   /\ inflight' = inflight \ {m}
-  /\ UNCHANGED <<mans, ws, acked, used, corrupt, notes>>
+  /\ UNCHANGED <<mans, ws, acked, used, corrupt, notes, ckpt>>
 
 \* putExactlyOnce: response arrives / read-back after a 412 or timeout
 Reply(w) ==
@@ -165,22 +172,31 @@ Reply(w) ==
                /\ UNCHANGED <<acked, inflight>>
           ELSE /\ inflight' = inflight \cup {m}          \* lost: retry same bytes
                /\ UNCHANGED <<ws, acked>>
-  /\ UNCHANGED <<segs, mans, used, corrupt, notes>>
+  /\ UNCHANGED <<segs, mans, used, corrupt, notes, ckpt>>
 
 \* retries exhausted while the PUT may still be in flight: ErrUnknownOutcome
 GiveUp(w) ==
   /\ ws[w].mode = "wait"
   /\ ws' = [ws EXCEPT ![w].mode = "dead"]
-  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt, notes>>
+  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt, notes, ckpt>>
+
+\* writeCheckpoint: after a commit, the writer records its index up to its
+\* last (acknowledged) segment k = next-1.
+Checkpoint(w) ==
+  /\ ws[w].mode = "open"
+  /\ LET k == ws[w].next - 1 IN
+     /\ k >= 1 /\ Present(k) /\ ~segs[k].fence /\ segs[k].epoch = ws[w].epoch
+     /\ ckpt' = ckpt \cup {k}
+  /\ UNCHANGED <<segs, mans, inflight, ws, acked, used, corrupt, notes>>
 
 Crash(w) ==
   /\ ws[w].mode # "down"
   /\ ws' = [ws EXCEPT ![w] = Idle]
-  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt, notes>>
+  /\ UNCHANGED <<segs, mans, inflight, acked, used, corrupt, notes, ckpt>>
 
 Next ==
   \/ \E w \in Writers : ReadManifest(w) \/ PutManifest(w) \/ Scan(w) \/ Fence(w)
-                        \/ Send(w) \/ Reply(w) \/ GiveUp(w) \/ Crash(w)
+                        \/ Send(w) \/ Reply(w) \/ GiveUp(w) \/ Crash(w) \/ Checkpoint(w)
   \/ \E m \in inflight : Land(m) \/ Drop(m) \/ LandTorn(m)
 
 Spec == Init /\ [][Next]_vars
@@ -209,4 +225,8 @@ AckedStable == [][acked \subseteq acked']_vars
 Immutable == [][\A s \in Seqs : Present(s) => segs'[s] = segs[s]]_vars
 \* a repair note is only ever written for a torn segment
 NotesTorn == \A s \in notes : Present(s) /\ segs[s].torn
+\* what a checkpoint covers was verified: present, and damage only where a
+\* repair note accepts it. So skipping those checks at open loses nothing
+\* (latent rot after the fact is outside this model; readSeg and Verify).
+CkptSound == \A c \in ckpt : \A s \in 1..c : Present(s) /\ (segs[s].torn => s \in notes)
 =============================================================================

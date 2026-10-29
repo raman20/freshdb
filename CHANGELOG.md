@@ -16,6 +16,9 @@ in its "Changes since v0.1.0" section.
   request; it used to `Stat` after reading, which reported size 0 and made
   every S3 read fail with "short read"). A body cut short by the network is
   `store.ErrShortRead`, never a silently short object.
+- A checksummed but inconsistent manifest (a null log entry, a parent
+  cycle, a ref to a missing log) is `ErrCorrupt` at open; it used to panic
+  or recurse without end (found by the new `FuzzOpenManifest`).
 - `--repair-tail` no longer deletes and re-creates the damaged segment
   (a crash in between lost its valid prefix; a zombie writer could fill the
   freed slot). It writes a create-only repair note `log/<id>/<seq>.repair`

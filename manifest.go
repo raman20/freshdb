@@ -135,7 +135,44 @@ func decodeManifest(b []byte) (*Manifest, error) {
 			ErrVersion, m.Format, manifestFormat, manifestFormatBase)
 	}
 	c := m.clone2()
+	if err := c.validate(); err != nil {
+		return nil, fmt.Errorf("%w: manifest %d: %v", ErrCorrupt, c.ID, err)
+	}
 	return &c, nil
+}
+
+// validate checks the structure the rest of the code relies on, so a
+// checksummed but inconsistent manifest (a bug, or a hand edit) is
+// refused instead of panicking or recursing forever. FuzzOpenManifest.
+func (m *Manifest) validate() error {
+	for id, lm := range m.Logs {
+		switch {
+		case lm == nil:
+			return fmt.Errorf("log %q: null", id)
+		case id == "" || lm.ID != id:
+			return fmt.Errorf("log %q: id %q", id, lm.ID)
+		case lm.Base != nil && lm.Base.Chunks < 0:
+			return fmt.Errorf("log %q: base chunks %d", id, lm.Base.Chunks)
+		}
+		// The parent chain must end (loadLog walks it recursively, stopping
+		// at a compaction base: a based log's parent may be gone).
+		p, hops := lm, 0
+		for p.Base == nil && p.Parent != "" {
+			if hops++; hops > len(m.Logs) {
+				return fmt.Errorf("log %q: parent cycle", id)
+			}
+			p = m.Logs[p.Parent]
+			if p == nil {
+				return fmt.Errorf("log %q: unknown ancestor", id)
+			}
+		}
+	}
+	for name, id := range m.Refs {
+		if name == "" || m.Logs[id] == nil {
+			return fmt.Errorf("ref %q: unknown log %q", name, id)
+		}
+	}
+	return nil
 }
 
 func (m Manifest) clone2() Manifest {

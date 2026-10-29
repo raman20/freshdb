@@ -396,7 +396,7 @@ simulator seeds, fuzzing and the MinIO tests on every push.
 
 | Method | What | Result |
 |---|---|---|
-| **TLA+ / TLC** ([spec/](spec), [results](spec/RESULTS.md)) | FreshLog (fencing, recovery, torn tails, lost/duplicated PUTs) | 10,415,103 states (2,475,220 distinct), no error |
+| **TLA+ / TLC** ([spec/](spec), [results](spec/RESULTS.md)) | FreshLog (fencing, recovery, torn tails, checkpoints, lost/duplicated PUTs) | 22,587,747 states (5,697,022 distinct), no error |
 | | FreshTxn (serializable OCC, exactly-once consume+ack) | 21,685,744 states (2,421,454 distinct), no error |
 | | FreshBranch (branch, rewind, time travel) | 3,430,206 states (1,845,287 distinct), no error |
 | | FreshShred (shred steps, crashes, late DEKs; incl. liveness) | 25,570 states (6,481 distinct), no error |

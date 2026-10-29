@@ -20,7 +20,7 @@ the first run reported 32 with identical state counts.
 
 | Spec | What it models | States generated | Distinct | Depth | Result |
 |---|---|---:|---:|---:|---|
-| FreshLog | object-store log: create-only manifests + epochs, recovery scan, fence segment, group commit, lost/delayed/duplicated PUTs, give-up (unknown outcome), crash, power-loss torn tail + repair, 2 racing writers | 10,415,103 | 2,475,220 | 30 | no error |
+| FreshLog | object-store log: create-only manifests + epochs, recovery scan, fence segment, group commit, lost/delayed/duplicated PUTs, give-up (unknown outcome), crash, power-loss torn tail + repair note, segment-index checkpoints (2026-10-29), 2 racing writers | 22,587,747 | 5,697,022 | 32 | no error |
 | FreshTxn | OCC serializable txns; consume-message + write-KV + ack-cursor in one txn; 3 concurrent consumers + blind writer; durable-prefix crash | 21,685,744 | 2,421,454 | 20 | no error |
 | FreshBranch | append-only logs with parents; create branch, rewind (fork + ref swap + reflog), time travel | 3,430,206 | 1,845,287 | 16 | no error |
 | FreshMigrate | offline layout migration (files ↔ journal): copy, verify, fsync, rename to `.migrated`, move original to backup, rename into place; volatile vs durable directory state; up to 4 crashes at any step with resume | 149 | 88 | 17 | no error (incl. liveness) |
@@ -36,8 +36,13 @@ the first run reported 32 with identical state counts.
 - **FreshLog** (invariants): `Durability` (acked ⊆ recovered log), `NoHoles`,
   `EpochMonotone` (no split brain: an older writer can't append after a newer
   fence), `NoDoubleApply`, `NoCorruption` (recovery never meets damage below the
-  tail), `TornOnlyUnacked`, `SingleLeader`, `ManifestMonotone`.
-  Temporal: `AckedStable`, `Immutable` (segments never change except torn-tail repair).
+  tail), `TornOnlyUnacked`, `SingleLeader`, `ManifestMonotone`, `NotesTorn`,
+  `CkptSound` (everything a checkpoint covers is present and undamaged or
+  noted, so recovery may skip re-checking it).
+  Temporal: `AckedStable`, `Immutable` (segments never change; a torn tail
+  is accepted with a separate repair note).
+  Checkpoints (2026-10-29) grew FreshLog from 10,415,103 / 2,475,220 to
+  22,587,747 / 5,697,022 states (139 s on the shared box under load).
 - **FreshTxn**: `ExactlyOnce` (each message processed ≤ once), `AtomicCursor`
   (processed set = {0..cursor-1}, i.e. consume+KV+ack are atomic), `Serializable`
   (every committed read equals the serial-order state before it), `DurablePrefix`.
@@ -109,6 +114,7 @@ the first run reported 32 with identical state counts.
 | Mutation | Result |
 |---|---|
 | FreshLog without the `Superseded` check | `EpochMonotone` violated (bug #1 above) |
+| FreshLog with a checkpoint allowed at any dense prefix, not only the writer's own acknowledged commit (spec edit, 2026-10-29) | `CkptSound` violated (found after 2,291 states) |
 | FreshTxn with OCC validation removed | `ExactlyOnce` violated (911 states) |
 | FreshCompact without the grace guard on sweeps | `ReaderOK` violated |
 | FreshNotify with the head read before taking the channel (`FreshNotifyBug.cfg`) | `NoLostWakeup` violated |
