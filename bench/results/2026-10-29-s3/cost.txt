@@ -1,0 +1,13 @@
+# go test -count=1 -v -run TestS3Cost . ; MinIO v0.0.0-20260212201848-7aac2a2c5b7c on loopback, 2026-10-29 19:52 IST
+open (empty prefix)                n=1    PUT   7.00  GET   7.00  LIST  5.00  DELETE  2.00  per op; $62.80 per million ops
+commit, serial (1 writer)          n=200  PUT   1.00  GET   0.00  LIST  0.00  DELETE  0.00  per op; $5.00 per million ops
+commit, 32 concurrent writers      n=3200 PUT   0.06  GET   0.00  LIST  0.00  DELETE  0.00  per op; $0.31 per million ops
+get (cached, after commits)        n=500  PUT   0.00  GET   0.00  LIST  0.00  DELETE  0.00  per op; $0.00 per million ops
+open (after 3400 commits)          n=1    PUT   4.00  GET 807.00  LIST  5.00  DELETE  2.00  per op; $367.80 per million ops
+get (cold, after reopen)           n=500  PUT   0.00  GET   0.00  LIST  0.00  DELETE  0.00  per op; $0.00 per million ops
+compaction                         n=1    PUT   4.00  GET   1.00  LIST  8.00  DELETE 402.00  per op; $60.40 per million ops
+open (after compaction)            n=1    PUT   4.00  GET   8.00  LIST  5.00  DELETE  2.00  per op; $48.20 per million ops
+gc (keep 0)                        n=1    PUT   0.00  GET   0.00  LIST  1.00  DELETE  0.00  per op; $5.00 per million ops
+--- PASS: TestS3Cost (1.98s)
+PASS
+ok  	github.com/raman20/freshdb	1.993s

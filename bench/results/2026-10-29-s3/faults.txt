@@ -1,0 +1,31 @@
+# go test -count=1 -v -run TestS3Faults . ; same MinIO, 2026-10-29 19:52 IST
+412 (create refused)                     17
+DELETE                                   181
+GET                                      24
+HEAD/meta                                2
+LIST                                     15
+PUT                                      376
+fault: 503 SlowDown                      35
+fault: lost response (DELETE applied)    5
+fault: lost response (PUT applied)       16
+fault: reset before forwarding           40
+300 acked, 0 unknown outcome (reopened 0 times), 0 false fences
+412 (create refused)                     42
+DELETE                                   74
+GET                                      57
+HEAD/meta                                26
+LIST                                     35
+PUT                                      204
+fault: 503 SlowDown                      77
+fault: lost response (DELETE applied)    8
+fault: lost response (GET applied)       15
+fault: lost response (HEAD/meta applied) 6
+fault: lost response (LIST applied)      7
+fault: lost response (PUT applied)       40
+fault: reset before forwarding           83
+60 acked, 0 unknown outcome (reopened 0 times), 0 false fences
+--- PASS: TestS3Faults (55.41s)
+    --- PASS: TestS3Faults/fault=0.15 (13.02s)
+    --- PASS: TestS3Faults/fault=0.60 (42.40s)
+PASS
+ok  	github.com/raman20/freshdb	55.429s

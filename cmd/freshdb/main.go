@@ -87,6 +87,8 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
   freshdb restore BACKUP_URL --db DEST [--at LSN] [--branch main]
                                               copy a complete backup into an empty DEST, check its
                                               digest, open + verify; --at rewinds the branch (PITR)
+  freshdb s3check [s3://bucket/prefix?...] [--large-mib 64]
+                                              probe an S3 endpoint for the guarantees freshDB needs
   freshdb version
 
 Every command takes --branch B (default main). Use --addr http://host:7070
@@ -159,6 +161,13 @@ func main() {
 		fmt.Println("freshdb", buildVersion())
 		fmt.Println("formats:", freshdb.Formats())
 		return
+	}
+	if args[0] == "s3check" {
+		u := dbURL
+		if len(args) > 1 {
+			u = args[1]
+		}
+		os.Exit(s3check(u, flags))
 	}
 	if args[0] == "restore" {
 		os.Exit(restore(dbURL, args, flags))

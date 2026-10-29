@@ -1,0 +1,11 @@
+# freshdb s3check against local MinIO, 2026-10-29 19:53 IST
+freshdb s3check s3://s3check/x?endpoint=127.0.0.1:9000&insecure=1&create=1 (writes only under _s3check/, removed afterwards)
+ok    read-after-write (20 objects)                PUT p50 1.7ms, max 3.8ms
+ok    create-only write (If-None-Match: *)         second create refused, object unchanged
+ok    concurrent creates (10 rounds x 8 writers)   exactly one winner per key
+ok    list-after-write                             LIST sees every new key at once
+ok    ranged GET                                   Range: bytes=2-4
+ok    not-found mapping, delete visibility         GET after DELETE is not found; key can be re-created
+ok    large object (64 MiB, single PUT)            PUT 238ms, GET 215ms
+
+verdict: every guarantee freshDB relies on held in this run (docs/s3.md). This is a probe, not a proof: rerun after endpoint or proxy changes.
