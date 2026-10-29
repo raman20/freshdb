@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -166,7 +167,6 @@ func TestMetricsCounters(t *testing.T) {
 	s := checkProm(t, body)
 	for k, v := range map[string]string{
 		"freshdb_commits_total":                     "3",
-		"freshdb_conflicts_total":                   "1",
 		"freshdb_commit_errors_total":               "0",
 		`freshdb_compactions_total{kind="compact"}`: "1",
 		`freshdb_compactions_total{kind="gc"}`:      "1",
@@ -177,6 +177,12 @@ func TestMetricsCounters(t *testing.T) {
 		if s[k] != v {
 			t.Errorf("%s = %q, want %q", k, s[k], v)
 		}
+	}
+	// At least one attempt loses. The loser can lose again when it lost
+	// to a commit still in flight in the same group commit: its retry
+	// may read before the winner is visible (seen in CI, ~3 % of runs).
+	if n, err := strconv.Atoi(s["freshdb_conflicts_total"]); err != nil || n < 1 {
+		t.Errorf("freshdb_conflicts_total = %q, want >= 1", s["freshdb_conflicts_total"])
 	}
 }
 

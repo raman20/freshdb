@@ -646,11 +646,8 @@ func (l *KV) SetLatest(space, key string, v Version) {
 		}
 	}
 	if vs, ok := l.m[k]; ok { // replace in place: k stays in keys/recent
-		l.hot -= vs.n() - 1
+		l.hot -= vs.n() - 1 // never grows, so no freeze is due
 		l.m[k] = vers{one: pack(v)}
-		if l.hot >= l.hotMax {
-			l.freeze()
-		}
 	} else {
 		l.put(k, v)
 	}

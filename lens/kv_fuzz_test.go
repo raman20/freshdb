@@ -90,6 +90,21 @@ func TestLoadKVRejectsMalformed(t *testing.T) {
 	if _, err := loadKV(good, 4, true); err != nil {
 		t.Fatalf("well-formed snapshot rejected: %v", err)
 	}
+	// raw: a one-key snapshot with the given u64 fields after the key,
+	// then an empty subject and a false delete flag.
+	raw := func(f, k string, u ...uint64) []byte {
+		e := &enc{}
+		e.str(f)
+		e.u64(4)
+		e.u64(1)
+		e.str(k)
+		for _, x := range u {
+			e.u64(x)
+		}
+		e.str("")
+		e.bool(false)
+		return e.b
+	}
 	notCanon := func(b []byte, at int, c byte) []byte {
 		b = append([]byte{}, b...)
 		b[at] = c
@@ -109,6 +124,10 @@ func TestLoadKVRejectsMalformed(t *testing.T) {
 		"trailing bytes":        append(append([]byte{}, good...), 0),
 		"truncated":             good[:len(good)-1],
 		"bad format":            build("KV9", 4),
+		"truncated in a u64":    good[:len(good)-5],
+		"value past the end":    notCanon(good, len(good)-18, 0x7f),
+		"count past the end":    raw("KV2", "kv\x00a", 1<<40),
+		"chunk over 32 bits":    raw("KV3", "kv\x00a", 1, 1, 0, 0, 1<<32, ^uint64(0), 0),
 	} {
 		if _, err := loadKV(b, 4, true); err != ErrBadSnapshot {
 			t.Errorf("%s: err = %v, want ErrBadSnapshot", name, err)
@@ -126,5 +145,12 @@ func TestLoadKVRejectsMalformed(t *testing.T) {
 	// A base may carry another inline limit.
 	if _, err := loadKV(build("KV2", 5, kv{"kv\x00a", v1}), 4, false); err != nil {
 		t.Errorf("base with another inline limit: %v", err)
+	}
+}
+
+// TestNewKVInlineNegative: a negative inline limit means "never inline".
+func TestNewKVInlineNegative(t *testing.T) {
+	if got := NewKVInline(-1).Inline(); got != 0 {
+		t.Fatalf("Inline() = %d, want 0", got)
 	}
 }
