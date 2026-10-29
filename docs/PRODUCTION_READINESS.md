@@ -60,7 +60,7 @@ named), **documented** (accepted limit, written down where users read).
 | S3.4 | No pprof endpoint. | fixed: `--pprof`, admin scope, refused without auth |
 | S3.5 | No backup or restore command; the documented method is copying the directory/bucket while stopped. No restore drill. | fixed: online `freshdb backup` (deletes held during the copy, incremental, digest record), `freshdb restore`, drill script + test — design 15 |
 | S3.6 | Point-in-time recovery exists only as `branch create --at LSN` / `rewind`; no way to restore a database to a log position into a new location. | fixed: `restore --at LSN` (within the history the backup holds) |
-| S3.7 | No long soak run; crash tests and the simulator run for seconds to minutes. | partly fixed (design 18): long deterministic simulator run recorded (bench/results/2026-10-29-soak/); 6 h real-time soak **in progress, result pending** — it ends ~02:00 IST 2026-10-30 and its last line (`SOAK OK:` / `SOAK FAIL:`) is in `/workspace/soak6h.out` on the test box (server log `/workspace/soak6h/server.log`); copy it to the results directory when it ends |
+| S3.7 | No long soak run; crash tests and the simulator run for seconds to minutes. | fixed (design 18): 6 h real-time soak **SOAK OK** (2026-10-29 20:00 → 2026-10-30 02:09 IST: 56.8 M ops, 134 kill -9 restarts, 216 full checks, 574 compactions, 271 GCs, 82 backups restored and checked, no violation) and long simulator (600 seeds × 2 000 steps, 151 k crashes, 550 k injected store faults, no violation): bench/results/2026-10-29-soak/. Server RSS and disk grew over the run (RSS to 3.3–4.5 GiB, max 6.1 GiB; disk to 9.5 GiB), not root-caused |
 
 ## S4 — security (beyond docs/security.md)
 
@@ -97,7 +97,7 @@ named), **documented** (accepted limit, written down where users read).
 Overall: **not production ready.** Nothing below is production-grade yet.
 Closest: durability and formats on the local journal store, backup/restore
 and operational safety (tested, unproven in the field). Experimental: S3,
-soak evidence (pending), memory bound.
+soak evidence (one 6 h run passed; memory growth during it not root-caused), memory bound.
 
 | area | verdict |
 |---|---|
@@ -106,7 +106,7 @@ soak evidence (pending), memory bound.
 | observability | metrics, readiness, structured/access/slow logs and pprof exist and are tested. Not yet: tracing, shipped dashboards/alert rules, a real Prometheus scrape in CI |
 | backup / restore | online consistent backup, incremental, verified restore, PITR within retained history, drill (test + script). Not yet: S3-destination cost measured, scheduled backups, backup encryption beyond what the data already has |
 | operational safety | graceful drain + shutdown, bind-before-open, per-request timeouts, key/body/tx limits, lease records naming writers, 409 for busy maintenance; tested with the real binary. Not yet: rate limits, global in-flight cap, request-level DB deadlines |
-| soak / chaos | not ready, result pending. Harness built (kill -9, concurrent compaction/GC/backup, invariant checker); 6 h run started 2026-10-29 20:00 IST: at 1 h 29 m, 20.7 M ops, 45 kill -9 restarts, every check and restored backup OK, no violation. Final line (`SOAK OK`/`SOAK FAIL`) in `/workspace/soak6h.out` (data in `/workspace/soak6h`). Long simulator run (4 × 150 seeds × 2 000 steps): first attempt found a harness liveness limit (open under read-fault storms, design 18), fixed; rerun result pending in `/workspace/simlong/shard*.out` |
+| soak / chaos | one 6 h soak passed (SOAK OK, 56.8 M ops, 134 kill -9 restarts, every full check and all 82 restored backups OK) and the long simulator passed (600 seeds × 2 000 steps, no violation): bench/results/2026-10-29-soak/. Not yet: a soak on S3, with network faults, longer than 6 h, or with heap profiles; server RSS and disk grew during the run and that growth is not root-caused |
 | memory bound | not ready: key index and lens state in RAM (S5.1); disk-backed index deferred, on the ROADMAP |
 | S3 | experimental. MinIO only (CI): fault injection (503, resets, lost replies) with no false fences or lost acks, request cost measured, `s3check` for other endpoints. Not yet: any real cloud provider, snapshots > 5 GiB |
 | API stability / supply chain | policy written, Go API diff-gated, govulncheck + SBOM + checksums in CI. Not yet: 1.0 freeze, HTTP/CLI compatibility tests, a published signing key, reproducible builds |

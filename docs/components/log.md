@@ -243,12 +243,10 @@ single-request Get keeps one GET per object read (docs/s3.md).
   This is planned for components D and E.
 - The fs serial-put number above is still unresolved, and S3 is tested
   only on MinIO.
-- **Results still pending:**
-  - the 6 h soak (pid 11033, ends about 02:00 IST);
-  - the 4-shard long sim.
-
-  They will be recorded in bench/results/2026-10-29-soak and STATUS.md
-  when they finish.
+- The 6 h soak (SOAK OK, 2026-10-30 02:09 IST) and the 4-shard long sim
+  (600 seeds × 2 000 steps, all OK) finished after this review; results
+  in bench/results/2026-10-29-soak. Server RSS and disk grew during the
+  soak; that is not root-caused.
 
 ## Verdict
 
@@ -258,7 +256,6 @@ each with a regression test.
 
 The component is **done for this review** with these open items:
 
-- the soak and long-sim results;
 - the fs put rerun.
 
 This is not a claim of production readiness. The residual risks above
