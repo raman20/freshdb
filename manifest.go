@@ -98,7 +98,7 @@ const (
 // Formats describes the on-storage format versions this build reads and
 // writes (`freshdb version`; docs/compatibility.md).
 func Formats() string {
-	return fmt.Sprintf("manifest %d-%d, segment %d, base %s, journal %d, kv snapshot KV2, ann %s",
+	return fmt.Sprintf("manifest %d-%d, segment %d, base %s, journal %d, snapshot 2 (KV2), ann %s",
 		manifestFormat, manifestFormatBase, format.SegVersion, baseMagic[7:], store.JournalVersion, lens.ANNVersion)
 }
 
@@ -169,16 +169,24 @@ func loadLatestManifest(ctx context.Context, st store.Store) (*Manifest, error) 
 	if best == 0 {
 		return nil, nil
 	}
-	b, err := st.Get(ctx, manifestKey(best))
-	if err != nil {
+	var m *Manifest
+	var derr error
+	if _, err := getStable(ctx, st, manifestKey(best), func(b []byte) readVerdict {
+		if m, derr = decodeManifest(b); derr != nil {
+			return readDamaged
+		}
+		if m.ID != best {
+			return readMisread
+		}
+		return readOK
+	}); err != nil {
 		return nil, err
 	}
-	m, err := decodeManifest(b)
-	if err != nil {
-		return nil, err
+	if derr != nil {
+		return nil, derr
 	}
-	if m.ID != best {
-		return nil, fmt.Errorf("%w: manifest id mismatch", ErrCorrupt)
+	if m.ID != best { // every read returned the same other manifest
+		return nil, fmt.Errorf("%w: manifest %d holds id %d", ErrCorrupt, best, m.ID)
 	}
 	return m, nil
 }
@@ -248,13 +256,16 @@ func putExactlyOnce(ctx context.Context, st store.Store, key string, data []byte
 }
 
 // readBackIs reports whether key holds exactly data, retrying failed reads.
-// A NotFound after the store said "exists" cannot happen on a correct store;
-// it is returned as an error so the caller retries the put.
+// "Other bytes" must be read alike several times (getStable): one faulty read must
+// not turn our own landed write into "fenced". A NotFound after the store
+// said "exists" cannot happen on a correct store; it is returned as an
+// error so the caller retries the put.
 func readBackIs(ctx context.Context, st store.Store, key string, data []byte) (bool, error) {
+	mine := func(b []byte) readVerdict { return okIf(string(b) == string(data)) }
 	var err error
 	for r := 0; r < 4 && ctx.Err() == nil; r++ {
 		var b []byte
-		if b, err = st.Get(ctx, key); err == nil {
+		if b, err = getStable(ctx, st, key, mine); err == nil {
 			return string(b) == string(data), nil
 		}
 		if errors.Is(err, store.ErrNotFound) {

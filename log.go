@@ -118,11 +118,23 @@ func (l *logState) locate(lsn uint64) (*logState, segIdx, bool) {
 
 // readSeg reads and decodes one indexed segment of this log.
 func (l *logState) readSeg(ctx context.Context, s segIdx) ([]format.Decoded, error) {
-	data, err := l.st.Get(ctx, segKey(l.meta.ID, s.seq))
+	var frames []format.Decoded
+	var derr error
+	_, err := getStable(ctx, l.st, segKey(l.meta.ID, s.seq), func(b []byte) readVerdict {
+		var h format.SegHeader
+		h, frames, _, derr = format.DecodeSegment(b)
+		switch {
+		case !errors.Is(derr, format.ErrHeader) && h.Seq != s.seq,
+			len(frames) > 0 && frames[0].Frame.LSN != s.first:
+			return readMisread // another segment, of this log or another
+		case uint64(len(frames)) >= s.n:
+			return readOK
+		}
+		return readDamaged
+	})
 	if err != nil {
 		return nil, err
 	}
-	_, frames, _, derr := format.DecodeSegment(data)
 	if uint64(len(frames)) < s.n {
 		return nil, fmt.Errorf("%w: log %s segment %d: %d of %d frames readable: %v", ErrCorrupt, l.meta.ID, s.seq, len(frames), s.n, derr)
 	}
@@ -246,58 +258,74 @@ func (l *logState) entryAt(ctx context.Context, lsn uint64) (*lens.Entry, error)
 // prefix or swap in other frames. A damaged non-tail segment is accepted
 // only with a note that matches its bytes.
 func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error {
-	st := db.st
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	keys, err := st.List(ctx, "log/"+l.meta.ID+"/")
-	if err != nil {
-		return err
+	for range 64 {
+		if grew, err := db.scanSegments(ctx, l, writable); !grew {
+			return err
+		}
 	}
+	return fmt.Errorf("%w: log %s keeps growing during recovery", ErrFenced, l.meta.ID)
+}
+
+// scanSegments reads l's segments from l.nextSeq on (l.mu held). grew: a
+// segment appeared past the end while we read; scan again.
+func (db *DB) scanSegments(ctx context.Context, l *logState, writable bool) (grew bool, err error) {
+	st := db.st
 	// resume after what we already have (re-recovery after a fencing race)
 	expectSeq := l.nextSeq
 	if expectSeq == 0 {
 		expectSeq = 1
 	}
-	var lastSeq uint64 // the tail; other keys (repair notes) do not count
-	for _, k := range keys {
-		if seq, ok := parseNum(k, "log/"+l.meta.ID+"/", ".seg"); ok {
-			lastSeq = max(lastSeq, seq)
+	// Segments are dense, so the log is read by sequence number until one
+	// is not found; GETs are authoritative. The LIST only cross-checks
+	// that nothing exists past that point (a hole in the log). A stale
+	// LIST can omit new keys but not invent them, so it can neither
+	// shorten the log nor make a non-tail segment look like the tail.
+	for seq := expectSeq; ; seq++ {
+		k := segKey(l.meta.ID, seq)
+		var (
+			h      format.SegHeader
+			frames []format.Decoded
+			valid  int
+			derr   error
+		)
+		data, err := getStable(ctx, st, k, func(b []byte) readVerdict {
+			h, frames, valid, derr = format.DecodeSegment(b)
+			return segVerdict(h, derr, seq)
+		})
+		if errors.Is(err, store.ErrNotFound) {
+			break
 		}
-	}
-	for _, k := range keys {
-		seq, ok := parseNum(k, "log/"+l.meta.ID+"/", ".seg")
-		if !ok || seq < expectSeq {
-			continue
-		}
-		if seq != expectSeq {
-			return fmt.Errorf("%w: log %s: missing segment %d (found %d)", ErrCorrupt, l.meta.ID, expectSeq, seq)
-		}
-		data, err := st.Get(ctx, k)
 		if errors.Is(err, store.ErrCorrupt) {
-			return fmt.Errorf("%w: %w", ErrCorrupt, err)
+			return false, fmt.Errorf("%w: %w", ErrCorrupt, err)
 		}
 		if err != nil {
-			return err
+			return false, err
 		}
-		h, frames, valid, derr := format.DecodeSegment(data)
 		if derr != nil && !(errors.Is(derr, format.ErrTorn) || errors.Is(derr, format.ErrHeader)) {
-			return fmt.Errorf("%s: %w", k, derr)
+			return false, fmt.Errorf("%s: %w", k, derr)
 		}
 		if derr == nil || errors.Is(derr, format.ErrTorn) {
 			if h.Seq != seq {
-				return fmt.Errorf("%w: segment %s header seq %d", ErrCorrupt, k, h.Seq)
+				return false, fmt.Errorf("%w: segment %s header seq %d", ErrCorrupt, k, h.Seq)
 			}
 			if h.Epoch < l.lastEp {
-				return fmt.Errorf("%w: segment %s epoch %d < %d (fencing violated)", ErrCorrupt, k, h.Epoch, l.lastEp)
+				return false, fmt.Errorf("%w: segment %s epoch %d < %d (fencing violated)", ErrCorrupt, k, h.Epoch, l.lastEp)
 			}
 		}
 		if derr != nil {
-			stop, err := db.damagedSeg(ctx, l, k, seq, seq == lastSeq, writable, data, h, len(frames), valid, derr)
+			tail, err := segAbsent(ctx, st, segKey(l.meta.ID, seq+1))
 			if err != nil {
-				return err
+				return false, err
 			}
-			if stop {
-				break
+			stop, err := db.damagedSeg(ctx, l, k, seq, tail, writable, data, h, len(frames), valid, derr)
+			if err != nil {
+				return false, err
+			}
+			if stop { // read-only view ends before this segment
+				l.nextSeq = expectSeq
+				return false, nil
 			}
 		}
 		if len(frames) > 0 {
@@ -306,10 +334,10 @@ func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error 
 			for i, d := range frames {
 				f := d.Frame
 				if want := first + uint64(i); f.LSN != want {
-					return fmt.Errorf("%w: log %s: LSN %d, expected %d (duplicate or gap)", ErrCorrupt, l.meta.ID, f.LSN, want)
+					return false, fmt.Errorf("%w: log %s: LSN %d, expected %d (duplicate or gap)", ErrCorrupt, l.meta.ID, f.LSN, want)
 				}
 				if f.Prev != prev {
-					return fmt.Errorf("%w: log %s: hash chain broken at LSN %d", ErrCorrupt, l.meta.ID, f.LSN)
+					return false, fmt.Errorf("%w: log %s: hash chain broken at LSN %d", ErrCorrupt, l.meta.ID, f.LSN)
 				}
 				prev = format.ChainNext(prev, d.Payload)
 			}
@@ -321,13 +349,62 @@ func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error 
 		expectSeq = seq + 1
 	}
 	l.nextSeq = expectSeq
+	// a writer (a zombie, or the next owner) may append while we read
+	if grew, err := checkNoHole(ctx, st, l.meta.ID, expectSeq); grew || err != nil {
+		return grew, err
+	}
 	if writable && l.lastEp > db.epoch {
 		// A newer writer already fenced this log (found by TLC, FreshLog.tla:
 		// a slow opener must not append an older-epoch fence after a newer
 		// one, which would make the log unrecoverable).
-		return fmt.Errorf("%w: log %s has epoch %d > ours %d", ErrFenced, l.meta.ID, l.lastEp, db.epoch)
+		return false, fmt.Errorf("%w: log %s has epoch %d > ours %d", ErrFenced, l.meta.ID, l.lastEp, db.epoch)
 	}
-	return nil
+	return false, nil
+}
+
+// segVerdict judges a read of segment seq: a readable header that names
+// another sequence number is a misread, not damage.
+func segVerdict(h format.SegHeader, derr error, seq uint64) readVerdict {
+	switch {
+	case errors.Is(derr, format.ErrHeader):
+		return readDamaged
+	case h.Seq != seq:
+		return readMisread
+	case derr == nil:
+		return readOK
+	}
+	return readDamaged
+}
+
+// segAbsent reports whether key does not exist.
+func segAbsent(ctx context.Context, st store.Store, key string) (bool, error) {
+	_, err := st.Get(ctx, key)
+	if errors.Is(err, store.ErrNotFound) {
+		return true, nil
+	}
+	return false, err
+}
+
+// checkNoHole checks that no segment exists past end, the first sequence
+// number that was not found. grew: segment end exists now (written after
+// our read), so the caller reads on. A listed segment past a still-absent
+// end is a hole: ErrCorrupt.
+func checkNoHole(ctx context.Context, st store.Store, id string, end uint64) (grew bool, err error) {
+	prefix := "log/" + id + "/"
+	keys, err := st.List(ctx, prefix)
+	if err != nil {
+		return false, err
+	}
+	for _, k := range keys {
+		if seq, ok := parseNum(k, prefix, ".seg"); ok && seq >= end {
+			absent, err := segAbsent(ctx, st, segKey(id, end))
+			if err != nil || !absent {
+				return !absent, err
+			}
+			return false, fmt.Errorf("%w: log %s: missing segment %d (found %d)", ErrCorrupt, id, end, seq)
+		}
+	}
+	return false, nil
 }
 
 // damagedSeg decides whether recovery may use the valid prefix (nframes
@@ -335,7 +412,8 @@ func (db *DB) recoverLog(ctx context.Context, l *logState, writable bool) error 
 // the log before k. Otherwise nil means "use the prefix".
 func (db *DB) damagedSeg(ctx context.Context, l *logState, k string, seq uint64, tail, writable bool, data []byte, h format.SegHeader, nframes, valid int, derr error) (stop bool, err error) {
 	note := repairNote(seq, data, nframes, valid)
-	switch got, err := db.st.Get(ctx, repairKey(l.meta.ID, seq)); {
+	isNote := func(b []byte) readVerdict { return okIf(string(b) == string(note)) }
+	switch got, err := getStable(ctx, db.st, repairKey(l.meta.ID, seq), isNote); {
 	case err == nil && string(got) == string(note):
 		return false, nil // repaired by an earlier open
 	case err == nil:

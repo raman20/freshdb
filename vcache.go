@@ -217,11 +217,16 @@ func (db *DB) readValue(x *logState, seq uint64, ver lens.Version) ([]byte, erro
 	if b, ok := db.vcache.get(k); ok {
 		return b, nil
 	}
-	b, err := store.GetRange(context.Background(), db.st, obj, int64(ver.Off), int64(ver.Len))
-	if err != nil {
-		return nil, fmt.Errorf("freshdb: reading value at LSN %d: %w", ver.LSN, err)
+	var b []byte
+	ok := false
+	for try := 0; try < 2 && !ok; try++ { // a second read rules out a transient read fault
+		var err error
+		if b, err = store.GetRange(context.Background(), db.st, obj, int64(ver.Off), int64(ver.Len)); err != nil {
+			return nil, fmt.Errorf("freshdb: reading value at LSN %d: %w", ver.LSN, err)
+		}
+		ok = crc32.Checksum(b, lens.Castagnoli) == ver.Sum
 	}
-	if crc32.Checksum(b, lens.Castagnoli) != ver.Sum {
+	if !ok {
 		return nil, fmt.Errorf("%w: value at LSN %d (segment %s/%d offset %d) fails its checksum", ErrCorrupt, ver.LSN, x.meta.ID, seq, ver.Off)
 	}
 	db.vcache.put(k, b)

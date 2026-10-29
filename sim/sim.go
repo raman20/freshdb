@@ -44,21 +44,22 @@ type Config struct {
 }
 
 type Result struct {
-	Seed        int64
-	Steps       int
-	Acked       int
-	Ambiguous   int
-	Crashes     int
-	ANNRestores int // opens that restored a saved HNSW graph
-	CalmOpens   int // recoveries that needed the fault storm to pass (100 failed opens)
-	Closes      int // clean closes (save the HNSW graph) instead of a crash
-	Takeovers   int
-	Shreds      int
-	Rewinds     int
-	Compacts    int
-	GCs         int
-	Faults      int
-	TraceHash   [32]byte
+	Seed             int64
+	Steps            int
+	Acked            int
+	Ambiguous        int
+	Crashes          int
+	ANNRestores      int // opens that restored a saved HNSW graph
+	ReadFaultCorrupt int // opens that said ErrCorrupt under read faults (then opened clean without them)
+	CalmOpens        int // recoveries that needed the fault storm to pass (100 failed opens)
+	Closes           int // clean closes (save the HNSW graph) instead of a crash
+	Takeovers        int
+	Shreds           int
+	Rewinds          int
+	Compacts         int
+	GCs              int
+	Faults           int
+	TraceHash        [32]byte
 }
 
 type mop struct {
@@ -113,15 +114,19 @@ func (s *sim) fail(f string, a ...any) error {
 	if len(tail) > 25 {
 		tail = tail[len(tail)-25:]
 	}
-	return fmt.Errorf("seed %d step %d: %s\n  recent: %s", s.seed, s.res.Steps, fmt.Sprintf(f, a...), strings.Join(tail, " | "))
+	st := s.st.Trace
+	if len(st) > 15 {
+		st = st[len(st)-15:]
+	}
+	return fmt.Errorf("seed %d step %d: %s\n  recent: %s\n  store: %s", s.seed, s.res.Steps, fmt.Sprintf(f, a...), strings.Join(tail, " | "), strings.Join(st, " | "))
 }
 
 func (s *sim) log(f string, a ...any) { s.trace = append(s.trace, fmt.Sprintf(f, a...)) }
 
 func (s *sim) open() (*freshdb.DB, error) {
 	var last error
-	on := s.st.On
-	defer func() { s.st.On = on }()
+	on, probs := s.st.On, s.st.P
+	defer func() { s.st.On, s.st.P = on, probs }()
 	for i := 0; i < 200; i++ {
 		if i == 100 {
 			// Open re-reads every object, so on a large store under a
@@ -147,7 +152,16 @@ func (s *sim) open() (*freshdb.DB, error) {
 			return db, nil
 		}
 		if errors.Is(err, freshdb.ErrCorrupt) {
-			return nil, err
+			p := &s.st.P
+			if !s.st.On || p.BitFlip+p.Misdirect+p.ShortRead+p.StaleList == 0 {
+				return nil, err
+			}
+			// Oracle for read-path faults: ErrCorrupt or the right answer,
+			// never a wrong one. The faults are transient, so with them off
+			// the same store must open cleanly and pass every check.
+			s.log("corrupt under read faults: %v", err)
+			s.res.ReadFaultCorrupt++
+			p.BitFlip, p.Misdirect, p.ShortRead, p.StaleList = 0, 0, 0, 0
 		}
 		last = err
 	}

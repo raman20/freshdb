@@ -18,7 +18,13 @@ var (
 func probs(seed int64) store.FaultProbs {
 	// vary fault intensity per seed: some seeds are calm, some are storms
 	lvl := float64(seed%5) / 4
-	return store.FaultProbs{FailBefore: 0.04 * lvl, FailAfter: 0.04 * lvl, Delay: 0.04 * lvl, Dup: 0.03 * lvl, ReadFail: 0.03 * lvl, Torn: 0.03 * lvl}
+	p := store.FaultProbs{FailBefore: 0.04 * lvl, FailAfter: 0.04 * lvl, Delay: 0.04 * lvl, Dup: 0.03 * lvl, ReadFail: 0.03 * lvl, Torn: 0.03 * lvl}
+	// swarm testing: each seed turns each read-path fault class on or off
+	// (bits of the seed's hash), so classes are also tested in isolation
+	sw := uint64(seed) * 0x9e3779b97f4a7c15 >> 32
+	on := func(bit uint) float64 { return float64(sw >> bit & 1) }
+	p.BitFlip, p.Misdirect, p.ShortRead, p.StaleList = 0.02*lvl*on(0), 0.02*lvl*on(1), 0.02*lvl*on(2), 0.05*lvl*on(3)
+	return p
 }
 
 func TestSimulation(t *testing.T) {
@@ -64,9 +70,10 @@ func TestSimulation(t *testing.T) {
 		tot.GCs += r.GCs
 		tot.Faults += r.Faults
 		tot.CalmOpens += r.CalmOpens
+		tot.ReadFaultCorrupt += r.ReadFaultCorrupt
 	}
-	t.Logf("%d seeds × %d steps OK: %d acked txns, %d ambiguous, %d crashes (%d clean closes, %d ann restores), %d takeovers, %d shreds, %d rewinds, %d compactions (%d gc), %d injected store faults, %d calm opens",
-		n, steps, tot.Acked, tot.Ambiguous, tot.Crashes, tot.Closes, tot.ANNRestores, tot.Takeovers, tot.Shreds, tot.Rewinds, tot.Compacts, tot.GCs, tot.Faults, tot.CalmOpens)
+	t.Logf("%d seeds × %d steps OK: %d acked txns, %d ambiguous, %d crashes (%d clean closes, %d ann restores), %d takeovers, %d shreds, %d rewinds, %d compactions (%d gc), %d injected store faults, %d calm opens, %d corrupt-under-read-faults",
+		n, steps, tot.Acked, tot.Ambiguous, tot.Crashes, tot.Closes, tot.ANNRestores, tot.Takeovers, tot.Shreds, tot.Rewinds, tot.Compacts, tot.GCs, tot.Faults, tot.CalmOpens, tot.ReadFaultCorrupt)
 }
 
 // TestDeterminism: the same seed produces a bit-identical trace.
