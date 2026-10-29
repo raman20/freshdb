@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/raman20/freshdb/store"
 )
 
 // s3Proxy sits between freshDB and an S3 endpoint. It counts requests by
@@ -28,7 +30,10 @@ type s3Proxy struct {
 	mu     sync.Mutex
 	rng    *rand.Rand
 	Fault  float64
-	counts map[string]int
+	// TruncateGets cuts every object GET body in half, keeping the
+	// original Content-Length, then drops the connection.
+	TruncateGets bool
+	counts       map[string]int
 }
 
 func newS3Proxy(t *testing.T, target string, seed int64) *s3Proxy {
@@ -120,7 +125,37 @@ func (p *s3Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header()[h] = v
 	}
 	w.WriteHeader(resp.StatusCode)
+	if p.TruncateGets && k == "GET" && resp.StatusCode == http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		w.Write(b[:len(b)/2])
+		w.(http.Flusher).Flush()
+		drop()
+		return
+	}
 	io.Copy(w, resp.Body)
+}
+
+// A GET whose body ends early is an error, never a shorter object.
+func TestS3TruncatedGetIsAnError(t *testing.T) {
+	raw, endpoint := s3Target(t)
+	p := newS3Proxy(t, endpoint, 1)
+	via, direct := p.proxied(raw, "trunc")
+	open := func(raw string) store.Store {
+		st, err := store.Open(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st
+	}
+	if err := open(direct).PutIfAbsent(ctx, "obj", bytes.Repeat([]byte("x"), 4096)); err != nil {
+		t.Fatal(err)
+	}
+	p.TruncateGets = true
+	b, err := open(via).Get(ctx, "obj")
+	if !errors.Is(err, store.ErrShortRead) {
+		t.Fatalf("truncated GET: %d bytes, %v; want ErrShortRead", len(b), err)
+	}
+	t.Logf("truncated GET: %v", err)
 }
 
 // proxied rewrites an s3:// URL to go through p, under a fresh prefix.

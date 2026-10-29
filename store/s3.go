@@ -91,18 +91,24 @@ func (s *S3) PutIfAbsent(ctx context.Context, key string, data []byte) error {
 }
 
 func (s *S3) Get(ctx context.Context, key string) ([]byte, error) {
-	o, err := s.c.GetObject(ctx, s.bucket, s.prefix+key, minio.GetObjectOptions{})
+	// Core.GetObject makes one request and returns the response's object
+	// info with the body (Object.Stat would cost a second request).
+	body, info, _, err := minio.Core{Client: s.c}.GetObject(ctx, s.bucket, s.prefix+key, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, mapNF(err)
 	}
-	defer o.Close()
-	b, err := io.ReadAll(o)
+	defer body.Close()
+	b, err := io.ReadAll(body)
+	if errors.Is(err, io.ErrUnexpectedEOF) { // body shorter than Content-Length
+		return nil, fmt.Errorf("%w: %s: %v", ErrShortRead, key, err)
+	}
 	if err != nil {
 		return nil, mapNF(err)
 	}
-	// net/http already fails a body shorter than Content-Length; check the
-	// object size too, so a truncated transfer can never pass as an object.
-	if info, err := o.Stat(); err == nil && info.Size != int64(len(b)) {
+	// Belt and braces: the size S3 reported must be what we read. (Both come
+	// from the response, so a proxy that rewrites Content-Length and body
+	// consistently is outside what this can catch.)
+	if info.Size != int64(len(b)) {
 		return nil, fmt.Errorf("%w: %s: got %d of %d bytes", ErrShortRead, key, len(b), info.Size)
 	}
 	return b, nil
