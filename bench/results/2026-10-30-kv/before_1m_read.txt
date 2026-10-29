@@ -1,0 +1,11 @@
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/lens
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkKVGet-8       	10326270	       240.1 ns/op
+BenchmarkKVGet-8       	11452126	       199.6 ns/op
+BenchmarkKVGet-8       	11933294	       201.3 ns/op
+BenchmarkKVScan100-8   	      31	  76562681 ns/op
+BenchmarkKVScan100-8   	      30	  79027814 ns/op
+BenchmarkKVScan100-8   	      30	  79473829 ns/op
+PASS

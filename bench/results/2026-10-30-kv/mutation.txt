@@ -1,0 +1,24 @@
+KILLED kv.go | if v.Del {
+KILLED kv.go | if i := vs.find(at); i >= 0 {
+KILLED kv.go | if l.runs[i].subj[s] == 0 {
+KILLED kv.go | if done[string(c.key)] {
+KILLED kv.go | done[k] = true
+KILLED kv.go | if b.n <= mergeRatio*a.n && len(a.b)+len(b.b) <= maxRunBytes && !l.merging(a) && !l.mergin
+KILLED kv.go | if (i > 0 && k <= prev) || strings.IndexByte(k, 0) < 0 {
+KILLED kv.go | if j > 0 && (v.LSN < last || v.LSN == last && v.Op <= lastOp) {
+KILLED kv.go | if d.bad || len(d.b) != 0 || (f == "KV3") != chunked {
+KILLED kv.go | for i := sort.SearchStrings(l.keys, p); i < len(l.keys)
+SURVIVED kv.go | l.hot -= vs.n() - 1
+KILLED kv.go | if vs, ok := l.m[k]; ok { // replace in place
+SURVIVED kvrun.go | if v.Off != 0 || v.Len != 0 || v.Sum != 0 {
+KILLED kvrun.go | for i := len(m.cur) - 1; i >= 0; i-- { // oldest run first
+KILLED kvrun.go | if lsn > at {
+KILLED kvrun.go | if first := r.keyAt(start); int(sh+sl) == len(k) && string(first[:sh]) == k[:sh] && string
+KILLED kvrun.go | if r.n%runBlock == 0 {
+KILLED kvrun.go | if bytes.Compare(c.key, k) >= 0 {
+SURVIVED kvrun.go | return v.Subject != "" && !(v.Del && v.Val == nil && v.Off == 0
+KILLED lens.go | if d.b[0] > 1 {
+# rerun after checkHot + TestKVRunOddVersions (2026-10-30 ~01:20 IST):
+KILLED kv.go | l.hot -= vs.n() - 1
+KILLED kvrun.go | if v.Off != 0 || v.Len != 0 || v.Sum != 0 {
+KILLED kvrun.go | v.Del && v.Val == nil

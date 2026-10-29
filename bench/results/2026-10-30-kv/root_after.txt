@@ -1,0 +1,26 @@
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkPutSerial/mem-8    	  373050	      9234 ns/op
+BenchmarkPutSerial/mem-8    	  389336	      8433 ns/op
+BenchmarkPutSerial/mem-8    	  420516	      8138 ns/op
+BenchmarkPutSerial/fs-8     	    4024	    661397 ns/op
+BenchmarkPutSerial/fs-8     	    3529	    659026 ns/op
+BenchmarkPutSerial/fs-8     	    4388	    717356 ns/op
+BenchmarkGet-8              	    6954	    356587 ns/op
+BenchmarkGet-8              	    6122	    327439 ns/op
+BenchmarkGet-8              	    7824	    293965 ns/op
+BenchmarkOpenRecover10k/get=0s/snapshot=false-8         	     100	  21704028 ns/op	       251.5 seg-gets/op
+BenchmarkOpenRecover10k/get=0s/snapshot=false-8         	     133	  16184390 ns/op	       268.0 seg-gets/op
+BenchmarkOpenRecover10k/get=0s/snapshot=false-8         	     175	  12566156 ns/op	       289.0 seg-gets/op
+BenchmarkOpenRecover10k/get=0s/snapshot=true-8          	     237	   9547605 ns/op	       220.0 seg-gets/op
+BenchmarkOpenRecover10k/get=0s/snapshot=true-8          	     228	  11611550 ns/op	       215.5 seg-gets/op
+BenchmarkOpenRecover10k/get=0s/snapshot=true-8          	     187	  11069540 ns/op	       195.0 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=false-8        	       7	 291973617 ns/op	       205.0 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=false-8        	       8	 285974433 ns/op	       205.5 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=false-8        	       8	 292496682 ns/op	       205.5 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=true-8         	      44	 103696557 ns/op	       123.5 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=true-8         	      43	 103674258 ns/op	       123.0 seg-gets/op
+BenchmarkOpenRecover10k/get=2ms/snapshot=true-8         	      43	 105412277 ns/op	       123.0 seg-gets/op
+PASS
