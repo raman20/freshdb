@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"slices"
 )
 
 var castagnoli = crc32.MakeTable(crc32.Castagnoli)
@@ -65,6 +66,16 @@ type Frame struct {
 	Ops  []Op
 }
 
+// Segment header layout (little-endian, SegHeaderSize bytes):
+//
+//	0..8   magic "FRDBSEG1"
+//	8..10  version (SegVersion)
+//	10..12 reserved, zero (rejected otherwise, so a future use is never misread)
+//	12..20 epoch
+//	20..28 seq
+//	28..32 CRC32C of bytes 0..28
+//
+// Frames follow: len uint32 | CRC32C(payload) uint32 | payload.
 const (
 	SegMagic      = "FRDBSEG1"
 	SegVersion    = 1
@@ -89,6 +100,7 @@ type SegHeader struct {
 	Seq   uint64 // dense sequence number within the log, starting at 1
 }
 
+// EncodeHeader encodes a segment header (layout above).
 func EncodeHeader(h SegHeader) []byte {
 	b := make([]byte, SegHeaderSize)
 	copy(b, SegMagic)
@@ -99,6 +111,8 @@ func EncodeHeader(h SegHeader) []byte {
 	return b
 }
 
+// DecodeHeader decodes and checks a segment header: ErrHeader if it is
+// damaged or not canonical, ErrVersion if intact but of another version.
 func DecodeHeader(b []byte) (SegHeader, error) {
 	if len(b) < SegHeaderSize || string(b[:8]) != SegMagic {
 		return SegHeader{}, ErrHeader
@@ -109,32 +123,52 @@ func DecodeHeader(b []byte) (SegHeader, error) {
 	if v := binary.LittleEndian.Uint16(b[8:]); v != SegVersion {
 		return SegHeader{}, fmt.Errorf("%w %d (this build reads %d; written by a newer freshdb? upgrade the binary)", ErrVersion, v, SegVersion)
 	}
+	if b[10]|b[11] != 0 {
+		return SegHeader{}, ErrHeader
+	}
 	return SegHeader{Epoch: binary.LittleEndian.Uint64(b[12:]), Seq: binary.LittleEndian.Uint64(b[20:])}, nil
-}
-
-func putStr(b []byte, s []byte) []byte {
-	b = binary.AppendUvarint(b, uint64(len(s)))
-	return append(b, s...)
 }
 
 // EncodePayload encodes a frame body (without the len/crc frame header).
 // It records each op's value offset (relative to the payload) in f.Ops.
 func EncodePayload(f *Frame) []byte {
-	b := make([]byte, 0, 64)
+	return appendPayload(make([]byte, 0, payloadSize(f)), f)
+}
+
+// payloadSize is the exact encoded size of f's payload.
+func payloadSize(f *Frame) int {
+	n := 8 + 8 + 32 + uvarintLen(uint64(len(f.Ops)))
+	for _, op := range f.Ops {
+		n += 1 + strLen(len(op.Subject)) + strLen(len(op.Space)) + strLen(len(op.Key)) + strLen(len(op.Value))
+	}
+	return n
+}
+
+func strLen(n int) int { return uvarintLen(uint64(n)) + n }
+
+// appendPayload appends f's payload to b. ValOff is relative to the start
+// of the payload, which begins at len(b) on entry.
+func appendPayload(b []byte, f *Frame) []byte {
+	start := len(b)
 	b = binary.LittleEndian.AppendUint64(b, f.LSN)
 	b = binary.LittleEndian.AppendUint64(b, uint64(f.TS))
 	b = append(b, f.Prev[:]...)
 	b = binary.AppendUvarint(b, uint64(len(f.Ops)))
 	for i, op := range f.Ops {
 		b = append(b, byte(op.Kind))
-		b = putStr(b, []byte(op.Subject))
-		b = putStr(b, []byte(op.Space))
-		b = putStr(b, []byte(op.Key))
+		b = appendStr(b, op.Subject)
+		b = appendStr(b, op.Space)
+		b = appendStr(b, op.Key)
 		b = binary.AppendUvarint(b, uint64(len(op.Value)))
-		f.Ops[i].ValOff = uint32(len(b))
+		f.Ops[i].ValOff = uint32(len(b) - start)
 		b = append(b, op.Value...)
 	}
 	return b
+}
+
+func appendStr[T string | []byte](b []byte, s T) []byte {
+	b = binary.AppendUvarint(b, uint64(len(s)))
+	return append(b, s...)
 }
 
 func rebase(ops []Op, base int) {
@@ -144,13 +178,17 @@ func rebase(ops []Op, base int) {
 }
 
 // AppendFrame appends a framed (len|crc|payload) encoding of f to dst and
-// returns the new slice plus the payload (for hash chaining).
+// returns the new slice plus the payload (for hash chaining). The payload
+// aliases the returned slice; ValOff in f.Ops becomes relative to dst[0].
 func AppendFrame(dst []byte, f *Frame) ([]byte, []byte) {
-	p := EncodePayload(f)
-	rebase(f.Ops, len(dst)+FrameHdrSize)
-	dst = binary.LittleEndian.AppendUint32(dst, uint32(len(p)))
-	dst = binary.LittleEndian.AppendUint32(dst, CRC(p))
-	dst = append(dst, p...)
+	hdr := len(dst)
+	dst = slices.Grow(dst, FrameHdrSize+payloadSize(f))
+	dst = append(dst, make([]byte, FrameHdrSize)...)
+	dst = appendPayload(dst, f)
+	p := dst[hdr+FrameHdrSize:]
+	binary.LittleEndian.PutUint32(dst[hdr:], uint32(len(p)))
+	binary.LittleEndian.PutUint32(dst[hdr+4:], CRC(p))
+	rebase(f.Ops, hdr+FrameHdrSize)
 	return dst, p
 }
 
@@ -200,7 +238,29 @@ func (r *reader) bytes() []byte {
 }
 
 // DecodePayload decodes a frame body. It never panics on arbitrary input.
-func DecodePayload(p []byte) (*Frame, error) {
+func DecodePayload(p []byte) (*Frame, error) { return decodePayload(p, nil) }
+
+// names interns Subject and Space strings across the frames of one segment:
+// a batch has few distinct spaces, and each conversion would allocate.
+type names map[string]string
+
+const maxNames = 256 // bound the table for segments with many subjects
+
+func (m names) str(b []byte) string {
+	if m == nil {
+		return string(b)
+	}
+	if s, ok := m[string(b)]; ok { // no allocation for the lookup
+		return s
+	}
+	s := string(b)
+	if len(m) < maxNames {
+		m[s] = s
+	}
+	return s
+}
+
+func decodePayload(p []byte, in names) (*Frame, error) {
 	r := &reader{b: p}
 	f := &Frame{}
 	f.LSN = r.u64()
@@ -234,7 +294,7 @@ func DecodePayload(p []byte) (*Frame, error) {
 		if val != nil {
 			v = append([]byte{}, val...)
 		}
-		f.Ops = append(f.Ops, Op{Kind: k, Subject: string(subj), Space: string(space), Key: string(key), Value: v, ValOff: uint32(valOff + uvarintLen(uint64(len(val))))})
+		f.Ops = append(f.Ops, Op{Kind: k, Subject: in.str(subj), Space: in.str(space), Key: string(key), Value: v, ValOff: uint32(valOff + uvarintLen(uint64(len(val))))})
 	}
 	if len(r.b) != 0 {
 		return nil, ErrCorrupt
@@ -258,6 +318,7 @@ func DecodeSegment(b []byte) (SegHeader, []Decoded, int, error) {
 	}
 	off := SegHeaderSize
 	var out []Decoded
+	in := names{}
 	for off < len(b) {
 		if len(b)-off < FrameHdrSize {
 			return h, out, off, ErrTorn
@@ -271,7 +332,7 @@ func DecodeSegment(b []byte) (SegHeader, []Decoded, int, error) {
 		if CRC(p) != c {
 			return h, out, off, ErrTorn
 		}
-		f, err := DecodePayload(p)
+		f, err := decodePayload(p, in)
 		if err != nil {
 			return h, out, off, ErrTorn
 		}
@@ -286,11 +347,9 @@ func DecodeSegment(b []byte) (SegHeader, []Decoded, int, error) {
 // The payload contains the stored (possibly encrypted) bytes, so the chain
 // is over ciphertext digests and survives crypto-shredding.
 func ChainNext(prev [32]byte, payload []byte) [32]byte {
+	var buf [64]byte
+	copy(buf[:32], prev[:])
 	d := sha256.Sum256(payload)
-	h := sha256.New()
-	h.Write(prev[:])
-	h.Write(d[:])
-	var out [32]byte
-	copy(out[:], h.Sum(nil))
-	return out
+	copy(buf[32:], d[:])
+	return sha256.Sum256(buf[:])
 }
