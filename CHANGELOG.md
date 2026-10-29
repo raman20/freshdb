@@ -10,6 +10,28 @@ break APIs and the on-storage format.
 Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
+### Fixed (component A review: the log)
+- `--repair-tail` no longer deletes and re-creates the damaged segment
+  (a crash in between lost its valid prefix; a zombie writer could fill the
+  freed slot). It writes a create-only repair note `log/<id>/<seq>.repair`
+  and leaves the segment as is. Binaries before this refuse such a log with
+  `ErrCorrupt` (they see a damaged non-tail segment); nothing is lost.
+- A damaged tail was misread as mid-log damage when any other object sat
+  under the log's prefix.
+- An ambiguous create (412 whose read-back failed) was reported as fenced
+  ("not committed"); it is now `ErrUnknownOutcome`. A manifest found below
+  a newer one after its create is fenced and `ErrUnknownOutcome`.
+- A failed open leaked the writer goroutines of branches opened before the
+  failure and the value cache.
+- Opening a filesystem store deleted every temp file, including another
+  process's put in flight; only temp files older than an hour go now.
+- Segment headers with non-zero reserved bytes are rejected.
+
+### Performance
+- Encoding a frame writes into the segment buffer (7 allocations to 0),
+  the hash chain step no longer allocates, and decoding a segment interns
+  space names (-32% allocations).
+
 ### Changed (breaking)
 - Keys and topic/collection/subject names over 8 KiB (`MaxKeyBytes`) are
   refused with `ErrTooLarge` (413); existing larger keys stay readable.

@@ -57,8 +57,8 @@ one concurrent opener wins. It then recovers each log it will write to:
 3. Damage in any segment is an error (`ErrCorrupt`): every store writes
    objects atomically, so a damaged segment is corruption and may hold
    acknowledged commits. Only with `WithRepairTail` / `--repair-tail` is a
-   damaged *final* segment copied to `quarantine/` and replaced by its valid
-   prefix. A segment of an unknown version is `format.ErrVersion`, and a log
+   damaged *final* segment accepted: its valid prefix is used, the object
+   stays as is, and a create-only repair note records the decision. A segment of an unknown version is `format.ErrVersion`, and a log
    that ends before its snapshot's LSN is `ErrCorrupt` (design 12).
 4. If it sees any segment from a *newer* epoch, it stops with `ErrFenced` and
    writes nothing. TLC found this race; see [spec/RESULTS.md](../spec/RESULTS.md).

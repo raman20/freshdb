@@ -365,7 +365,7 @@ Read more in [docs/architecture.md](docs/architecture.md) and
 | Isolation | Transactions on a branch are **serializable**. There is a single writer per database with OCC read-set validation on KV, topic and cursor reads. |
 | Exactly-once processing | Fetch + write + ack in one transaction processes each message at most once, and each ack is atomic with its writes. |
 | Fencing | After a newer `Open` succeeds, an older writer can never commit again. |
-| Recoverability | Damage is reported (`ErrCorrupt`, `format.ErrVersion`), never silently dropped; the journal store tells torn appends and interrupted deletes from corruption, checked by a power-loss crash-point test. `--repair-tail` keeps the valid prefix of a damaged final segment (original kept in `quarantine/`). |
+| Recoverability | Damage is reported (`ErrCorrupt`, `format.ErrVersion`), never silently dropped; the journal store tells torn appends and interrupted deletes from corruption, checked by a power-loss crash-point test. `--repair-tail` keeps the valid prefix of a damaged final segment (the object stays in place; a repair note records the kept prefix). |
 | Lens consistency | For every lens, `state == fold(redact(log, shredded))`, including after restart, snapshots, branches and rewinds. |
 | History | Time travel to any LSN returns exactly what was visible then, minus shredded data. Rewind never deletes the old head; it goes into the reflog. |
 | Shred | After `Shred(s)` returns, freshDB returns no value written with subject `s` on any branch, at any LSN. The subject's DEK is deleted, new writes for `s` are refused (`410`), and the hash chain and signed certificate verify. |

@@ -20,7 +20,10 @@ payload's bytes canonical, which the hash chain relies on.
   manifest/<id:%020d>.mf             JSON manifest, create-only, dense ids from 1
   log/<logID>/<seq:%020d>.seg        segment = one group commit (or a fence), create-only, dense seq from 1
   snap/<logID>/<lsn:%020d>.snap      optional KV+topic checkpoint (cache, never truth)
-  quarantine/<logID>/<seq>-<epoch>.seg  original bytes of a tail segment repaired by --repair-tail
+  log/<logID>/<seq>.repair              repair note of a damaged segment kept by --repair-tail:
+                                        "freshdb-repair v1 seq= frames= valid= size= sha256=" (create-only;
+                                        the segment stays as is; deleted with the segment by GC)
+  quarantine/<logID>/<seq>-<epoch>.seg  written by versions before the repair note (copy of a repaired tail)
   base/<logID>/<lsn:%020d>-e<epoch>-<nonce>.base         compaction base image (main only)
   base/<logID>/<lsn:%020d>-e<epoch>-<nonce>.<n:%06d>.val value chunk of that base, ≤ 64 MiB
   keys/_kek                          dev-mode key-encryption key (see SECURITY.md)

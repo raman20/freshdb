@@ -56,7 +56,14 @@ object that fails its CRC returns `ErrCorrupt` instead of not found.
 **Engine (S1.4, S1.5, S1.7).** A damaged final segment is `ErrCorrupt`,
 the segment untouched (open does write its new manifest first: that is the
 fencing step and holds no data). `WithRepairTail(true)` / `--repair-tail`
-keeps the old behaviour: copy to `quarantine/`, keep the valid prefix. The
+keeps the valid prefix without touching the segment: a create-only repair
+note `log/<id>/<seq>.repair` records the segment's size, SHA-256 and the
+number of frames kept, and the fence at the next sequence number makes it a
+non-tail segment. Recovery accepts a damaged non-tail segment only with a
+note that matches its bytes. (Before this, repair copied the segment to
+`quarantine/`, deleted it and re-created its prefix: a crash between the
+delete and the put lost the prefix, and a zombie writer could fill the freed
+slot with other frames.) The
 simulator turns it on because its faulty store models non-atomic puts. A
 header with a good CRC and an unknown version is `format.ErrVersion`
 ("written by a newer freshdb? upgrade the binary") and is never repaired. A
