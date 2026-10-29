@@ -99,8 +99,23 @@ RSS grows by about its size once it fills. Go API options:
 |---|---|---|
 | `WithValueCacheBytes(n)` | 1/16 of the memory limit (cgroup v2 `memory.max`, else MemTotal), 16–256 MiB | cache size; negative disables the cache |
 | `WithInlineMax(n)` | 64 B | KV values up to `n` bytes stay in RAM; negative keeps none inline |
-| `WithSnapshotEvery(n)` | 0 (off) | KV+topic snapshot every `n` commits; written synchronously and does not speed up open yet |
+| `WithSnapshotEvery(n)` | 0 (off) | KV+topic snapshot and segment-index checkpoint every `n` commits, written synchronously. Open then reads each segment once instead of twice and folds KV/topics from the snapshot; vector and document-index lenses are still rebuilt from every segment (see "Open time") |
+| `WithReadAhead(n)` | 8 | segment reads kept in flight while replaying (open, time travel, index builds); 1 = sequential |
 | `WithCommitPolicy(CommitPolicy{MaxDelay, TargetBytes})` | no wait | a group commit waits up to `MaxDelay` for more transactions, until it holds `TargetBytes` (default 1 MiB) or `MaxBatch` (256) of them. Fewer, larger segment PUTs for more latency; see below |
+
+**Open time.** Open recovers each log (reads its segments to rebuild the
+segment index and check the hash chain) and then replays them into the
+lenses. `BenchmarkOpenRecover10k` (100 segments, 10k keys, 2 ms per GET,
+one 8-core box shared with other jobs, 2026-10-29; mean of 10 opens):
+
+| | before | checkpoint | + read-ahead 8 | segment GETs |
+|---|---|---|---|---|
+| no snapshots | 480-518 ms | 479-494 ms | 283-293 ms | 206.5 |
+| `WithSnapshotEvery(50)` | 480 ms | 262-270 ms | 64-68 ms | 206.5 → 106.5 |
+
+Raw output: `bench/results/2026-10-29-open/`. Open time still grows with
+the log: every segment is read once to rebuild the vector and
+document-index lenses, which have no snapshot yet.
 
 **Commit policy.** With the default, a batch is whatever queued while the
 previous segment was being written, so with N steady writers about half of

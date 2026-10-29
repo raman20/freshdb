@@ -132,32 +132,58 @@ func BenchmarkVectorSearch10k(b *testing.B) {
 }
 
 // Cold open (recovery) of a 10k-commit log on fs, with and without a snapshot.
+// BenchmarkOpenRecover10k opens a log of 100 segments (10k keys). With
+// get=2ms every GET waits 2ms (an object store round trip); seg-gets/op
+// counts segment reads per open.
 func BenchmarkOpenRecover10k(b *testing.B) {
-	for _, snap := range []bool{false, true} {
-		b.Run(fmt.Sprintf("snapshot=%v", snap), func(b *testing.B) {
-			st, _ := store.NewFS(b.TempDir())
-			every := -1 // never
-			if snap {
-				every = 50 // per 50 commits -> snapshot at commit 100 covers everything
-			}
-			db := mustOpen(b, st, WithSnapshotEvery(every))
-			for c := 0; c < 100; c++ {
-				// 100 commits x 100 puts: 10k keys, 100 segments
-				db.Update(ctx, func(tx *Tx) error {
-					for i := 0; i < 100; i++ {
-						tx.Put(fmt.Sprintf("k%03d-%03d", c, i), make([]byte, 100))
-					}
-					return nil
-				})
-			}
-			db.Close()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				d := mustOpen(b, st, WithSnapshotEvery(every))
-				d.Close()
-			}
-		})
+	for _, lat := range []time.Duration{0, 2 * time.Millisecond} {
+		for _, snap := range []bool{false, true} {
+			b.Run(fmt.Sprintf("get=%v/snapshot=%v", lat, snap), func(b *testing.B) {
+				fs, _ := store.NewFS(b.TempDir())
+				st := &slowGets{Store: fs}
+				every := -1 // never
+				if snap {
+					every = 50 // per 50 commits -> snapshot at commit 100 covers everything
+				}
+				db := mustOpen(b, st, WithSnapshotEvery(every))
+				for c := 0; c < 100; c++ {
+					// 100 commits x 100 puts: 10k keys, 100 segments
+					db.Update(ctx, func(tx *Tx) error {
+						for i := 0; i < 100; i++ {
+							tx.Put(fmt.Sprintf("k%03d-%03d", c, i), make([]byte, 100))
+						}
+						return nil
+					})
+				}
+				db.Close()
+				st.delay, st.segs = lat, 0
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					d := mustOpen(b, st, WithSnapshotEvery(every))
+					d.Close()
+				}
+				b.ReportMetric(float64(st.segs)/float64(b.N), "seg-gets/op")
+			})
+		}
 	}
+}
+
+// slowGets adds a fixed latency to every GET and counts segment GETs.
+type slowGets struct {
+	store.Store
+	delay time.Duration
+	mu    sync.Mutex
+	segs  int
+}
+
+func (s *slowGets) Get(ctx context.Context, k string) ([]byte, error) {
+	if strings.HasSuffix(k, ".seg") {
+		s.mu.Lock()
+		s.segs++
+		s.mu.Unlock()
+	}
+	time.Sleep(s.delay)
+	return s.Store.Get(ctx, k)
 }
 
 // slowPuts adds a fixed latency to every segment write (an object store's

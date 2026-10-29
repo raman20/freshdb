@@ -73,10 +73,10 @@ func (s *Mem) Delete(_ context.Context, key string) error {
 }
 
 // Raw exposes the object map for fault-injection tests (overwrite/corrupt).
-func (s *Mem) Raw(fn func(m map[string][]byte)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	fn(s.m)
+func (m *Mem) Raw(fn func(objects map[string][]byte)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	fn(m.m)
 }
 
 // Keys returns every key, sorted.

@@ -98,7 +98,7 @@ const (
 // Formats describes the on-storage format versions this build reads and
 // writes (`freshdb version`; docs/compatibility.md).
 func Formats() string {
-	return fmt.Sprintf("manifest %d-%d, segment %d, base %s, journal %d, snapshot 2 (KV2), ann %s",
+	return fmt.Sprintf("manifest %d-%d, segment %d, base %s, journal %d, snapshot 2 (KV2), checkpoint 1, ann %s",
 		manifestFormat, manifestFormatBase, format.SegVersion, baseMagic[7:], store.JournalVersion, lens.ANNVersion)
 }
 

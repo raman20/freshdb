@@ -139,7 +139,7 @@ func (s *sim) open() (*freshdb.DB, error) {
 		}
 		db, err := freshdb.OpenStore(s.ctx, s.st,
 			freshdb.WithClock(func() int64 { return s.clock.Add(1) }),
-			freshdb.WithRand(s.rnd), freshdb.WithRepairTail(true), freshdb.WithSnapshotEvery(1+int(s.seed%7)),
+			freshdb.WithRand(s.rnd), freshdb.WithRepairTail(true), freshdb.WithSnapshotEvery(1+int(s.seed%7)), freshdb.WithReadAhead(1),
 			freshdb.WithLogf(func(f string, _ ...any) {
 				if strings.Contains(f, "ANN graphs restored") {
 					s.res.ANNRestores++

@@ -9,7 +9,7 @@ reasoning and [formats.md](formats.md) for the byte layouts.
 `freshdb version` prints the formats the binary reads and writes:
 
 ```
-formats: manifest 1-2, segment 1, base 1, journal 1, snapshot 2 (KV2), ann 1
+formats: manifest 1-2, segment 1, base 1, journal 1, snapshot 2 (KV2), checkpoint 1, ann 1
 ```
 
 | object | stamp | unknown version |
@@ -19,6 +19,7 @@ formats: manifest 1-2, segment 1, base 1, journal 1, snapshot 2 (KV2), ann 1
 | base (`.base`) | magic `FRDBBAS1` (last byte = version) | open fails, `ErrVersion` |
 | journal file (`journal.fj`) | magic `FRESHJ1\0` (byte 6 = version) | open fails, `ErrVersion` |
 | KV/topic snapshot (`.snap`) | magic `FRSNAP2\n` (v2, bound to its log and hash chain); `KV2` tag inside | ignored, rebuilt from the log (cache). v1 snapshots (no magic) are ignored by this build; older builds ignore v2 ones |
+| segment-index checkpoint (`.idx`) | magic `FRDBIDX1` (last byte = version) | ignored, the segments are scanned (cache). Older builds ignore `.idx` objects; their GC leaves them behind (a few bytes each) |
 | HNSW snapshot (`ann/`) | magic `FHNSW1` | ignored, rebuilt (cache) |
 | value chunk (`.val`) | magic `FRDBVAL1`, not checked | gated by the manifest format (each value has its own CRC) |
 | keys (`keys/…`), shred certificates, token file | none | gated by the manifest format |

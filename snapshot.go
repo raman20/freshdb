@@ -94,6 +94,12 @@ func (db *DB) writeSnapshot(ctx context.Context, l *logState, v *view) error {
 	if err != nil {
 		return err
 	}
+	// The segment index goes first: open then reads only the segments
+	// after this point to recover the log, and replays only those on top
+	// of the snapshot. Failing to write it only costs open time.
+	if err := db.writeCheckpoint(ctx, l); err != nil {
+		db.logf("freshdb: segment-index checkpoint failed (non-fatal): %v", err)
+	}
 	key := snapKey(l.meta.ID, lsn)
 	b := encodeSnapshot(snapHeader{log: l.meta.ID, lsn: lsn, chain: chain}, kv, topic)
 	if err := putExactlyOnce(ctx, db.st, key, b); err != nil && !errors.Is(err, store.ErrExists) {

@@ -213,7 +213,7 @@ func (db *DB) Verify(ctx context.Context) (*VerifyReport, error) {
 	if last == nil {
 		return nil, errors.New("freshdb: no manifest")
 	}
-	fresh := &DB{st: db.st, opts: db.opts, epoch: db.epoch, keys: db.keys, env: db.env, man: last, logs: map[string]*logState{}}
+	fresh := &DB{st: db.st, opts: db.opts, epoch: db.epoch, fullScan: true, keys: db.keys, env: db.env, man: last, logs: map[string]*logState{}}
 	for _, id := range sortedMapKeys(last.Logs) {
 		l, err := fresh.loadLog(ctx, id, false)
 		if err != nil {
@@ -226,8 +226,13 @@ func (db *DB) Verify(ctx context.Context) (*VerifyReport, error) {
 				bad("log %s: %v", id, err)
 			}
 		}
-		segs, _ := db.st.List(ctx, "log/"+id+"/")
-		r.Segments += len(segs)
+		objs, _ := db.st.List(ctx, "log/"+id+"/")
+		for _, k := range objs {
+			if _, ok := parseNum(k, "log/"+id+"/", ".seg"); ok {
+				r.Segments++
+			}
+		}
+		r.Warnings = append(r.Warnings, fresh.verifyCheckpoints(ctx, l, objs)...)
 		err = l.eachOwn(ctx, l.head(), func(e *lens.Entry) error { // the parent is verified on its own
 			r.Entries++
 			for i, op := range e.Ops {

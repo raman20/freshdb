@@ -3,6 +3,7 @@ var (
 	ErrExists   = errors.New("store: object already exists")
 	ErrNotFound = errors.New("store: not found")
 	ErrCorrupt = errors.New("store: corrupt")
+	ErrShortRead = errors.New("store: short read")
 	ErrVersion = format.ErrVersion
 var ErrInjected = errors.New("store: injected fault")
 func CheckConditional(ctx context.Context, s Store) error
@@ -32,6 +33,10 @@ type FaultProbs struct {
 	Dup        float64
 	ReadFail   float64
 	Torn       float64
+	BitFlip   float64
+	Misdirect float64
+	ShortRead float64
+	StaleList float64
 type Faulty struct {
 	Inner Store
 	P  FaultProbs
@@ -71,7 +76,7 @@ func (s *Mem) GetRange(_ context.Context, key string, off, n int64) ([]byte, err
 func (m *Mem) Keys(context.Context) ([]string, error)
 func (s *Mem) List(_ context.Context, prefix string) ([]string, error)
 func (s *Mem) PutIfAbsent(_ context.Context, key string, data []byte) error
-func (s *Mem) Raw(fn func(m map[string][]byte))
+func (m *Mem) Raw(fn func(objects map[string][]byte))
 type RangeReader interface {
 type S3 struct {
 func NewS3(c *minio.Client, bucket, prefix string) *S3

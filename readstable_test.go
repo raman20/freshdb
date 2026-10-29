@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/raman20/freshdb/format"
@@ -14,6 +15,7 @@ import (
 // scripted answers Get from a per-key script (then the real object).
 type scripted struct {
 	store.Store
+	mu     sync.Mutex
 	gets   map[string][][]byte
 	nGet   map[string]int
 	listFn func(prefix string, keys []string) []string
@@ -25,11 +27,14 @@ func newScripted(inner store.Store) *scripted {
 }
 
 func (s *scripted) Get(ctx context.Context, k string) ([]byte, error) {
+	s.mu.Lock()
 	s.nGet[k]++
 	if q := s.gets[k]; len(q) > 0 {
 		s.gets[k] = q[1:]
+		s.mu.Unlock()
 		return q[0], nil
 	}
+	s.mu.Unlock()
 	return s.Store.Get(ctx, k)
 }
 

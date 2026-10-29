@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/raman20/freshdb/format"
+	"github.com/raman20/freshdb/lens"
 	"github.com/raman20/freshdb/store"
 )
 
@@ -229,5 +230,73 @@ func TestManifestLostAfterPutIsUnknown(t *testing.T) {
 	err = db.CreateBranch(ctx, "b", "main", 0)
 	if !errors.Is(err, ErrFenced) || !errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("create branch: %v, want ErrFenced and ErrUnknownOutcome", err)
+	}
+}
+
+// failGet fails reads of one key.
+type failGet struct {
+	store.Store
+	key string
+}
+
+var errFailGet = errors.New("injected read failure")
+
+func (f failGet) Get(ctx context.Context, k string) ([]byte, error) {
+	if k == f.key {
+		return nil, errFailGet
+	}
+	return f.Store.Get(ctx, k)
+}
+
+// Replay reads segments concurrently (ReadAhead) but hands entries over in
+// LSN order, returns the first error in log order, and leaves no reads
+// running after an error.
+func TestEachReadAhead(t *testing.T) {
+	st := store.NewMem()
+	db := mustOpen(t, st)
+	for i := 0; i < 40; i++ {
+		if err := db.Put(ctx, fmt.Sprint("k", i), []byte("v")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer db.Close()
+	l, _ := recoverWith(t, db, st, true)
+	before := runtime.NumGoroutine()
+	for _, ra := range []int{1, 3, 8, 100} {
+		l.readAhead = ra
+		var got []uint64
+		if err := l.each(ctx, 37, func(e *lens.Entry) error { got = append(got, e.LSN); return nil }); err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 37 || got[0] != 1 || got[36] != 37 {
+			t.Fatalf("readAhead %d: %d entries %v", ra, len(got), got)
+		}
+		for i := 1; i < len(got); i++ {
+			if got[i] != got[i-1]+1 {
+				t.Fatalf("readAhead %d: out of order at %d: %v", ra, i, got)
+			}
+		}
+		stop := errors.New("stop")
+		n := 0
+		if err := l.each(ctx, 40, func(*lens.Entry) error {
+			if n++; n == 5 {
+				return stop
+			}
+			return nil
+		}); err != stop || n != 5 {
+			t.Fatalf("readAhead %d: early stop: %v after %d", ra, err, n)
+		}
+		x := &logState{meta: l.meta, segs: l.segs, readAhead: ra, st: failGet{Store: st, key: segKey("L1", l.segs[20].seq)}}
+		n = 0
+		if err := x.each(ctx, 40, func(*lens.Entry) error { n++; return nil }); !errors.Is(err, errFailGet) || n != 20 {
+			t.Fatalf("readAhead %d: read failure: %v after %d entries", ra, err, n)
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for runtime.NumGoroutine() > before && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := runtime.NumGoroutine(); n > before {
+		t.Fatalf("goroutines: %d before, %d after", before, n)
 	}
 }

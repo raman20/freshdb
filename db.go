@@ -30,11 +30,17 @@ type Options struct {
 	KEK []byte
 	// Keys, if set, supplies the KEK at open (overrides KEK).
 	Keys KeyProvider
-	// SnapshotEvery writes a KV/topic checkpoint every N commits per log
-	// (<= 0 = never, the default). Snapshots are written synchronously in the
-	// commit path, copy the whole lens state, and do not yet make open faster
-	// (recovery still verifies every segment), so they are opt-in for now.
+	// SnapshotEvery writes a KV/topic snapshot and a segment-index
+	// checkpoint every N commits per log (<= 0 = never, the default). Open
+	// then recovers the log from the checkpoint (reading only the segments
+	// after it) and folds KV and topics from the snapshot. Vector and
+	// document-index lenses are not snapshotted yet, so open still reads
+	// every segment once to rebuild them. Snapshots are written
+	// synchronously in the commit path and copy the whole KV/topic state.
 	SnapshotEvery int
+	// ReadAhead is how many segment reads a replay (open, time travel,
+	// index builds) keeps in flight. 0 = default (8); 1 = one at a time.
+	ReadAhead int
 	// MaxBatch bounds how many transactions one group commit may contain.
 	MaxBatch int
 	// Commit sets how long a group commit may wait to grow (CommitPolicy).
@@ -77,8 +83,10 @@ func WithLogf(f func(string, ...any)) Option { return func(o *Options) { o.Logf 
 func WithInlineMax(n int) Option             { return func(o *Options) { o.InlineMax = n } }
 func WithValueCacheBytes(n int) Option       { return func(o *Options) { o.ValueCacheBytes = n } }
 func WithRepairTail(on bool) Option          { return func(o *Options) { o.RepairTail = on } }
+func WithReadAhead(n int) Option             { return func(o *Options) { o.ReadAhead = n } }
 
 const (
+	defaultReadAhead  = 8
 	defaultInlineMax  = 64
 	defaultValueCache = 256 << 20
 )
@@ -89,6 +97,9 @@ type DB struct {
 	st    store.Store
 	opts  Options
 	epoch uint64
+	// fullScan: recovery ignores segment-index checkpoints (Verify reads
+	// every segment and cross-checks the checkpoints instead)
+	fullScan bool
 
 	annTainted bool                         // a shred ran: do not save graphs built before it
 	annCarry   map[string]lens.ANNSnapshot  // graphs handed over a compaction reload
@@ -193,6 +204,9 @@ func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
 	}
 	if o.Commit.MaxDelay > 0 && o.Commit.TargetBytes <= 0 {
 		o.Commit.TargetBytes = defaultTargetBytes
+	}
+	if o.ReadAhead <= 0 {
+		o.ReadAhead = defaultReadAhead
 	}
 	if o.Logf == nil {
 		o.Logf = log.Printf
@@ -342,7 +356,7 @@ func (db *DB) loadLog(ctx context.Context, id string, writable bool) (*logState,
 	if !ok {
 		return nil, fmt.Errorf("%w: unknown log %s", ErrCorrupt, id)
 	}
-	l := &logState{meta: *meta, st: db.st}
+	l := &logState{meta: *meta, st: db.st, readAhead: db.opts.ReadAhead}
 	if b := meta.Base; b != nil {
 		// A compacted log starts from its base: no parent, no older segments.
 		c, err := hex.DecodeString(b.Chain)
@@ -363,6 +377,9 @@ func (db *DB) loadLog(ctx context.Context, id string, writable bool) (*logState,
 		if l.base, err = p.chainAt(ctx, meta.ParentLSN); err != nil {
 			return nil, err
 		}
+	}
+	if err := db.loadCheckpoint(ctx, l); err != nil {
+		return nil, err
 	}
 	if err := db.recoverLog(ctx, l, writable); err != nil {
 		return nil, err

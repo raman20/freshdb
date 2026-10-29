@@ -636,6 +636,9 @@ func (db *DB) deleteGarbage(ctx context.Context, g Garbage) (int, error) {
 			if !ok && g.Kind == "segs" {
 				n, ok = parseNum(k, dir, ".repair") // a repair note goes with its segment
 			}
+			if !ok && g.Kind == "segs" {
+				n, ok = parseNum(k, dir, ".idx") // so does a checkpoint ending there
+			}
 			if ok && n < g.Below {
 				keys = append(keys, k)
 			}

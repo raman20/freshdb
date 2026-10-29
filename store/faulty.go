@@ -175,7 +175,10 @@ func (f *Faulty) Delete(ctx context.Context, key string) error {
 
 // tearable: the objects Torn may cut. Torn models a store without atomic
 // puts (none is supported) to exercise --repair-tail on segments; small
-// metadata objects (repair notes, manifests, keys) are not torn.
+// metadata objects (repair notes, manifests, keys) are not torn. Snapshots
+// and segment-index checkpoints are torn too: they are caches that open
+// must skip when damaged.
 func tearable(key string) bool {
-	return strings.HasPrefix(key, "snap/") || strings.HasPrefix(key, "log/") && strings.HasSuffix(key, ".seg")
+	return strings.HasPrefix(key, "snap/") ||
+		strings.HasPrefix(key, "log/") && (strings.HasSuffix(key, ".seg") || strings.HasSuffix(key, ".idx"))
 }

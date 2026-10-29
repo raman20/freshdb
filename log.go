@@ -31,6 +31,8 @@ type logState struct {
 	nextSeq uint64
 	lastEp  uint64
 	repairs int
+	// readAhead: segment reads eachOwn keeps in flight (>= 1)
+	readAhead int
 }
 
 // segIdx locates the frames of one segment. It is 24 bytes, one per
@@ -200,20 +202,39 @@ func (l *logState) each(ctx context.Context, upto uint64, fn func(*lens.Entry) e
 	return l.eachOwn(ctx, upto, fn)
 }
 
-// eachOwn is each restricted to this log's own frames.
+// eachOwn is each restricted to this log's own frames. Up to readAhead
+// segments are read concurrently; fn still sees entries in LSN order.
 func (l *logState) eachOwn(ctx context.Context, upto uint64, fn func(*lens.Entry) error) error {
 	l.mu.RLock()
 	segs := l.segs
 	l.mu.RUnlock()
-	for _, s := range segs {
-		if s.first > upto {
-			break
+	n := sort.Search(len(segs), func(i int) bool { return segs[i].first > upto })
+	segs = segs[:n]
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel() // stops reads still in flight after an error
+	type result struct {
+		frames []format.Decoded
+		err    error
+	}
+	inflight := make([]chan result, 0, max(l.readAhead, 1))
+	next := 0
+	fill := func() {
+		for next < len(segs) && len(inflight) < cap(inflight) {
+			c, s := make(chan result, 1), segs[next]
+			go func() {
+				frames, err := l.readSeg(ctx, s)
+				c <- result{frames, err}
+			}()
+			inflight, next = append(inflight, c), next+1
 		}
-		frames, err := l.readSeg(ctx, s)
-		if err != nil {
-			return err
+	}
+	for fill(); len(inflight) > 0; fill() {
+		r := <-inflight[0]
+		inflight = append(inflight[:0], inflight[1:]...)
+		if r.err != nil {
+			return r.err
 		}
-		for _, d := range frames {
+		for _, d := range r.frames {
 			if d.Frame.LSN > upto {
 				break
 			}

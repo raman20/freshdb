@@ -11,6 +11,11 @@ Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
 ### Fixed (component A review: the log)
+
+- S3 `Get` now takes the object size from the GET response itself (one
+  request; it used to `Stat` after reading, which reported size 0 and made
+  every S3 read fail with "short read"). A body cut short by the network is
+  `store.ErrShortRead`, never a silently short object.
 - `--repair-tail` no longer deletes and re-creates the damaged segment
   (a crash in between lost its valid prefix; a zombie writer could fill the
   freed slot). It writes a create-only repair note `log/<id>/<seq>.repair`
@@ -26,8 +31,27 @@ in its "Changes since v0.1.0" section.
 - Opening a filesystem store deleted every temp file, including another
   process's put in flight; only temp files older than an hour go now.
 - Segment headers with non-zero reserved bytes are rejected.
+- Recovery read the log as "every segment the LIST shows", so a stale
+  LIST (S3 list-after-write lag) could shorten the log and fail open with
+  "log ends before snapshot". Segments are now read by sequence number until
+  one is absent; the LIST only checks for holes.
+- Read faults: a silently short read could decode as a clean shorter
+  segment (`store.ErrShortRead`, S3 size check); damage is believed only
+  after 3 identical reads, and a well-formed object naming another key only
+  after 6, else the read is retried (transient) instead of reported as
+  corruption or repaired.
+- A truncated `keys/_sign` seed panicked (ed25519); now `ErrCorrupt`.
+- Snapshot v2 binds a snapshot to its log id, LSN and hash-chain head: a
+  snapshot copied from another log or a diverged history was loaded.
 
 ### Performance
+- Segment-index checkpoints (`log/<id>/<seq>.idx`, written with each
+  snapshot): open recovers a log by reading only the segments after the
+  newest checkpoint. Replay keeps 8 segment reads in flight
+  (`WithReadAhead`). 100 segments at 2 ms per GET, with snapshots: open
+  480 ms → 64-68 ms; without: ~500 → ~290 ms (docs/operations.md).
+- `WithCommitPolicy(CommitPolicy{MaxDelay, TargetBytes})`: a group commit
+  may wait to grow; off by default (docs/operations.md "Commit policy").
 - Encoding a frame writes into the segment buffer (7 allocations to 0),
   the hash chain step no longer allocates, and decoding a segment interns
   space names (-32% allocations).
@@ -37,8 +61,7 @@ in its "Changes since v0.1.0" section.
   refused with `ErrTooLarge` (413); existing larger keys stay readable.
 - A damaged final log segment now makes open fail with `ErrCorrupt` instead
   of being truncated to its valid prefix. `WithRepairTail(true)` /
-  `--repair-tail` restores the old behaviour (damaged copy kept under
-  `quarantine/`).
+  `--repair-tail` keeps the valid prefix (now with a repair note, see above).
 
 ### Fixed
 - Windows builds (broken since the format-version work: a constant lived

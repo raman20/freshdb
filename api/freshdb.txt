@@ -74,6 +74,9 @@ type Certificate struct {
 	TS          int64    `json:"ts"`
 	PublicKey   string   `json:"public_key"`
 	Signature   string   `json:"signature,omitempty"`
+type CommitPolicy struct {
+	MaxDelay    time.Duration
+	TargetBytes int
 type CompactOptions struct {
 	Grace time.Duration
 type CompactStats struct {
@@ -194,12 +197,14 @@ type Message struct {
 type Op = format.Op
 type Option func(*Options)
 func WithClock(f func() int64) Option
+func WithCommitPolicy(p CommitPolicy) Option
 func WithHolder(s string) Option
 func WithInlineMax(n int) Option
 func WithKEK(k []byte) Option
 func WithKeyProvider(p KeyProvider) Option
 func WithLogf(f func(string, ...any)) Option
 func WithRand(r io.Reader) Option
+func WithReadAhead(n int) Option
 func WithRepairTail(on bool) Option
 func WithSnapshotEvery(n int) Option
 func WithValueCacheBytes(n int) Option
@@ -210,7 +215,9 @@ type Options struct {
 	KEK []byte
 	Keys KeyProvider
 	SnapshotEvery int
+	ReadAhead int
 	MaxBatch int
+	Commit CommitPolicy
 	Logf func(format string, args ...any)
 	InlineMax int
 	ValueCacheBytes int

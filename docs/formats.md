@@ -20,6 +20,8 @@ payload's bytes canonical, which the hash chain relies on.
   manifest/<id:%020d>.mf             JSON manifest, create-only, dense ids from 1
   log/<logID>/<seq:%020d>.seg        segment = one group commit (or a fence), create-only, dense seq from 1
   snap/<logID>/<lsn:%020d>.snap      optional KV+topic checkpoint (cache, never truth)
+  log/<logID>/<seq>.idx                 segment-index checkpoint covering segments up to <seq> (cache, never
+                                        truth; create-only; deleted with the segment by GC)
   log/<logID>/<seq>.repair              repair note of a damaged segment kept by --repair-tail:
                                         "freshdb-repair v1 seq= frames= valid= size= sha256=" (create-only;
                                         the segment stays as is; deleted with the segment by GC)
@@ -161,6 +163,35 @@ See [design/03-compaction.md](design/03-compaction.md).
 The manifest with the highest id is current. Creating `id+1` is how a writer
 takes the lease and how branch operations commit; `ErrExists` means another
 writer got there first, and this one is fenced.
+
+## Segment-index checkpoint (`.idx`)
+
+Key `log/<log>/<seq %020d>.idx`, where `seq` is the last segment it
+covers. Written with each snapshot. Version 1:
+
+```
+8B   magic "FRDBIDX1"
+u8   len(log id), then the log id
+u64  first segment sequence number of the log (1, or the compaction base's)
+32B  hash-chain head the covered frames extend (the log's base)
+u64  epoch of segment seq
+i64  timestamp of the last covered frame
+32B  hash-chain head after the last covered frame
+u32  count (>= 1)
+count x { u64 seq | u64 first LSN | u64 frame count (>= 1) }   ascending seq, contiguous LSNs
+u32  CRC32C(all of the above)
+```
+
+Recovery lists the log's directory, tries the newest three checkpoints at
+or above the log's first segment, and uses the first that (1) decodes,
+(2) names this log, its first segment and base chain, and starts at the
+LSN the log continues from, and (3) matches segment `seq` exactly: frame
+count, first LSN, chain head after it, last timestamp and header epoch.
+It then reads segments `seq+1` on as usual. Anything else is ignored with
+a log line. Segments a checkpoint covers are not re-read at open: their
+frames are checked (CRC, sequence, first LSN) when read, and `verify`
+scans everything and warns about any checkpoint that differs from the
+segments.
 
 ## Snapshot (`.snap`)
 
