@@ -24,3 +24,18 @@ Durability fixes (docs/design/12-durability.md), before = c0affcd, after = this 
    present, no deleted object back, no foreign bytes. 22 s.
    With the interrupted-delete recovery disabled (mutation): fails within 1 s on every
    seed (a torn dead-marking write reads as mid-file corruption).
+
+5. Disk full (S1.10), enospc_test.go + store/journal_enospc_test.go; before = f1e5096
+   Engine: 50 commits, then every store write fails with ENOSPC (before the write, or
+   after it landed = failed sync), Compact, space freed, commit, reopen.
+   before: errors.Is(err, syscall.ENOSPC) false (cause flattened with %v, message repeated);
+           Compact on the halted writer replaced it with a fresh one: the next commit
+           succeeded without a reopen (write-before mode) or said ErrFenced (write-after mode)
+   after:  commit error wraps ErrUnknownOutcome and ENOSPC; Compact refused with the halt
+           error; later commits keep failing until reopen; reopen: 50/50 acked present, the
+           failed commit either present or absent, writes work, verify clean (fs and journal)
+   Journal store, 4 seeds x 400 ops, ENOSPC after a random prefix of a write, failed
+   fdatasync, disk full for 1-6 ops at a time: 35-61 failed calls per seed, every failure
+   says ENOSPC, appends work again without reopen once space is back, every mid-run and
+   final reopen succeeds with all acknowledged objects. Mutation (put acks despite a
+   failed append): reopen fails with ErrCorrupt on the first seed.

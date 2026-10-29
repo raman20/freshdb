@@ -231,5 +231,5 @@ func putExactlyOnce(ctx context.Context, st store.Store, key string, data []byte
 			return err
 		}
 	}
-	return fmt.Errorf("%w: %v", ErrUnknownOutcome, err)
+	return fmt.Errorf("%w: %w", ErrUnknownOutcome, err)
 }

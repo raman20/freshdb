@@ -35,7 +35,7 @@ named), **documented** (accepted limit, written down where users read).
 | S1.7 | Losing the newest segment object(s) of a log (deleted outside freshDB, restored from an older backup) is not detected: the log just ends earlier, and the next fence reuses the sequence number. | code read | **mitigated**: detected when the manifest's snapshot LSN or a child branch point lies past the end (`TestMissingNewestSegmentsDetected`); a log with no such reference still cannot tell |
 | S1.8 | No power-loss test: crash tests kill the process (`kill -9`), which keeps the page cache. Unsynced writes reordering or vanishing is not exercised; fsync placement is argued in comments only. | review | **fixed for the journal store**: crash-point enumeration over traced writes/syncs (`store/powerloss_test.go`, design 12); fs:// and S3 not modelled |
 | S1.9 | No full scrub: `verify` checks segments, chains, fencing and shred state, but not snapshots, bases, value chunks, ANN blobs or journal records that no index points to. | review | **fixed for local stores**: verify reads every object back and CRC-checks snapshots; on S3 only referenced objects (`scrubbed: false`) |
-| S1.10 | Disk full (ENOSPC) on the journal/fs stores is not tested: whether a failed append leaves a record that later validates, and whether the writer recovers once space is freed. | review | open → item 17 |
+| S1.10 | Disk full (ENOSPC) on the journal/fs stores is not tested: whether a failed append leaves a record that later validates, and whether the writer recovers once space is freed. | review | fixed: fault-injected ENOSPC on journal and engine; halted writer stays halted until reopen (Compact used to revive it) — design 12 |
 | S1.11 | Windows: directory fsync is a no-op (NTFS journals metadata); not power-loss tested. | code read | documented (README limits) |
 
 ## S2 — availability
@@ -94,7 +94,7 @@ named), **documented** (accepted limit, written down where users read).
 
 | area | verdict |
 |---|---|
-| durability / corruption handling | journal store: corruption detected, never silently dropped; power-loss modelled. Still open: ENOSPC (S1.10), fs:// and S3 not power-loss modelled, no salvage tool |
+| durability / corruption handling | journal store: corruption detected, never silently dropped; power-loss modelled. Disk full tested by fault injection (S1.10). Still open: fs:// and S3 not power-loss modelled, no salvage tool |
 | formats / upgrades | not ready |
 | observability | not ready |
 | backup / restore | not ready |

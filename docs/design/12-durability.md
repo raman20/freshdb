@@ -100,6 +100,41 @@ durable: open syncs the directory after creating it), and that the file
 system itself survives. The fs:// layout (file + rename + directory fsync)
 is not modelled.
 
+## Disk full (S1.10)
+
+What a full disk does at each layer:
+
+- **journal store**: preallocation (`reserve`, the background grower) fails
+  before any record byte is written. An append that does fail part-way
+  leaves a record prefix after the end; the end does not move, so the next
+  append overwrites it, and if the process dies first the prefix is a torn
+  tail (zeroed on open). A failed `fdatasync` leaves a whole record after
+  the end: it is either overwritten by the next append or, after a crash,
+  shows up as an object whose put returned an error (an allowed outcome,
+  see below). Nothing here ever makes open fail.
+- **fs store**: data goes to a temp file, is fsynced, then linked into
+  place; a failed write or fsync removes the temp file. A failed directory
+  fsync after the link leaves the object visible with an error returned.
+- **engine**: any segment write error halts that branch's writer with
+  `ErrUnknownOutcome` wrapping the cause (`errors.Is(err,
+  syscall.ENOSPC)` works). Reads keep working. Commits fail until the
+  database is reopened, which learns whether the last segment landed.
+  Before this change `Compact` silently replaced a halted writer with a
+  fresh one; it now refuses with the halt error, and a halt survives a
+  compaction that does nothing.
+
+Why halt instead of retrying: after a failed fsync Linux may drop the dirty
+pages and report success on the next fsync, so the only safe recovery is to
+re-read storage (PostgreSQL made the same choice in 2018). A reopen does
+that. `serve` has to be restarted; `/readyz` (item 15) will report the
+halt.
+
+Tests: `store/journal_enospc_test.go` (fault hook in the journal's write
+and sync paths, random prefixes, multi-op full periods, mid-run reopens),
+`enospc_test.go` (fs and journal, error before and after the write lands).
+Not tested on a real full filesystem (needs root to mount a small tmpfs or
+loop device on this box); the fault hook sits directly above the syscalls.
+
 ## Numbers
 
 bench/results/2026-10-29-durability/before-after.txt:

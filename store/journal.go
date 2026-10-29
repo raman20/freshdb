@@ -800,15 +800,37 @@ type jev struct {
 	data []byte
 }
 
+// jfault, when set (disk-full tests only), can fail a write after letting
+// a prefix of it through (op 'w', returns how many bytes land) or fail a
+// sync (op 's').
+var jfault func(op byte, n int) (int, error)
+
 func (j *Journal) writeAt(b []byte, off int64) (int, error) {
-	n, err := j.f.WriteAt(b, off)
+	var n int
+	var err error
+	if m, ferr := faultAt('w', len(b)); ferr != nil {
+		n, _ = j.f.WriteAt(b[:m], off)
+		err = &os.PathError{Op: "write", Path: j.f.Name(), Err: ferr}
+	} else {
+		n, err = j.f.WriteAt(b, off)
+	}
 	if jtrace != nil && n > 0 {
 		jtrace(jev{kind: 'w', off: off, data: append([]byte(nil), b[:n]...)})
 	}
 	return n, err
 }
 
+func faultAt(op byte, n int) (int, error) {
+	if jfault == nil {
+		return n, nil
+	}
+	return jfault(op, n)
+}
+
 func (j *Journal) traced(err error) error {
+	if _, ferr := faultAt('s', 0); err == nil && ferr != nil {
+		err = &os.PathError{Op: "sync", Path: j.f.Name(), Err: ferr}
+	}
 	if jtrace != nil && err == nil {
 		jtrace(jev{kind: 's'})
 	}

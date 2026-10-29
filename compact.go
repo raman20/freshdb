@@ -113,7 +113,18 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 	if db.closed {
 		return stats, ErrClosed
 	}
-	committed, err := db.compactLocked(ctx, o, gc, &stats)
+	// A writer halted by a storage error (ErrUnknownOutcome) stays halted
+	// until reopen: compacting would rebuild from a state that may miss
+	// its last segment, and a fresh writer would hide the halt.
+	var committed bool
+	for _, w := range ws {
+		if w.failed != nil && err == nil {
+			err = fmt.Errorf("freshdb: compaction refused: %w", w.failed)
+		}
+	}
+	if err == nil {
+		committed, err = db.compactLocked(ctx, o, gc, &stats)
+	}
 	if gc && err == nil {
 		defer func() { db.deleteOldManifests(ctx, o.KeepManifests, &stats) }()
 	}
@@ -122,6 +133,7 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 		for _, w := range ws {
 			if db.writers[w.l.meta.ID] == w {
 				nw := newWriter(db, w.l, w.v)
+				nw.failed = w.failed // a halt survives (read after stop)
 				db.writers[w.l.meta.ID] = nw
 			}
 		}

@@ -339,8 +339,10 @@ func (w *writer) process(batch []*commitReq) {
 	if err != nil {
 		if errors.Is(err, store.ErrExists) {
 			w.failed = ErrFenced
+		} else if errors.Is(err, ErrUnknownOutcome) {
+			w.failed = fmt.Errorf("segment %d, writer halted until reopen: %w", seq, err)
 		} else {
-			w.failed = fmt.Errorf("%w (segment %d): %v", ErrUnknownOutcome, seq, err)
+			w.failed = fmt.Errorf("segment %d, writer halted until reopen: %w: %w", seq, ErrUnknownOutcome, err)
 		}
 		w.db.logf("freshdb: writer for %s halted: %v", w.l.meta.ID, w.failed)
 		fail(accepted, w.failed)

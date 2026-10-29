@@ -16,6 +16,12 @@ in its "Changes since v0.1.0" section.
   `--repair-tail` restores the old behaviour (damaged copy kept under
   `quarantine/`).
 
+### Fixed
+- Disk full: a commit's storage error now wraps its cause (`errors.Is(err,
+  syscall.ENOSPC)`), and `Compact`/`GC` refuse to run on a writer halted by
+  a storage error instead of silently replacing it (a commit after the halt
+  could succeed without the reopen that learns the failed commit's outcome).
+
 ### Added
 - **Durability hardening** (docs/design/12-durability.md). Transactions over
   64 MiB encoded or 2^20 ops fail with `ErrTooLarge` (`MaxTxBytes`,
