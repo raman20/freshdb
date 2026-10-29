@@ -49,5 +49,10 @@ const (
 	MaxTxOps   = format.MaxOps
 )
 
+// MaxKeyBytes bounds keys, and topic, collection and subject names
+// (checked when the write is staged; ErrTooLarge). Every key lives in the
+// in-memory index, so this also bounds what one write can cost in RAM.
+const MaxKeyBytes = 8 << 10
+
 // Op re-exports the log op type for advanced users (Entries).
 type Op = format.Op

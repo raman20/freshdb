@@ -11,6 +11,8 @@ Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
 ### Changed (breaking)
+- Keys and topic/collection/subject names over 8 KiB (`MaxKeyBytes`) are
+  refused with `ErrTooLarge` (413); existing larger keys stay readable.
 - A damaged final log segment now makes open fail with `ErrCorrupt` instead
   of being truncated to its valid prefix. `WithRepairTail(true)` /
   `--repair-tail` restores the old behaviour (damaged copy kept under
@@ -31,6 +33,14 @@ in its "Changes since v0.1.0" section.
   `freshdb restore BACKUP --db NEW [--at LSN]` / `Restore` (verified copy,
   point-in-time rewind), `scripts/restore-drill.sh`. `S3` stores gain
   `Keys` (recursive listing).
+- Operational safety: `serve` drains on SIGTERM (`/readyz` 503, SSE
+  `event: shutdown`, long polls return), waits for in-flight requests up
+  to `--shutdown-timeout` and closes cleanly; binds before opening (a busy
+  port no longer fences the running server); per-request
+  `--read-timeout`/`--write-timeout`, `IdleTimeout`; `MaxKeyBytes` (8 KiB
+  keys and names, `ErrTooLarge`); lease records (`WithHolder`,
+  `lease/<epoch>.json`) so a takeover and a fenced writer name each other;
+  `server.Options.Drain/ReadTimeout/WriteTimeout`.
 - `bench/cmd/freshdb-soak`: real-time soak/chaos harness (mixed workload,
   periodic kill -9, concurrent compaction/GC/backup, invariant checker).
 - Observability: `GET /metrics` (Prometheus text format, admin scope:

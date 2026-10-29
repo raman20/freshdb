@@ -55,6 +55,8 @@ time travel and crypto-shredding. Config: --db URL (or FRESHDB_URL), default ./f
         [--log-format text|json]              log format (json: one slog object per line)
         [--access-log] [--slow-op 1s]         log every request; log requests slower than this (0: off)
         [--pprof]                             serve /debug/pprof/ to admin tokens (needs auth)
+        [--read-timeout 5m] [--write-timeout 2m]   per-request body read / response write bounds
+        [--shutdown-timeout 30s]              SIGTERM: drain, wait this long for requests, close
                                               also: GET /metrics (Prometheus; admin token), /healthz, /readyz
   freshdb put KEY VALUE [--subject S]         write a key
   freshdb get KEY [--at LSN]                  read a key (time travel with --at)
@@ -291,13 +293,20 @@ func serve(dbURL string, flags map[string]string) {
 	if flags["pprof"] != "" && token == "" && auth == nil {
 		log.Fatal("freshdb: --pprof needs auth (--token or --token-file): profiles expose memory contents")
 	}
+	// Bind before opening: opening takes the write lease (fencing any
+	// running writer), so a port clash must fail first.
+	ln, err := net.Listen("tcp", listen)
+	if err != nil {
+		log.Fatalf("freshdb: %v (nothing opened; any running writer is untouched)", err)
+	}
 	db, err := freshdb.Open(context.Background(), dbURL, keyOpts(flags)...)
 	if err != nil {
 		log.Fatalf("freshdb: open %s: %v", dbURL, err)
 	}
-	opts := server.Options{Token: token, Auth: auth, MaxStreams: intFlag(flags, "max-streams"), MaxWaiters: intFlag(flags, "max-waiters"), MaxBody: intFlag(flags, "max-body"),
+	drain := make(chan struct{})
+	opts := server.Options{Drain: drain, ReadTimeout: durFlag(flags, "read-timeout"), WriteTimeout: durFlag(flags, "write-timeout"), Token: token, Auth: auth, MaxStreams: intFlag(flags, "max-streams"), MaxWaiters: intFlag(flags, "max-waiters"), MaxBody: intFlag(flags, "max-body"),
 		Version: buildVersion(), AccessLog: flags["access-log"] != "", SlowOp: slowOp, Pprof: flags["pprof"] != ""}
-	srv := &http.Server{Addr: listen, Handler: server.New(db, opts), ReadHeaderTimeout: 10 * time.Second,
+	srv := &http.Server{Addr: listen, Handler: server.New(db, opts), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute,
 		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}}
 	var certs *server.Certs
 	if cert != "" {
@@ -331,13 +340,29 @@ func serve(dbURL string, flags map[string]string) {
 			log.Printf("freshdb: SIGHUP: reloaded")
 		}
 	}()
+	// SIGTERM/SIGINT: drain (readyz 503, streams and long polls end),
+	// stop accepting, wait for in-flight requests up to
+	// --shutdown-timeout, then close the database. A second signal exits
+	// at once (the log is crash-safe; nothing acknowledged is lost).
+	shutTO := 30 * time.Second
+	if d := durFlag(flags, "shutdown-timeout"); d > 0 {
+		shutTO = d
+	}
+	stopped := make(chan struct{})
 	go func() {
-		ch := make(chan os.Signal, 1)
+		ch := make(chan os.Signal, 2)
 		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
-		<-ch
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		sig := <-ch
+		log.Printf("freshdb: %v: draining (up to %v)", sig, shutTO)
+		go func() { <-ch; log.Printf("freshdb: second signal: exiting now"); os.Exit(1) }()
+		close(drain)
+		ctx, cancel := context.WithTimeout(context.Background(), shutTO)
 		defer cancel()
-		srv.Shutdown(ctx)
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("freshdb: shutdown: %v; closing remaining connections", err)
+			srv.Close()
+		}
+		close(stopped)
 	}()
 	if every := flags["compact-every"]; every != "" {
 		startCompactor(db, every, flags["compact-grace"])
@@ -351,14 +376,31 @@ func serve(dbURL string, flags map[string]string) {
 	}
 	log.Printf("freshdb: serving %s on %s://%s (epoch %d, auth %v)", dbURL, scheme, listen, db.Epoch(), token != "" || auth != nil)
 	if cert != "" {
-		err = srv.ListenAndServeTLS("", "")
+		err = srv.ServeTLS(ln, "", "")
 	} else {
-		err = srv.ListenAndServe()
+		err = srv.Serve(ln)
 	}
 	if err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
-	db.Close()
+	<-stopped // Serve returns when Shutdown starts; wait for in-flight requests
+	if err := db.Close(); err != nil {
+		log.Fatalf("freshdb: close: %v", err)
+	}
+	log.Printf("freshdb: closed cleanly")
+}
+
+// durFlag parses a duration flag ("" = 0); exits on a bad value.
+func durFlag(flags map[string]string, name string) time.Duration {
+	v := flags[name]
+	if v == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		log.Fatalf("freshdb: --%s %q: want a duration like 30s", name, v)
+	}
+	return d
 }
 
 // secret returns --NAME, else the first line of --NAME-file, else
@@ -380,7 +422,7 @@ func secret(flags map[string]string, name string) string {
 // keyOpts picks the KEK source: --kek-file, else $FRESHDB_KEK, else none
 // (dev mode).
 func keyOpts(flags map[string]string) []freshdb.Option {
-	var o []freshdb.Option
+	o := []freshdb.Option{freshdb.WithHolder(fmt.Sprintf("freshdb %s, %s, %s", buildVersion(), strings.Join(os.Args[1:2], ""), freshdb.HolderName()))}
 	if flags["repair-tail"] != "" {
 		o = append(o, freshdb.WithRepairTail(true))
 	}

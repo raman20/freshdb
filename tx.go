@@ -70,6 +70,9 @@ func (tx *Tx) write(op format.Op, opts []WriteOpt) error {
 	for _, o := range opts {
 		o(&op)
 	}
+	if n := max(len(op.Key), len(op.Space), len(op.Subject)); n > MaxKeyBytes {
+		return fmt.Errorf("%w: key or name of %d bytes (max %d)", ErrTooLarge, n, MaxKeyBytes)
+	}
 	if op.Subject != "" && tx.db.keys.isShredded(SubjectHash(op.Subject)) {
 		return ErrShredded
 	}

@@ -234,6 +234,7 @@ func (db *DB) deleteOldManifests(ctx context.Context, keep int, stats *CompactSt
 	if db.failed != nil || db.man.ID <= uint64(keep) {
 		return
 	}
+	db.deleteOldLeases(ctx, keep)
 	keys, err := db.st.List(ctx, "manifest/")
 	if err != nil {
 		db.logf("freshdb: gc: list manifests: %v", err)

@@ -44,6 +44,7 @@ otherwise; the latest release is
 | [design/13-format-versioning.md](design/13-format-versioning.md) | design: version stamps, `ErrVersion`, golden databases, compatibility policy |
 | [design/14-observability.md](design/14-observability.md) | design: `/metrics`, `/readyz`, structured/access/slow logs, pprof, `DB.Stats` |
 | [design/15-backup.md](design/15-backup.md) | design: online backup (delete hold), incremental copy, digest record, restore, PITR |
+| [design/16-operational-safety.md](design/16-operational-safety.md) | design: graceful drain/shutdown, bind before open, per-request timeouts, key limits, lease records |
 
 ## Evidence and numbers
 

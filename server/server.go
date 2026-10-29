@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -43,6 +44,8 @@ type Server struct {
 	maxBody          int64
 	obs              *observer
 	pprof            bool
+	drainCtx         context.Context // canceled when Options.Drain closes; nil: never
+	readTO, writeTO  time.Duration
 }
 
 func newServer(db *freshdb.DB, o Options) *Server {
@@ -61,7 +64,54 @@ func newServer(db *freshdb.DB, o Options) *Server {
 	if s.maxBody <= 0 {
 		s.maxBody = DefaultMaxBody
 	}
+	to := func(d, def time.Duration) time.Duration {
+		if d == 0 {
+			return def
+		}
+		return max(d, 0)
+	}
+	s.readTO, s.writeTO = to(o.ReadTimeout, DefaultReadTimeout), to(o.WriteTimeout, DefaultWriteTimeout)
+	if o.Drain != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() { <-o.Drain; cancel() }()
+		s.drainCtx = ctx
+	}
 	return s
+}
+
+func (s *Server) draining() bool { return s.drainCtx != nil && s.drainCtx.Err() != nil }
+
+// drainable returns ctx, also canceled when draining starts (for streams
+// and long polls).
+func (s *Server) drainable(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
+	if s.drainCtx == nil {
+		return ctx, cancel
+	}
+	stop := context.AfterFunc(s.drainCtx, cancel)
+	return ctx, func() { stop(); cancel() }
+}
+
+// deadlineBody clears the connection's read deadline once the body is
+// read, so it bounds the upload only, not the handler.
+type deadlineBody struct {
+	io.ReadCloser
+	rc *http.ResponseController
+}
+
+func (b *deadlineBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err == io.EOF { // on a timeout the deadline stays: the server's discard of the rest fails fast too
+		b.rc.SetReadDeadline(time.Time{})
+	}
+	return n, err
+}
+
+// writeDeadline (re)arms the response write deadline d from now.
+func writeDeadline(w http.ResponseWriter, d time.Duration) {
+	if d > 0 {
+		http.NewResponseController(w).SetWriteDeadline(time.Now().Add(d))
+	}
 }
 
 // Handler is the API without auth and with the default limits.
@@ -86,6 +136,15 @@ func (s *Server) routes() http.Handler {
 			}
 			if r.Body != nil {
 				r.Body = http.MaxBytesReader(w, r.Body, s.maxBody)
+				if s.readTO > 0 && r.ContentLength != 0 {
+					rc := http.NewResponseController(w)
+					if rc.SetReadDeadline(time.Now().Add(s.readTO)) == nil {
+						r.Body = &deadlineBody{r.Body, rc}
+					}
+				}
+			}
+			if scope != ScopeAdmin {
+				writeDeadline(w, s.writeTO)
 			}
 			f(w, r)
 		}))
@@ -162,6 +221,8 @@ func fail(w http.ResponseWriter, err error) {
 		code = http.StatusGone
 	case errors.As(err, new(*http.MaxBytesError)), errors.Is(err, freshdb.ErrTooLarge):
 		code = http.StatusRequestEntityTooLarge
+	case errors.Is(err, os.ErrDeadlineExceeded):
+		code = http.StatusRequestTimeout // --read-timeout while reading the body
 	case errors.Is(err, freshdb.ErrBadLSN), errors.Is(err, errBad):
 		code = http.StatusBadRequest
 	case errors.Is(err, freshdb.ErrFenced), errors.Is(err, errBusy):
@@ -424,8 +485,11 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer release()
+		writeDeadline(w, wait+s.writeTO)
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), wait)
+	dctx, dcancel := s.drainable(r.Context())
+	defer dcancel()
+	ctx, cancel := context.WithTimeout(dctx, wait)
 	defer cancel()
 	for {
 		var ms []freshdb.Message
@@ -513,8 +577,11 @@ func (s *Server) next(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer release()
+		writeDeadline(w, wait+s.writeTO)
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), wait)
+	dctx, dcancel := s.drainable(r.Context())
+	defer dcancel()
+	ctx, cancel := context.WithTimeout(dctx, wait)
 	defer cancel()
 	for {
 		var ms []freshdb.Message
@@ -583,8 +650,10 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	if b == "" {
 		b = "main"
 	}
-	ctx := r.Context()
+	ctx, cancel := s.drainable(r.Context())
+	defer cancel()
 	for {
+		writeDeadline(w, s.writeTO)
 		// a token revoked (or narrowed) by a reload ends its streams
 		if err := permit(r, ScopeRead, "topic", r.PathValue("t")); err != nil {
 			fmt.Fprintf(w, "event: error\ndata: %q\n\n", err.Error())
@@ -612,10 +681,15 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 			fl.Flush()
 			continue
 		}
-		pctx, cancel := context.WithTimeout(ctx, streamPing)
+		pctx, pcancel := context.WithTimeout(ctx, streamPing)
 		_, err = s.DB.WaitHead(pctx, b, at)
-		cancel()
+		pcancel()
 		if ctx.Err() != nil {
+			if r.Context().Err() == nil { // draining: tell the client to resume elsewhere/later
+				writeDeadline(w, s.writeTO)
+				fmt.Fprint(w, "event: shutdown\ndata: \"server shutting down; reconnect with Last-Event-ID\"\n\n")
+				fl.Flush()
+			}
 			return
 		}
 		if errors.Is(err, context.DeadlineExceeded) {

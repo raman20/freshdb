@@ -23,6 +23,8 @@ type Options struct {
 	Clock func() int64
 	// Rand is the entropy source for keys and nonces (crypto/rand default).
 	Rand io.Reader
+	// Holder names this process in its lease record (WithHolder).
+	Holder string
 	// KEK is the 32-byte key-encryption key. Nil = dev mode: generated and
 	// stored in the bucket at keys/_kek (NOT safe against bucket backups).
 	KEK []byte
@@ -265,6 +267,7 @@ func (db *DB) acquire(ctx context.Context) error {
 		}
 		db.man, db.epoch = next, next.Epoch
 		db.bw.Store(nil)
+		db.writeLease(ctx, next.Epoch-1)
 		return nil
 	}
 	return errors.New("freshdb: could not acquire write lease (manifest contention)")
@@ -287,8 +290,8 @@ func (db *DB) commitManifest(ctx context.Context, change func(m *Manifest) error
 	next.ID = db.man.ID + 1
 	err := putManifest(ctx, db.st, next)
 	if errors.Is(err, store.ErrExists) {
-		db.failed = ErrFenced
-		return ErrFenced
+		db.failed = db.fenced()
+		return db.failed
 	}
 	if err != nil {
 		db.failed = err

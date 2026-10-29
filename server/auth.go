@@ -45,7 +45,25 @@ type Options struct {
 	// Pprof serves net/http/pprof under /debug/pprof/ to admin tokens.
 	// Ignored without auth (Token or Auth).
 	Pprof bool
+	// Drain, when closed, starts a graceful shutdown: /readyz answers 503
+	// "draining", SSE streams end with an "event: shutdown" (clients
+	// resume with Last-Event-ID), long polls return what they have.
+	// Close it before http.Server.Shutdown, which waits for handlers.
+	Drain <-chan struct{}
+	// ReadTimeout bounds reading one request body (default
+	// DefaultReadTimeout; < 0 = none). WriteTimeout bounds writing one
+	// response (default DefaultWriteTimeout; < 0 = none); streams renew it
+	// per event, long polls get it on top of ?wait=, admin routes
+	// (compact, gc, backup, ...) are exempt. Set per request, so slow
+	// clients cannot hold a handler forever.
+	ReadTimeout, WriteTimeout time.Duration
 }
+
+// Default per-request timeouts (Options.ReadTimeout, WriteTimeout).
+const (
+	DefaultReadTimeout  = 5 * time.Minute
+	DefaultWriteTimeout = 2 * time.Minute
+)
 
 // DefaultMaxBody is the default request body cap: one transaction's limit
 // (freshdb.MaxTxBytes) plus room for JSON/base64 encoding.
@@ -295,6 +313,11 @@ func New(db *freshdb.DB, o Options) http.Handler {
 	// Unauthenticated like healthz, so it says only which class of problem.
 	m.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
+		if s.draining() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprint(w, "not ready: draining\n")
+			return
+		}
 		if err := s.obs.ready(r.Context(), db); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			fmt.Fprintf(w, "not ready: %s\n", notReady(err))

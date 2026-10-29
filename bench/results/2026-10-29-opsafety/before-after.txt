@@ -1,0 +1,25 @@
+Item 17: operational safety. Before = c46988d (item 16), after = this commit.
+
+1. Behaviour (functional; TestServeLifecycle runs the real binary)
+   serve on a busy port:   before: opened the DB (fenced the running server: its
+                           next PUT failed 503), then died on bind.
+                           after:  exits before opening; running server unaffected.
+   SIGTERM, SSE + 60 s long poll open:
+                           before: db.Close raced in-flight requests; streams held
+                           Shutdown for its full 5 s.
+                           after:  stream gets "event: shutdown", poll returns 200,
+                           exit 0 "closed cleanly" well under 5 s (test bound).
+   stalled request body:   before: handler held forever (no read timeout).
+                           after:  connection closed after --read-timeout
+                           (300 ms in TestTimeouts), nothing written.
+   fenced writer error:    before: "freshdb: fenced: another writer took over"
+                           after:  "... (our epoch 1; now held by epoch 2
+                           (freshdb dev, serve, pid N on HOST, since T))"
+   compaction while one runs: before 500, after 409 (ErrBusy).
+   key > 8 KiB:            before accepted; after ErrTooLarge / 413.
+
+2. Cost: BenchmarkLoopbackPut (PUT over real loopback HTTP, ns/op, -count 6;
+   the 6 h soak was running on the same box, so absolute numbers are noisy)
+     deadlines (defaults): 71758 66324 73661 66576 63016 66207  median 66.4 µs
+     none (-1):            71383 84730 62922 67497 66549 87928  median 69.4 µs
+   -> per-request deadlines cost is below the noise.

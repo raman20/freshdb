@@ -44,11 +44,11 @@ named), **documented** (accepted limit, written down where users read).
 |---|---|---|
 | S2.1 | One writer per database; no replicas, no HA. A writer crash means unavailability until a new process opens (fencing makes takeover safe, not automatic). | documented |
 | S2.2 | Compaction and GC pause commits for their duration (0.87 s on the compaction bench; longer on big logs). | documented |
-| S2.3 | `serve` shutdown: `ListenAndServe` returns as soon as `Shutdown` starts, so `db.Close` races in-flight requests; open SSE streams hold `Shutdown` for its whole 5 s timeout. | open → item 17 |
-| S2.4 | No `ReadTimeout`/`WriteTimeout`/`IdleTimeout` on the HTTP server (only `ReadHeaderTimeout`): slow clients hold goroutines. | open → item 17 |
-| S2.5 | No limits on key, value or transaction size (see S1.1), number of ops, or JSON nesting in requests. | partly fixed: transaction size and ops (S1.1), request body (S1.2); key size and JSON nesting → item 17 |
+| S2.3 | `serve` shutdown: `ListenAndServe` returns as soon as `Shutdown` starts, so `db.Close` races in-flight requests; open SSE streams hold `Shutdown` for its whole 5 s timeout. | fixed (item 17): listen before open, drain (`/readyz` 503, streams `event: shutdown`, long polls return), wait for in-flight requests up to `--shutdown-timeout`, then close — design 16 |
+| S2.4 | No `ReadTimeout`/`WriteTimeout`/`IdleTimeout` on the HTTP server (only `ReadHeaderTimeout`): slow clients hold goroutines. | fixed: per-request read (body) and write deadlines, renewed for streams/long polls, admin exempt; `IdleTimeout`; `TestTimeouts` |
+| S2.5 | No limits on key, value or transaction size (see S1.1), number of ops, or JSON nesting in requests. | partly fixed: transaction size and ops (S1.1), request body (S1.2); key/name size: `MaxKeyBytes` 8 KiB (item 17); JSON nesting bounded by encoding/json (10 000) — fixed |
 | S2.6 | Open reads every segment since the last base/snapshot; on S3 that is one GET per segment. | documented (benchmarks) |
-| S2.7 | Two writers on one fs/journal directory: the second fences the first (by design); there is no lock-file message telling an operator which process holds it. | open → item 17 |
+| S2.7 | Two writers on one fs/journal directory: the second fences the first (by design); there is no lock-file message telling an operator which process holds it. | fixed: lease records (`lease/<epoch>.json`: version, command, pid, host); opener and fenced writer both name the other — design 16 |
 
 ## S3 — operability
 
@@ -66,7 +66,7 @@ named), **documented** (accepted limit, written down where users read).
 
 | id | gap | status |
 |---|---|---|
-| S4.1 | pprof/metrics must not leak to non-admin tokens once added. | open → item 15 |
+| S4.1 | pprof/metrics must not leak to non-admin tokens once added. | fixed (item 15): admin scope; pprof refused without auth |
 | S4.2 | No `govulncheck` in CI, no SBOM, release checksums not signed. | open → item 21 |
 | S4.3 | No threat model document; SECURITY.md has no response timeline. | open → item 21 |
 | S4.4 | No per-token rate limits, no audit log of admin actions. | documented |
@@ -98,7 +98,7 @@ named), **documented** (accepted limit, written down where users read).
 | formats / upgrades | stamps on every authoritative object, refusal tested, golden files for v0.1.0 and main, written policy. Not yet: frozen 1.0 policy, migration tooling for a future bump, old-binary column in CI |
 | observability | metrics, readiness, structured/access/slow logs and pprof exist and are tested. Not yet: tracing, shipped dashboards/alert rules, a real Prometheus scrape in CI |
 | backup / restore | online consistent backup, incremental, verified restore, PITR within retained history, drill (test + script). Not yet: S3-destination cost measured, scheduled backups, backup encryption beyond what the data already has |
-| operational safety | not ready |
+| operational safety | graceful drain + shutdown, bind-before-open, per-request timeouts, key/body/tx limits, lease records naming writers, 409 for busy maintenance; tested with the real binary. Not yet: rate limits, global in-flight cap, request-level DB deadlines |
 | soak / chaos | not ready |
 | memory bound | not ready (RAM-bound by design today) |
 | S3 | MinIO only |

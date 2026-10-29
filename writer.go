@@ -355,7 +355,7 @@ func (w *writer) process(batch []*commitReq) {
 	w.db.met.segmentLat.Observe(time.Since(t0))
 	if err != nil {
 		if errors.Is(err, store.ErrExists) {
-			w.failed = ErrFenced
+			w.failed = w.db.fenced()
 		} else if errors.Is(err, ErrUnknownOutcome) {
 			w.failed = fmt.Errorf("segment %d, writer halted until reopen: %w", seq, err)
 		} else {

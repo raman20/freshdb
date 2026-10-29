@@ -169,11 +169,33 @@ export FRESHDB_ADDR=http://127.0.0.1:7070            # point CLI calls at it
   (no rekey yet).
 - Consumers can long-poll (`?wait=30s`, max 60 s) or hold an SSE stream
   (`GET /v1/topics/{t}/stream`, a `: ping` comment every 15 s). Each one
-  holds a connection and a goroutine and there is no per-server limit yet,
-  so cap connections at a proxy if clients are untrusted. Proxies must not
+  holds a connection and a goroutine (capped by `--max-streams` /
+  `--max-waiters`); cap connections at a proxy if clients are untrusted. Proxies must not
   buffer `text/event-stream` responses (nginx: `proxy_buffering off`).
   Streams end when the server shuts down; clients resume with
   `Last-Event-ID`.
+- Shutdown: `SIGTERM`/`SIGINT` drains: `/readyz` turns 503 `draining`,
+  SSE streams end with `event: shutdown`, long polls return, in-flight
+  requests finish (up to `--shutdown-timeout`, default 30 s), then the
+  database closes and the log says `closed cleanly`. A second signal
+  exits at once; acknowledged writes are durable either way. Point your
+  orchestrator's stop timeout above `--shutdown-timeout`.
+- `serve` binds the port before opening the database, so a start on a
+  busy port fails without fencing the running server.
+- Timeouts per request: `--read-timeout` (default 5m) bounds reading a
+  request body (stalled uploads are cut off, nothing written);
+  `--write-timeout` (default 2m) bounds writing a response (streams renew
+  it per event, long polls get it on top of `wait`, admin routes such as
+  compact/gc/backup are exempt); idle keep-alive connections close after
+  2m. `-1` disables a timeout.
+- Limits: keys and topic/collection/subject names ≤ 8 KiB
+  (`MaxKeyBytes`), a transaction ≤ 64 MiB encoded and 1M ops, a request
+  body ≤ `--max-body` (96 MiB); over a limit: 413.
+- Who holds the write lease: every CLI process records itself in
+  `lease/<epoch>.json` (version, command, pid, host, start). A takeover
+  logs `took the write lease (epoch N) from epoch M (...)`, and the fenced
+  server's errors say `now held by epoch N (...)`. Compaction or GC
+  started while one runs: 409.
 - To scale, shard by database (one per tenant or agent).
 
 ## Backups and restore
