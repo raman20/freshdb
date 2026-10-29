@@ -37,8 +37,10 @@ bug reports). Everything must respect the [design principles](docs/design-princi
 
 - **Compaction follow-ups.** Compaction and GC with retention windows
   (old manifests, retired logs, reflog, offline journal shrink) are on
-  `main`. Still open: compacting without pausing commits, an online journal
-  shrink or record-header reuse, and topic retention.
+  `main`, and so is topic retention at compaction (`--topic-max-age`,
+  `--topic-max-messages`). Still open: compacting without pausing
+  commits, an online journal shrink or record-header reuse, and topic
+  storage outside RAM.
 - **Persisted lens snapshots for all lenses.** Today only KV and topics
   checkpoint, and recovery still scans every segment. The goal is open time
   proportional to the tail, not to history.

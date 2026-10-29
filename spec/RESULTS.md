@@ -29,6 +29,7 @@ the first run reported 32 with identical state counts.
 | FreshGC | GC with retention (item 8): two logs (main's log and a rewind child forked at P=1, kept by the reflog), retention window W=1 commits, a base at the cut capped by the dependent child's branch point, reflog pruning, dropping unreachable logs, sweeping, deleting old manifests (Keep=1), 2 processes with crashes, ≤2 epochs, a fenced writer that keeps running (incl. committing into a deleted manifest slot), create-only manifest put + post-create List check; MaxLSN=3, MaxMan=6, process symmetry | 6,582,415 | 1,598,697 | 28 | no error |
 | FreshGrow | journal preallocation (item 9): 2 appenders, 2 background growers, a file of ≤6 blocks; appends extend synchronously when needed, growers write one zero block at the current size under the writer lock | 97 | 28 | 8 | no error |
 | FreshANN | persisted HNSW graphs (item 10): 2 ids × 3 versions, owner put/delete/shred/save/crash/open with restore, one takeover whose zombie saves on Close with a fence check before and after its put | 982,783 | 222,948 | 23 | no error |
+| FreshRetain | topic retention vs consumer groups (component C, 2026-10-30): one topic, 2 groups × 2 workers doing Fetch (read clamped to the retained start) → OCC Commit of the cursor or Abort, publishing, compaction moving the start up to the end, clamped to the smallest committed cursor; MaxMsgs=4 | 73,958 | 9,143 | 24 | no error |
 | FreshShred | DEK per subject, marker → delete → audit entry + certificate; crash between steps; DEK create landing late; sweep; hash chain | 25,570 | 6,481 | 16 | no error (incl. liveness) |
 
 ## Properties checked
@@ -125,6 +126,8 @@ the first run reported 32 with identical state counts.
 | FreshGrow with the grower writing at a size read before releasing the lock (`FreshGrow_unlocked.cfg`) | `NoLostRecord` violated in 4 steps |
 | FreshANN with the zombie's re-check after its put removed (`FreshANN_norecheck.cfg`) | `ShredClean` violated in 7 steps (takeover, check, fence, shred, zombie put) |
 | FreshANN restoring saved nodes without the vector check (`FreshANN_novalidate.cfg`) | `GraphCurrent` violated in 6 steps (put, save, put, crash, open) |
+| FreshRetain without the clamp to the slowest group (`FreshRetain_noclamp.cfg`, the `IgnoreGroups` option) | `ExactlyOnce` violated (a lagging group skips messages; expected and documented) |
+| FreshRetain with the OCC cursor check removed | `ExactlyOnce` violated (needs 2 workers per group) |
 | FreshShred with `Sweep` disabled | `KeyEventuallyGone` violated |
 | FreshShred with reads ignoring the shred marker | `ShreddedNeverRevealed` violated |
 

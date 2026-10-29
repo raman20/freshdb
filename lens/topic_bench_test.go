@@ -98,10 +98,21 @@ func BenchmarkTopicSnapshotLoad(b *testing.B) {
 	}
 }
 
-// BenchmarkTopicDropSubject: shred one subject (1/1024 of the messages).
+// BenchmarkTopicDropSubject: shred one subject that still has messages
+// (1/1024 of them; 1,024 messages at the default 1M). Every shred hits
+// a live subject: a fresh topic is loaded, outside the timer, every 64
+// shreds. Run with -benchtime 64x; with a time-based benchtime the
+// reloads dominate the wall time.
 func BenchmarkTopicDropSubject(b *testing.B) {
-	l, _ := loadedTopic(b)
+	n := benchMsgs()
+	var l *Topic
 	for i := 0; i < b.N; i++ {
+		if i%64 == 0 {
+			b.StopTimer()
+			l = nil
+			l = topicLoad(n)
+			b.StartTimer()
+		}
 		l.DropSubject(fmt.Sprintf("s%d", i%64))
 	}
 }

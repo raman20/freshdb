@@ -412,20 +412,29 @@ func (h *harness) readLive() reader {
 			}
 			return out, nil
 		},
+		// topic pages through the server's per-request cap (1000).
 		topic: func(t string, from int) ([]string, error) {
-			c, b, err := h.do("GET", fmt.Sprintf("/v1/topics/%s?from=%d&max=100000", url.PathEscape(t), from), nil)
-			if err != nil || c != 200 {
-				return nil, fmt.Errorf("topic %s: %d %s %v", t, c, b, err)
+			var out []string
+			for {
+				c, b, err := h.do("GET", fmt.Sprintf("/v1/topics/%s?from=%d&max=1000", url.PathEscape(t), from), nil)
+				if err != nil || c != 200 {
+					return nil, fmt.Errorf("topic %s: %d %s %v", t, c, b, err)
+				}
+				var ms []struct {
+					Offset int
+					Value  string
+				}
+				if err := json.Unmarshal(b, &ms); err != nil {
+					return nil, err
+				}
+				for _, m := range ms {
+					out = append(out, m.Value)
+				}
+				if len(ms) < 1000 {
+					return out, nil
+				}
+				from = ms[len(ms)-1].Offset + 1
 			}
-			var ms []struct{ Value string }
-			if err := json.Unmarshal(b, &ms); err != nil {
-				return nil, err
-			}
-			out := make([]string, len(ms))
-			for i, m := range ms {
-				out[i] = m.Value
-			}
-			return out, nil
 		},
 	}
 }

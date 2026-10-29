@@ -1,0 +1,24 @@
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicPublish-8      	  552680	      6288 ns/op
+BenchmarkTopicConsume100-8   	   81955	     30668 ns/op
+BenchmarkTopicOpen200k-8     	      19	 131611085 ns/op	       338.5 heapB/msg
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicPublish-8      	  543434	      6089 ns/op
+BenchmarkTopicConsume100-8   	   85194	     33575 ns/op
+BenchmarkTopicOpen200k-8     	      19	 120801565 ns/op	       338.5 heapB/msg
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicPublish-8      	  522830	      6848 ns/op
+BenchmarkTopicConsume100-8   	   80490	     46717 ns/op
+BenchmarkTopicOpen200k-8     	      19	 140089741 ns/op	       338.5 heapB/msg
+PASS

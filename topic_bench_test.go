@@ -79,3 +79,32 @@ func BenchmarkTopicOpen200k(b *testing.B) {
 		d.Close()
 	}
 }
+
+// BenchmarkTopicRetainOpen: 200k messages of 256 B, compacted with
+// Topics.MaxMessages = 1000, then reopened. Reports the compaction time
+// and the live heap after the reopen per message published, against
+// BenchmarkTopicOpen200k (no retention).
+func BenchmarkTopicRetainOpen(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		st := store.NewMem()
+		db := mustOpen(b, st, WithSnapshotEvery(-1))
+		publishN(b, db, "t", 200000, make([]byte, 256))
+		b.StartTimer()
+		s, err := db.Compact(ctx, CompactOptions{Topics: TopicRetention{MaxMessages: 1000}})
+		b.StopTimer()
+		if err != nil || s.Trimmed != 199000 {
+			b.Fatalf("compact: %+v %v", s, err)
+		}
+		db.Close()
+		runtime.GC()
+		var m0, m1 runtime.MemStats
+		runtime.ReadMemStats(&m0)
+		d := mustOpen(b, st, WithSnapshotEvery(-1))
+		runtime.GC()
+		runtime.ReadMemStats(&m1)
+		b.ReportMetric(float64(int64(m1.HeapAlloc)-int64(m0.HeapAlloc))/200000, "heapB/msg")
+		d.Close()
+		b.StartTimer()
+	}
+}

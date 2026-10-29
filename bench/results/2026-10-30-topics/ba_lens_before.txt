@@ -1,0 +1,42 @@
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/lens
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicApply-8          	       3	 579137866 ns/op	       338.6 heapB/msg	       397.0 ns/msg
+BenchmarkTopicSnapshotLoad-8   	       3	 290505475 ns/op	1043.78 MB/s	       329.0 heapB/msg
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/lens
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicRead100-8       	  465409	      2208 ns/op
+BenchmarkTopicDropSubject-8   	     392	   2986266 ns/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/lens
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicApply-8          	       3	 487101978 ns/op	       338.6 heapB/msg	       380.1 ns/msg
+BenchmarkTopicSnapshotLoad-8   	       3	 274290385 ns/op	1105.49 MB/s	       329.0 heapB/msg
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/lens
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicRead100-8       	  476720	      2252 ns/op
+BenchmarkTopicDropSubject-8   	     382	   2948906 ns/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/lens
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicApply-8          	       3	 489831371 ns/op	       338.6 heapB/msg	       394.8 ns/msg
+BenchmarkTopicSnapshotLoad-8   	       3	 253564184 ns/op	1195.85 MB/s	       329.0 heapB/msg
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/lens
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicRead100-8       	  474507	      2377 ns/op
+BenchmarkTopicDropSubject-8   	     392	   2973078 ns/op
+PASS

@@ -1,0 +1,18 @@
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/lens
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicDropSubject-8   	      64	   3230666 ns/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/lens
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicDropSubject-8   	      64	   2987506 ns/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/raman20/freshdb/lens
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkTopicDropSubject-8   	      64	   3171769 ns/op
+PASS

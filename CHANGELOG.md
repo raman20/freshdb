@@ -25,6 +25,9 @@ in its "Changes since v0.1.0" section.
 
 ### Changed (component C review: topics)
 
+- The soak driver (`bench/cmd/freshdb-soak`) pages topic reads through the
+  1000-message HTTP cap instead of asking for `max=100000`.
+
 - Shredding a subject touches only that subject's topic messages (an
   index in the topic lens) instead of scanning every message.
 - HTTP `GET /v1/topics/{t}` without `max` (or with `max=0`) returns at

@@ -307,8 +307,8 @@ What you give up:
 - `log` and `verify` start at the base (the base records the hash-chain head,
   so the chain still verifies from there).
 
-What it does not do yet: no retention for topics (every message is kept),
-no TTL. Values of a subject
+What it does not do by default: topic messages are kept unless topic
+retention is set (see "Topic retention" below); there is no TTL. Values of a subject
 shredded after the last compaction are dropped by the next one.
 
 Disk space: on the files layout and S3, replaced objects are deleted. In the
