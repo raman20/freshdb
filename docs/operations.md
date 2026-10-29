@@ -100,6 +100,29 @@ RSS grows by about its size once it fills. Go API options:
 | `WithValueCacheBytes(n)` | 1/16 of the memory limit (cgroup v2 `memory.max`, else MemTotal), 16–256 MiB | cache size; negative disables the cache |
 | `WithInlineMax(n)` | 64 B | KV values up to `n` bytes stay in RAM; negative keeps none inline |
 | `WithSnapshotEvery(n)` | 0 (off) | KV+topic snapshot every `n` commits; written synchronously and does not speed up open yet |
+| `WithCommitPolicy(CommitPolicy{MaxDelay, TargetBytes})` | no wait | a group commit waits up to `MaxDelay` for more transactions, until it holds `TargetBytes` (default 1 MiB) or `MaxBatch` (256) of them. Fewer, larger segment PUTs for more latency; see below |
+
+**Commit policy.** With the default, a batch is whatever queued while the
+previous segment was being written, so with N steady writers about half of
+them wait for the next PUT. `BenchmarkCommitPolicy` (2 ms simulated
+segment PUT, in-memory store, one 8-core box, 2026-10-29):
+
+| writers | MaxDelay | txn/s | mean commit latency | segment PUTs per txn |
+|---|---|---|---|---|
+| 1 | 0 | 441 | 2.3 ms | 1.00 |
+| 1 | 1 ms | 304 | 3.3 ms | 1.00 |
+| 8 | 0 | 1,766 | 4.5 ms | 0.25 |
+| 8 | 1 ms | 2,246 | 3.6 ms | 0.13 |
+| 8 | 4 ms | 1,204 | 6.6 ms | 0.13 |
+| 64 | 0 | 13,031 | 4.9 ms | 0.031 |
+| 64 | 1 ms | 16,002 | 4.0 ms | 0.016 |
+| 64 | 4 ms | 8,970 | 7.1 ms | 0.016 |
+
+A `MaxDelay` of about half the store's PUT latency halved the PUTs (on S3,
+the request bill for writes) and raised throughput with several writers;
+a single writer only pays the delay, and a delay longer than the PUT is
+worse on every column. It stays off by default because the right value
+depends on the store's latency and the write concurrency.
 
 The CLI and `freshdb serve` use the defaults; they have no flags for these
 yet. For scale: the 1M × 1 KiB YCSB run peaked at 1.55 GiB RSS with the

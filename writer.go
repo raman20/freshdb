@@ -29,6 +29,16 @@ type commitReq struct {
 	done chan commitRes
 }
 
+// size estimates the bytes r adds to a segment (an escalated transaction's
+// ops are not known until it runs: counted as small).
+func (r *commitReq) size() int {
+	n := 64
+	for _, op := range r.ops {
+		n += len(op.Key) + len(op.Value) + len(op.Space) + len(op.Subject) + 16
+	}
+	return n
+}
+
 type commitRes struct {
 	lsn      uint64
 	err      error
@@ -137,8 +147,25 @@ func (w *writer) crash() {
 	w.stop()
 }
 
+// CommitPolicy is the group-commit budget: after taking what is queued, a
+// batch waits up to MaxDelay (from its first transaction's arrival) for
+// more transactions, until it holds TargetBytes of keys and values or
+// MaxBatch transactions. Waiting trades commit latency for fewer, larger
+// segment writes: on an object store each segment is one billed PUT.
+type CommitPolicy struct {
+	MaxDelay    time.Duration // 0: never wait (the default)
+	TargetBytes int           // 0 with MaxDelay set: 1 MiB
+}
+
+const defaultTargetBytes = 1 << 20
+
 func (w *writer) loop() {
 	defer close(w.done)
+	var timer *time.Timer
+	if w.db.opts.Commit.MaxDelay > 0 {
+		timer = time.NewTimer(time.Hour)
+		timer.Stop()
+	}
 	for {
 		batch := w.carry
 		w.carry = nil
@@ -149,20 +176,58 @@ func (w *writer) loop() {
 			}
 			batch = append(batch, r)
 		}
-	drain:
-		for len(batch) < w.db.opts.MaxBatch {
-			select {
-			case r2, ok := <-w.ch:
-				if !ok {
-					break drain
-				}
-				batch = append(batch, r2)
-			default:
-				break drain
-			}
+		start := time.Now()
+		batch = w.drain(batch)
+		if timer != nil {
+			batch = w.linger(batch, start, timer)
 		}
 		w.process(batch)
 	}
+}
+
+// drain adds the requests already queued, up to MaxBatch.
+func (w *writer) drain(batch []*commitReq) []*commitReq {
+	for len(batch) < w.db.opts.MaxBatch {
+		select {
+		case r, ok := <-w.ch:
+			if !ok {
+				return batch
+			}
+			batch = append(batch, r)
+		default:
+			return batch
+		}
+	}
+	return batch
+}
+
+// linger waits for more requests within the CommitPolicy budget. A closed
+// queue ends the wait; loop sees the close on its next receive.
+func (w *writer) linger(batch []*commitReq, start time.Time, timer *time.Timer) []*commitReq {
+	p := w.db.opts.Commit
+	size := 0
+	for _, r := range batch {
+		size += r.size()
+	}
+	for len(batch) < w.db.opts.MaxBatch && size < p.TargetBytes {
+		wait := p.MaxDelay - time.Since(start)
+		if wait <= 0 {
+			break
+		}
+		timer.Reset(wait)
+		select {
+		case r, ok := <-w.ch:
+			timer.Stop()
+			if !ok {
+				return batch
+			}
+			batch = append(batch, r)
+			size += r.size()
+		case <-timer.C:
+			return batch
+		}
+	}
+	return batch
 }
 
 // runExec runs an escalated transaction body at the applied head. It

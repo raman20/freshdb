@@ -1,10 +1,14 @@
 package freshdb
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/raman20/freshdb/store"
 )
@@ -153,5 +157,59 @@ func BenchmarkOpenRecover10k(b *testing.B) {
 				d.Close()
 			}
 		})
+	}
+}
+
+// slowPuts adds a fixed latency to every segment write (an object store's
+// PUT round trip) and counts them.
+type slowPuts struct {
+	store.Store
+	d    time.Duration
+	segs atomic.Int64
+}
+
+func (s *slowPuts) PutIfAbsent(ctx context.Context, k string, b []byte) error {
+	if strings.HasSuffix(k, ".seg") {
+		s.segs.Add(1)
+		time.Sleep(s.d)
+	}
+	return s.Store.PutIfAbsent(ctx, k, b)
+}
+
+// Group commit under a 2 ms segment PUT, by commit policy and number of
+// concurrent writers: ns/op is per transaction (throughput), lat/txn the
+// mean commit latency, puts/txn the segment PUTs per transaction.
+func BenchmarkCommitPolicy(b *testing.B) {
+	for _, writers := range []int{1, 8, 64} {
+		for _, delay := range []time.Duration{0, time.Millisecond, 4 * time.Millisecond} {
+			b.Run(fmt.Sprintf("writers=%d/delay=%v", writers, delay), func(b *testing.B) {
+				st := &slowPuts{Store: store.NewMem(), d: 2 * time.Millisecond}
+				db := mustOpen(b, st, WithSnapshotEvery(1<<30), WithCommitPolicy(CommitPolicy{MaxDelay: delay}))
+				defer db.Close()
+				before := st.segs.Load()
+				var n, lat atomic.Int64
+				v := make([]byte, 100)
+				var wg sync.WaitGroup
+				b.ResetTimer()
+				for w := 0; w < writers; w++ {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						for i := n.Add(1); i <= int64(b.N); i = n.Add(1) {
+							t0 := time.Now()
+							if err := db.Put(ctx, fmt.Sprintf("k%09d", i), v); err != nil {
+								b.Error(err)
+								return
+							}
+							lat.Add(int64(time.Since(t0)))
+						}
+					}()
+				}
+				wg.Wait()
+				b.StopTimer()
+				b.ReportMetric(float64(st.segs.Load()-before)/float64(b.N), "puts/txn")
+				b.ReportMetric(float64(lat.Load())/float64(b.N)/1e6, "ms-lat/txn")
+			})
+		}
 	}
 }

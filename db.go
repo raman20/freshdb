@@ -37,6 +37,10 @@ type Options struct {
 	SnapshotEvery int
 	// MaxBatch bounds how many transactions one group commit may contain.
 	MaxBatch int
+	// Commit sets how long a group commit may wait to grow (CommitPolicy).
+	// The zero value never waits: a batch is whatever queued up while the
+	// previous segment was being written.
+	Commit CommitPolicy
 	// Logf receives operational messages (default: log.Printf; nil-safe).
 	Logf func(format string, args ...any)
 	// InlineMax: KV values up to this many bytes are kept in memory; larger
@@ -61,9 +65,13 @@ type Options struct {
 
 type Option func(*Options)
 
-func WithClock(f func() int64) Option        { return func(o *Options) { o.Clock = f } }
-func WithRand(r io.Reader) Option            { return func(o *Options) { o.Rand = r } }
-func WithKEK(k []byte) Option                { return func(o *Options) { o.KEK = k } }
+func WithClock(f func() int64) Option { return func(o *Options) { o.Clock = f } }
+func WithRand(r io.Reader) Option     { return func(o *Options) { o.Rand = r } }
+func WithKEK(k []byte) Option         { return func(o *Options) { o.KEK = k } }
+
+// WithCommitPolicy sets the group-commit budget (see CommitPolicy).
+func WithCommitPolicy(p CommitPolicy) Option { return func(o *Options) { o.Commit = p } }
+
 func WithSnapshotEvery(n int) Option         { return func(o *Options) { o.SnapshotEvery = n } }
 func WithLogf(f func(string, ...any)) Option { return func(o *Options) { o.Logf = f } }
 func WithInlineMax(n int) Option             { return func(o *Options) { o.InlineMax = n } }
@@ -182,6 +190,9 @@ func OpenStore(ctx context.Context, st store.Store, opts ...Option) (*DB, error)
 	}
 	if o.MaxBatch <= 0 {
 		o.MaxBatch = 256
+	}
+	if o.Commit.MaxDelay > 0 && o.Commit.TargetBytes <= 0 {
+		o.Commit.TargetBytes = defaultTargetBytes
 	}
 	if o.Logf == nil {
 		o.Logf = log.Printf

@@ -1,0 +1,10 @@
+BenchmarkCommitPolicy/writers=1/delay=0s-8         	    1046	   2265526 ns/op	         2.265 ms-lat/txn	         1.000 puts/txn
+BenchmarkCommitPolicy/writers=1/delay=1ms-8        	     734	   3290729 ns/op	         3.290 ms-lat/txn	         1.000 puts/txn
+BenchmarkCommitPolicy/writers=1/delay=4ms-8        	     376	   6392733 ns/op	         6.392 ms-lat/txn	         1.000 puts/txn
+BenchmarkCommitPolicy/writers=8/delay=0s-8         	    4311	    566247 ns/op	         4.525 ms-lat/txn	         0.2501 puts/txn
+BenchmarkCommitPolicy/writers=8/delay=1ms-8        	    5496	    445148 ns/op	         3.557 ms-lat/txn	         0.1252 puts/txn
+BenchmarkCommitPolicy/writers=8/delay=4ms-8        	    2740	    830851 ns/op	         6.637 ms-lat/txn	         0.1252 puts/txn
+BenchmarkCommitPolicy/writers=64/delay=0s-8        	   30543	     76742 ns/op	         4.904 ms-lat/txn	         0.03078 puts/txn
+BenchmarkCommitPolicy/writers=64/delay=1ms-8       	   38586	     62493 ns/op	         3.999 ms-lat/txn	         0.01578 puts/txn
+BenchmarkCommitPolicy/writers=64/delay=4ms-8       	   21891	    111479 ns/op	         7.121 ms-lat/txn	         0.01567 puts/txn
+ok  	github.com/raman20/freshdb	25.692s
