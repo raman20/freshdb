@@ -79,7 +79,7 @@ named), **documented** (accepted limit, written down where users read).
 | id | gap | status |
 |---|---|---|
 | S5.1 | The key index (every key and version) lives in RAM: memory grows with keys, ~10× Pebble steady state (design 07). | open: disk-backed key index deferred (no < 1 h route that keeps the formats and tests honest); on the ROADMAP |
-| S5.2 | HNSW build is single-threaded (16 min at 1M × 128-d); after a crash, vectors since the last clean close are re-inserted on open. | documented |
+| S5.2 | HNSW build is single-threaded (16 min at 1M × 128-d); after a crash, vectors since the last clean close are re-inserted on open. `EnableANN` builds under the writer lock. Periodic checkpoints designed (design 19 #3), not built. | documented |
 | S5.3 | The journal file only shrinks offline (`gc --shrink`). The 6 h soak's 9.5 GiB was this: 40.8 M dead records; shrink took 8.57 GB allocated (244 GB apparent) to 0.45 GB in 6 min 54 s | documented, measured; open: online reclaim |
 | S5.6 | Topics without retention keep every message in RAM and in every compaction and snapshot: the 6 h soak's 11.37 M messages were ~1.09 GB of live heap (~95 B each), the bulk of its RSS | documented: retention exists since component C (`--topic-max-age`, `--topic-max-messages`); topic storage outside RAM is on the ROADMAP |
 | S5.4 | S3 request cost per commit and per open is not measured. | fixed (measured): docs/s3.md — 1 PUT per serial commit, 0.06 with 32 writers, ~2 GETs per segment at open |

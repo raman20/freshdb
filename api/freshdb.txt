@@ -3,7 +3,9 @@ const (
 	MaxTxOps   = format.MaxOps
 const ANNExactBelow = 4096
 const BackupInfoKey = "backup/info.json"
+const MaxEf = 4096
 const MaxKeyBytes = 8 << 10
+const MaxM = 128
 var (
 	ErrNotFound       = errors.New("freshdb: not found")
 	ErrConflict       = errors.New("freshdb: transaction conflict (serializability); retry")

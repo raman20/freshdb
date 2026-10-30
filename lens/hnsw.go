@@ -2,6 +2,7 @@ package lens
 
 import (
 	"math"
+	"slices"
 	"sort"
 )
 
@@ -30,13 +31,20 @@ func (p ANNParams) norm() ANNParams {
 // slab slot slot[n], kept in sync by the slab's swap-delete. Levels come
 // from a hash of the id, and nodes are inserted in log order, so the same
 // history builds the same graph. It is a cache: not part of the digest.
+//
+// Identical vectors share one node: the first is its representative
+// (slot[n]), the others are listed in dups[n]. Without this, more than
+// 2M copies of one vector fill each other's link lists and form an
+// island no search reaches (5,000 vectors over 35 distinct directions:
+// 4,966 unreachable).
 type hnsw struct {
 	p     ANNParams
 	sl    *slab
-	slot  []int32     // node -> slab slot; -1 = deleted
-	links [][][]int32 // node -> level -> neighbor nodes
-	free  []int32     // deleted nodes with no remaining references
-	dead  int         // deleted nodes still possibly referenced
+	slot  []int32            // node -> slab slot of its representative; -1 = deleted
+	dups  map[int32][]string // node -> other ids with the identical vector (sorted)
+	links [][][]int32        // node -> level -> neighbor nodes
+	free  []int32            // deleted nodes with no remaining references
+	dead  int                // deleted nodes still possibly referenced
 	entry int32
 	top   int
 }
@@ -125,8 +133,56 @@ func (g *hnsw) maxM(l int) int {
 	return g.p.M
 }
 
-// insert adds slab slot s (already appended) to the graph.
+// insert adds slab slot s (already appended) to the graph, or to the
+// node of an identical vector the search finds.
 func (g *hnsw) insert(s int) {
+	d := g.sl.dim
+	q := g.sl.data[s*d : (s+1)*d : (s+1)*d]
+	lv := g.levelOf(g.sl.ids[s])
+	if g.entry < 0 {
+		n := g.newNode(s, lv)
+		g.entry, g.top = n, lv
+		return
+	}
+	ep := g.entry
+	for l := g.top; l > lv; l-- {
+		ep = g.greedy(q, ep, l)
+	}
+	// The searches read only the existing graph, so all levels are
+	// searched first: the level-0 result tells whether q is a duplicate.
+	ws := make([][]cand, min(lv, g.top)+1)
+	eps := []int32{ep}
+	for l := len(ws) - 1; l >= 0; l-- {
+		ws[l] = g.search(q, eps, g.p.EfConstruction, l)
+		eps = make([]int32, 0, len(ws[l]))
+		for _, c := range ws[l] {
+			eps = append(eps, c.n)
+		}
+	}
+	for _, c := range ws[0] {
+		if c.s < ws[0][0].s {
+			break
+		}
+		if slices.Equal(g.vec(c.n), q) {
+			g.addDup(c.n, s)
+			return
+		}
+	}
+	n := g.newNode(s, lv)
+	for l := len(ws) - 1; l >= 0; l-- {
+		g.links[n][l] = g.selectNb(q, ws[l], g.maxM(l))
+		for _, nb := range g.links[n][l] {
+			g.link(nb, n, l)
+		}
+	}
+	if lv > g.top {
+		g.entry, g.top = n, lv
+	}
+}
+
+// newNode makes slot s the representative of a fresh node with lv+1
+// empty levels.
+func (g *hnsw) newNode(s, lv int) int32 {
 	var n int32
 	if k := len(g.free); k > 0 {
 		n, g.free = g.free[k-1], g.free[:k-1]
@@ -137,32 +193,48 @@ func (g *hnsw) insert(s int) {
 	}
 	g.slot[n] = int32(s)
 	g.sl.node[s] = n
-	lv := g.levelOf(g.sl.ids[s])
 	g.links[n] = make([][]int32, lv+1)
-	if g.entry < 0 {
-		g.entry, g.top = n, lv
-		return
+	return n
+}
+
+// addDup attaches slot s to node n, whose vector is identical.
+func (g *hnsw) addDup(n int32, s int) {
+	if g.dups == nil {
+		g.dups = map[int32][]string{}
 	}
-	q := g.vec(n)
-	ep := g.entry
-	for l := g.top; l > lv; l-- {
-		ep = g.greedy(q, ep, l)
+	id := g.sl.ids[s]
+	ds := g.dups[n]
+	i, _ := slices.BinarySearch(ds, id)
+	g.dups[n] = slices.Insert(ds, i, id)
+	g.sl.node[s] = n
+}
+
+// dropSlot detaches slab slot s (about to be deleted) from its node. It
+// reports the node to remove from the graph once the slab is updated, or
+// -1 if other copies keep the node; then a new representative is chosen
+// by fixRep after the swap-delete.
+func (g *hnsw) dropSlot(s int) (gone int32, rep string) {
+	n := g.sl.node[s]
+	ds := g.dups[n]
+	if len(ds) == 0 {
+		return n, ""
 	}
-	eps := []int32{ep}
-	for l := min(lv, g.top); l >= 0; l-- {
-		w := g.search(q, eps, g.p.EfConstruction, l)
-		g.links[n][l] = g.selectNb(q, w, g.maxM(l))
-		for _, nb := range g.links[n][l] {
-			g.link(nb, n, l)
-		}
-		eps = eps[:0]
-		for _, c := range w {
-			eps = append(eps, c.n)
-		}
+	if g.slot[n] == int32(s) { // the representative goes: promote the first copy
+		rep = ds[0]
+		ds = ds[1:]
+	} else {
+		i, _ := slices.BinarySearch(ds, g.sl.ids[s])
+		ds = slices.Delete(ds, i, i+1)
 	}
-	if lv > g.top {
-		g.entry, g.top = n, lv
+	if len(ds) == 0 {
+		delete(g.dups, n)
+	} else {
+		g.dups[n] = ds
 	}
+	if rep != "" {
+		g.slot[n] = int32(g.sl.pos[rep]) // fixed again by moved if rep's slot moves
+	}
+	return -1, rep
 }
 
 // link adds n to nb's level-l links, re-selecting if it overflows.
@@ -334,7 +406,10 @@ func (g *hnsw) sweep() {
 	g.dead = 0
 }
 
-// knn returns up to k hits for the unit query u with beam width ef.
+// knn returns the up to max(ef,k) nodes the beam search for the unit
+// query u ends with, as hits (unordered; the caller keeps the best k by
+// score and id). A node with copies contributes up to k of its ids, the
+// smallest, as the tie order needs.
 func (g *hnsw) knn(u []float32, k, ef int) []Hit {
 	if g.entry < 0 {
 		return nil
@@ -344,9 +419,12 @@ func (g *hnsw) knn(u []float32, k, ef int) []Hit {
 		ep = g.greedy(u, ep, l)
 	}
 	w := g.search(u, []int32{ep}, max(ef, k), 0)
-	h := make([]Hit, 0, min(k, len(w)))
+	h := make([]Hit, 0, len(w))
 	for _, c := range w {
 		h = append(h, Hit{g.sl.ids[g.slot[c.n]], c.s})
+		for _, id := range g.dups[c.n][:min(k, len(g.dups[c.n]))] {
+			h = append(h, Hit{id, c.s})
+		}
 	}
 	return h
 }

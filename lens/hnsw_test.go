@@ -38,41 +38,9 @@ func recall(got, want []Hit) float64 {
 // checkGraph verifies the slot/node mapping and link invariants.
 func checkGraph(t *testing.T, sl *slab) {
 	t.Helper()
-	g := sl.g
-	if len(sl.node) != len(sl.ids) {
-		t.Fatalf("node map %d, slots %d", len(sl.node), len(sl.ids))
-	}
-	live := 0
-	for n, s := range g.slot {
-		if s < 0 {
-			if g.links[n] != nil {
-				t.Fatalf("deleted node %d keeps links", n)
-			}
-			continue
-		}
-		live++
-		if sl.node[s] != int32(n) {
-			t.Fatalf("slot %d -> node %d, node %d -> slot %d", s, sl.node[s], n, s)
-		}
-		for l, ls := range g.links[n] {
-			if len(ls) > g.maxM(l) {
-				t.Fatalf("node %d level %d has %d links", n, l, len(ls))
-			}
-			for _, x := range ls {
-				if x == int32(n) {
-					t.Fatalf("self link %d", n)
-				}
-				if g.slot[x] >= 0 && len(g.links[x]) <= l {
-					t.Fatalf("link %d->%d at level %d above its level", n, x, l)
-				}
-			}
-		}
-	}
-	if live != len(sl.ids) {
-		t.Fatalf("%d live nodes, %d slots", live, len(sl.ids))
-	}
-	if live > 0 && (g.entry < 0 || g.slot[g.entry] < 0) {
-		t.Fatalf("entry %d is not live", g.entry)
+	l := &Vector{m: map[string]*vecColl{"c": {slabs: map[int]*slab{sl.dim: sl}}}}
+	if err := l.CheckANN(); err != nil {
+		t.Fatal(err)
 	}
 }
 

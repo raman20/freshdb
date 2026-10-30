@@ -25,9 +25,12 @@ never needed for correctness; losing it costs a rebuild.
 - **Load** in `openWritable`: the newest complete snapshot with
   `lsn ≤ head` is decoded (bad magic, CRC, bounds or a link to a node that
   lacks that level → ignored, rebuild). Per graph with the same normalized
-  parameters, each saved node is kept only if its id is in the view, its
-  level count equals the id's hashed level, and the hash of the view's
-  vector matches. Other nodes are removed with the normal delete repair,
+  parameters, each saved node is kept only if its id is in the view, it
+  has at least one level, and the hash of the view's vector matches (the
+  level count is not checked against the id since 2026-10-30: identical
+  vectors share a node, and a copy that replaces a deleted representative
+  keeps the node's levels). Copies are not saved; each vector without a
+  node first joins a kept node with the same hash and identical vector. Other nodes are removed with the normal delete repair,
   then dead links are swept, the entry is re-picked if needed, and every
   vector without a node is inserted (catch-up for commits after the save).
   Graphs whose parameters differ are rebuilt.

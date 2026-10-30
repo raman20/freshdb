@@ -173,23 +173,29 @@ func (l *Vector) del(coll, id string) {
 	i, last := sl.pos[id], len(sl.ids)-1
 	var gone int32 = -1
 	if sl.g != nil {
-		gone = sl.node[i]
+		gone, _ = sl.g.dropSlot(i)
 	}
 	if i != last { // move the last slot into the hole
 		sl.ids[i], sl.subj[i] = sl.ids[last], sl.subj[last]
 		copy(sl.data[i*d:(i+1)*d], sl.data[last*d:])
 		sl.pos[sl.ids[i]] = i
 		if sl.g != nil {
-			sl.node[i] = sl.node[last]
-			sl.g.slot[sl.node[i]] = int32(i)
+			m := sl.node[last]
+			sl.node[i] = m
+			if sl.g.slot[m] == int32(last) { // it represented its node
+				sl.g.slot[m] = int32(i)
+			}
 		}
 	}
 	delete(sl.pos, id)
 	sl.ids, sl.subj, sl.data = sl.ids[:last], sl.subj[:last], sl.data[:last*d]
+	clear(sl.data[last*d : (last+1)*d]) // no copy of a deleted vector stays behind
+	sl.subj[:last+1][last] = ""
 	if sl.g != nil {
-		clear(sl.data[last*d : (last+1)*d]) // no copy of a deleted vector stays behind
 		sl.node = sl.node[:last]
-		sl.g.remove(gone)
+		if gone >= 0 {
+			sl.g.remove(gone)
+		}
 	}
 	if last == 0 {
 		delete(c.slabs, d)
@@ -256,6 +262,10 @@ func (l *Vector) TopK(coll string, u []float32, k, lo, hi int) []Hit {
 	}
 	return h
 }
+
+// Dot is the similarity Search ranks by: the dot product of two unit
+// vectors of one dimension, computed exactly as the lens computes it.
+func Dot(a, b []float32) float32 { return dot(a, b) }
 
 // dot is an 8-wide, 4-accumulator unrolled float32 dot product (independent accumulators
 // let the CPU overlap the multiply-adds). len(b) must equal len(a).
@@ -350,7 +360,8 @@ func (l *Vector) ANN(coll string, u []float32, k, ef, minN int) ([]Hit, bool) {
 	if ef <= 0 {
 		ef = sl.g.p.EfSearch
 	}
-	return sl.g.knn(u, k, ef), true
+	k = min(k, len(sl.ids))
+	return sl.g.knn(u, k, min(ef, len(sl.ids))), true
 }
 
 // Search returns the top-k ids by cosine similarity (ties broken by id).

@@ -262,6 +262,9 @@ type ANNOptions struct {
 	EfSearch       int `json:"ef_search,omitempty"`
 }
 
+// MaxM bounds ANNOptions.M (links per node; 2M at layer 0).
+const MaxM = 128
+
 func (o ANNOptions) params() lens.ANNParams {
 	return lens.ANNParams{M: o.M, EfConstruction: o.EfConstruction, EfSearch: o.EfSearch}
 }
@@ -273,6 +276,9 @@ func (o ANNOptions) params() lens.ANNParams {
 // least ANNExactBelow vectors; SearchExact still scans. Calling it again
 // with other options rebuilds the graphs.
 func (db *DB) EnableANN(ctx context.Context, coll string, o ANNOptions) error {
+	if o.M < 0 || o.M > MaxM || o.EfConstruction < 0 || o.EfConstruction > MaxEf || o.EfSearch < 0 || o.EfSearch > MaxEf {
+		return fmt.Errorf("%w: ANN options %+v (m 0..%d, ef 0..%d; 0 = default)", ErrBadValue, o, MaxM, MaxEf)
+	}
 	db.lockIdle()
 	defer db.mu.Unlock()
 	if err := db.commitManifest(ctx, func(m *Manifest) error {

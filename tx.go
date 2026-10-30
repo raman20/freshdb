@@ -37,8 +37,8 @@ func Subject(s string) WriteOpt { return func(o *format.Op) { o.Subject = s } }
 
 // Tx is a transaction. Update transactions are serializable: reads come
 // from a snapshot at LSN At(), and commit fails with ErrConflict if anything
-// read (keys, scanned prefixes, consumer cursors) changed since. Vector and
-// index queries read the lens state and are not part of the read set.
+// read (keys, scanned prefixes, consumer cursors) changed since. Doc Find
+// and vector Search read their whole collection (see each).
 type Tx struct {
 	db       *DB
 	v        *view
@@ -289,7 +289,11 @@ func (tx *Tx) Vector(coll string) VecTx { return VecTx{tx, coll} }
 
 func (v VecTx) Put(id string, vec []float32, opts ...WriteOpt) error {
 	if _, ok := lens.DecodeVec(lens.EncodeVec(vec)); !ok {
-		return fmt.Errorf("freshdb: vector must be non-empty and finite")
+		return fmt.Errorf("%w: vector must be non-empty and finite", ErrBadValue)
+	}
+	if _, ok := lens.Normalize(vec); !ok {
+		// the lens would drop it: a stored vector no search can return
+		return fmt.Errorf("%w: zero vector", ErrBadValue)
 	}
 	return v.tx.write(format.Op{Kind: format.OpPut, Space: vecSpace(v.coll), Key: id, Value: lens.EncodeVec(vec)}, opts)
 }
@@ -301,6 +305,11 @@ func (v VecTx) Delete(id string) error {
 // id). Collections without EnableANN, or with fewer than ANNExactBelow
 // vectors, are scanned exactly; otherwise the HNSW graph answers
 // (approximate), falling back to the exact scan if it finds fewer than k.
+// A query with a NaN or infinite component is ErrBadValue; a zero query,
+// or k <= 0, finds nothing. Only vectors of the query's dimension are
+// candidates. In a read-write transaction the result includes the
+// transaction's own puts and deletes, and the whole collection is part
+// of the read set: any concurrent write to it makes the commit retry.
 func (v VecTx) Search(q []float32, k int) ([]lens.Hit, error) {
 	return v.search(q, k, 0, false)
 }
@@ -310,7 +319,8 @@ func (v VecTx) SearchExact(q []float32, k int) ([]lens.Hit, error) {
 	return v.search(q, k, 0, true)
 }
 
-// SearchANN is Search with beam width ef (0 = the collection's EfSearch).
+// SearchANN is Search with beam width ef (0 = the collection's EfSearch;
+// at most MaxEf).
 func (v VecTx) SearchANN(q []float32, k, ef int) ([]lens.Hit, error) {
 	return v.search(q, k, ef, false)
 }
@@ -319,7 +329,16 @@ func (v VecTx) SearchANN(q []float32, k, ef int) ([]lens.Hit, error) {
 // even if the collection has an HNSW graph.
 const ANNExactBelow = 4096
 
+// MaxEf bounds the HNSW beam width of a search (ANNOptions and SearchANN).
+const MaxEf = 4096
+
 func (v VecTx) search(q []float32, k, ef int, exact bool) ([]lens.Hit, error) {
+	if _, ok := lens.DecodeVec(lens.EncodeVec(q)); !ok && len(q) > 0 {
+		return nil, fmt.Errorf("%w: query vector must be finite", ErrBadValue)
+	}
+	if ef < 0 || ef > MaxEf {
+		return nil, fmt.Errorf("%w: ef %d (0..%d)", ErrBadValue, ef, MaxEf)
+	}
 	vw, err := v.tx.lensView()
 	if err != nil {
 		return nil, err
@@ -328,14 +347,54 @@ func (v VecTx) search(q []float32, k, ef int, exact bool) ([]lens.Hit, error) {
 	if !ok || k <= 0 {
 		return nil, nil
 	}
-	vw.mu.RLock()
-	defer vw.mu.RUnlock()
-	if !exact {
-		if hs, ok := vw.vec.ANN(v.coll, u, k, ef, ANNExactBelow); ok && len(hs) >= min(k, vw.vec.Slots(v.coll, len(u))) {
-			return lens.MergeHits([][]lens.Hit{hs}, k), nil
+	space := vecSpace(v.coll)
+	var mine map[string]*localVal // this transaction's writes to the collection
+	if v.tx.writable {
+		// The lens is at the branch head, which may be past the snapshot:
+		// the collection read makes any such difference a conflict.
+		v.tx.prefixes = append(v.tx.prefixes, rkey{space, ""})
+		for key, l := range v.tx.local {
+			if key.space == space {
+				if mine == nil {
+					mine = map[string]*localVal{}
+				}
+				mine[key.key] = l
+			}
 		}
 	}
-	return searchParallel(vw.vec, v.coll, u, k), nil
+	vw.mu.RLock()
+	n := vw.vec.Slots(v.coll, len(u))
+	k = min(k, n+len(mine))   // no more hits than candidates (k may come from a request)
+	kk := min(k+len(mine), n) // the lens's own hits that survive the overlay
+	var hs []lens.Hit
+	if !exact {
+		if a, ok := vw.vec.ANN(v.coll, u, kk, ef, ANNExactBelow); ok && len(a) >= kk {
+			hs = lens.MergeHits([][]lens.Hit{a}, kk)
+		}
+	}
+	if hs == nil && kk > 0 {
+		hs = searchParallel(vw.vec, v.coll, u, kk)
+	}
+	vw.mu.RUnlock()
+	if mine == nil {
+		return hs, nil
+	}
+	out := hs[:0:0]
+	for _, h := range hs {
+		if mine[h.ID] == nil {
+			out = append(out, h)
+		}
+	}
+	for id, l := range mine {
+		if l.del {
+			continue
+		}
+		x, _ := lens.DecodeVec(l.val) // checked by Put
+		if w, ok := lens.Normalize(x); ok && len(w) == len(u) {
+			out = append(out, lens.Hit{ID: id, Score: lens.Dot(u, w)})
+		}
+	}
+	return lens.MergeHits([][]lens.Hit{out}, k), nil
 }
 
 // vecChunk is the smallest slot range worth its own goroutine.

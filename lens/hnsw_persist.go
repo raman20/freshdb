@@ -6,6 +6,7 @@ import (
 	"errors"
 	"hash/crc32"
 	"math"
+	"slices"
 	"sort"
 )
 
@@ -28,6 +29,7 @@ type ANNLoadStats struct {
 	Rebuilt  int // graphs built from scratch (no usable snapshot)
 	Reused   int // nodes kept as saved
 	Stale    int // saved nodes removed (vector deleted or changed)
+	Copies   int // vectors attached to a kept node with the identical vector
 	Inserted int // vectors inserted after the restore
 }
 
@@ -179,29 +181,39 @@ func DecodeANN(b []byte) (ANNSnapshot, error) {
 	out := ANNSnapshot{}
 	for k := binary.LittleEndian.Uint32(body[len(annMagic):]); k > 0 && r.err == nil; k-- {
 		coll := r.str()
-		var v [6]int
+		var v [7]uint64
 		for i := range v {
-			v[i] = int(r.u())
+			v[i] = r.u()
 		}
-		s := &annSnap{p: ANNParams{M: v[1], EfConstruction: v[2], EfSearch: v[3]}, top: v[5], entry: int32(r.u()) - 1}
-		dim, nodes := v[0], v[4]
-		if nodes > len(r.b) || s.top > maxLevel {
+		// every field fits an int32 (node ids are int32); each node takes
+		// at least one byte, so nodes cannot exceed what is left
+		for _, x := range v {
+			if x > math.MaxInt32 {
+				return nil, errANNFormat
+			}
+		}
+		dim, nodes := int(v[0]), int(v[4])
+		if nodes > len(r.b) || v[5] > maxLevel {
 			return nil, errANNFormat
 		}
+		s := &annSnap{p: ANNParams{M: int(v[1]), EfConstruction: int(v[2]), EfSearch: int(v[3])}, top: int(v[5]), entry: int32(v[6]) - 1}
 		s.ids, s.hash, s.links = make([]string, nodes), make([]uint64, nodes), make([][][]int32, nodes)
 		for n := 0; n < nodes && r.err == nil; n++ {
 			if s.ids[n] = r.str(); s.ids[n] == "" {
 				continue
 			}
 			s.hash[n] = binary.LittleEndian.Uint64(r.fixed(8))
-			lv := int(r.u())
+			lv := r.u()
 			if lv > maxLevel+1 {
 				return nil, errANNFormat
 			}
 			s.links[n] = make([][]int32, lv)
-			for l := 0; l < lv && r.err == nil; l++ {
-				c := int(r.u())
-				raw := r.fixed(4 * c)
+			for l := 0; l < int(lv) && r.err == nil; l++ {
+				c := r.u()
+				if c > uint64(len(r.b)/4) {
+					return nil, errANNFormat
+				}
+				raw := r.fixed(4 * int(c))
 				ls := make([]int32, c)
 				for i := range ls {
 					x := int32(binary.LittleEndian.Uint32(raw[4*i:]))
@@ -281,7 +293,9 @@ func restoreHNSW(sl *slab, s *annSnap, st *ANNLoadStats) *hnsw {
 			continue
 		}
 		p, ok := sl.pos[id]
-		if ok && sl.node[p] < 0 && len(s.links[i]) == g.levelOf(id)+1 &&
+		// (a node's levels come from the id that created it, which a
+		// copy of its vector may have replaced as representative)
+		if ok && sl.node[p] < 0 && len(s.links[i]) >= 1 &&
 			vecHash(sl.data[p*sl.dim:(p+1)*sl.dim]) == s.hash[i] {
 			g.slot[i], sl.node[p] = int32(p), int32(i)
 			st.Reused++
@@ -296,8 +310,50 @@ func restoreHNSW(sl *slab, s *annSnap, st *ANNLoadStats) *hnsw {
 		st.Stale++
 	}
 	g.sweep()
+	// A snapshot is only a cache from storage: links a correct save never
+	// writes (self, repeated, over the level's cap) are dropped here, so
+	// the graph keeps the invariants CheckANN verifies.
+	for n, lv := range g.links {
+		for l, ls := range lv {
+			seen := map[int32]bool{int32(n): true}
+			k := 0
+			for _, x := range ls {
+				if !seen[x] && k < g.maxM(l) {
+					seen[x] = true
+					ls[k] = x
+					k++
+				}
+			}
+			lv[l] = ls[:k]
+		}
+	}
 	if g.entry < 0 || g.slot[g.entry] < 0 || len(g.links[g.entry])-1 != g.top {
 		g.pickEntry()
+	}
+	// Copies are not saved: each joins the kept node of its identical
+	// vector, found by hash, before anything is inserted.
+	var byVec map[uint64][]int32
+	d := sl.dim
+	for p := range sl.ids {
+		if sl.node[p] >= 0 {
+			continue
+		}
+		if byVec == nil {
+			byVec = map[uint64][]int32{}
+			for n, s := range g.slot {
+				if s >= 0 {
+					h := vecHash(g.vec(int32(n)))
+					byVec[h] = append(byVec[h], int32(n))
+				}
+			}
+		}
+		for _, n := range byVec[vecHash(sl.data[p*d:(p+1)*d])] {
+			if slices.Equal(g.vec(n), sl.data[p*d:(p+1)*d]) {
+				g.addDup(n, p)
+				st.Copies++
+				break
+			}
+		}
 	}
 	for p := range sl.ids {
 		if sl.node[p] < 0 {
@@ -319,8 +375,9 @@ func (g *hnsw) pickEntry() {
 }
 
 // CheckANN verifies every graph's structure against its slab: each vector
-// has exactly one live node and back, levels follow the id, links stay
-// within bounds and levels, and the entry is a live top-level node.
+// maps to a live node, which is its own or holds it as a copy of an
+// identical vector, and back; links stay within bounds and levels; the
+// entry is a live top-level node.
 func (l *Vector) CheckANN() error {
 	for _, coll := range sortedKeys(l.m) {
 		for d, sl := range l.m[coll].slabs {
@@ -337,11 +394,11 @@ func (l *Vector) CheckANN() error {
 			if len(sl.node) != len(sl.ids) {
 				return bad("node map, slots:", len(sl.node), len(sl.ids))
 			}
-			live := 0
+			live, copies := 0, 0
 			for n, s := range g.slot {
 				if s < 0 {
-					if g.links[n] != nil {
-						return bad("deleted node keeps links:", n)
+					if g.links[n] != nil || g.dups[int32(n)] != nil {
+						return bad("deleted node keeps links or copies:", n)
 					}
 					continue
 				}
@@ -349,9 +406,21 @@ func (l *Vector) CheckANN() error {
 				if int(s) >= len(sl.ids) || sl.node[s] != int32(n) {
 					return bad("node -> slot does not map back:", n, int(s))
 				}
-				if len(g.links[n]) != g.levelOf(sl.ids[s])+1 {
-					return bad("node, levels:", n, len(g.links[n]))
+				if lv := len(g.links[n]); lv < 1 || lv > maxLevel+1 {
+					return bad("node, levels:", n, lv)
 				}
+				ds := g.dups[int32(n)]
+				if ds != nil && len(ds) == 0 || !slices.IsSorted(ds) {
+					return bad("node's copies not a sorted non-empty list:", n)
+				}
+				for i, id := range ds {
+					p, ok := sl.pos[id]
+					if !ok || sl.node[p] != int32(n) || id == sl.ids[s] || i > 0 && ds[i-1] == id ||
+						!slices.Equal(sl.data[p*d:(p+1)*d], sl.data[int(s)*d:(int(s)+1)*d]) {
+						return bad("node, bad copy:", n, p)
+					}
+				}
+				copies += len(ds)
 				for lv, ls := range g.links[n] {
 					if len(ls) > g.maxM(lv) {
 						return bad("node, level, links:", n, lv, len(ls))
@@ -366,8 +435,13 @@ func (l *Vector) CheckANN() error {
 					}
 				}
 			}
-			if live != len(sl.ids) {
-				return bad("live nodes, vectors:", live, len(sl.ids))
+			if live+copies != len(sl.ids) {
+				return bad("live nodes + copies, vectors:", live, copies, len(sl.ids))
+			}
+			for p, n := range sl.node {
+				if n < 0 || int(n) >= len(g.slot) || g.slot[n] < 0 {
+					return bad("slot without a live node:", p)
+				}
 			}
 			if live > 0 && (g.entry < 0 || g.slot[g.entry] < 0 || len(g.links[g.entry])-1 != g.top) {
 				return bad("entry, top not a live top node:", int(g.entry), g.top)

@@ -26,6 +26,29 @@ in its "Changes since v0.1.0" section.
 - Old manifests are deleted after the final sweep, so `KeepManifests`
   counts the sweep's own manifest.
 
+### Fixed (component E review: vectors)
+
+- Identical vectors now share one HNSW node. More than 2·M copies of a
+  vector used to fill each other's neighbor lists and cut themselves off:
+  with 5,000 vectors over 35 directions, 4,966 nodes were unreachable and
+  recall@10 was 0.12; now 0 and 1.00. Copies are not saved in the graph
+  blob (format unchanged); they rejoin their node by hash on restore
+  (`ANNLoadStats.Copies`).
+- `Search` in a read-write transaction includes the transaction's own
+  puts and deletes and puts the collection in the read set (a concurrent
+  write to it makes the commit retry); it used to ignore both.
+- `k` is capped at the candidate count and `ef` must be 0..`MaxEf`
+  (4096); `EnableANN` options are bounded (`M` ≤ `MaxM` = 128). A huge
+  `k` or `ef` from HTTP could loop or exhaust memory.
+- Empty, non-finite and zero vectors in `Put`, a non-finite query, and
+  out-of-range `ef` / ANN options are `ErrBadValue` (HTTP 400; were 500 or
+  silently dropped).
+- `DecodeANN` rejects oversized counts instead of panicking, and a
+  restored graph drops self, repeated and over-cap links (found by the
+  new `FuzzDecodeANN`).
+- A deleted vector's components and subject are cleared from the slab's
+  spare capacity. New `lens.Dot`.
+
 ### Fixed (component D review: documents)
 
 - `Find` with an index now includes the transaction's own writes and is

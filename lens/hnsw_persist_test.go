@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"testing"
 )
 
@@ -122,5 +123,131 @@ func TestHNSWPersist(t *testing.T) {
 	}
 	if NewVector().MarshalANN() != nil {
 		t.Fatal("blob without graphs")
+	}
+}
+
+// Identical vectors share a node; the copies are not saved but rejoin
+// their node by hash on restore, so a restore of the same state rebuilds
+// the same graph, and deleting representatives keeps every copy findable.
+func TestHNSWDuplicates(t *testing.T) {
+	r := rand.New(rand.NewSource(3))
+	dirs := make([][]float32, 12)
+	for i := range dirs {
+		dirs[i] = randVec(r, 8)
+	}
+	var ops []func(*Vector)
+	for i := 0; i < 3000; i++ {
+		id, v := fmt.Sprintf("v%04d", r.Intn(1200)), dirs[r.Intn(len(dirs))]
+		if r.Intn(4) == 0 {
+			ops = append(ops, func(l *Vector) { l.del("c", id) })
+		} else {
+			ops = append(ops, func(l *Vector) { put(l, "c", id, "s", v) })
+		}
+	}
+	p := ANNParams{M: 4, EfConstruction: 16}
+	a := NewVector()
+	a.EnableANN("c", p)
+	for _, op := range ops {
+		op(a)
+	}
+	sl := a.m["c"].slabs[8]
+	checkGraph(t, sl)
+	if len(sl.g.dups) == 0 {
+		t.Fatal("no shared nodes")
+	}
+	for _, d := range dirs {
+		u, _ := normalize(d)
+		got, _ := a.ANN("c", u, 50, 0, 0)
+		want := MergeHits([][]Hit{a.TopK("c", u, 50, 0, len(sl.ids))}, 50)
+		if rc := recall(MergeHits([][]Hit{got}, 50), want); rc != 1 {
+			t.Fatalf("recall %.2f on a duplicated direction", rc)
+		}
+	}
+	snap, err := DecodeANN(a.MarshalANN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := NewVector()
+	for _, op := range ops {
+		op(b)
+	}
+	st := b.EnableANNFrom("c", p, snap)
+	checkGraph(t, b.m["c"].slabs[8])
+	if st.Inserted != 0 || st.Stale != 0 || st.Reused+st.Copies != len(sl.ids) || st.Copies == 0 {
+		t.Fatalf("restore %+v of %d vectors", st, len(sl.ids))
+	}
+	if !reflect.DeepEqual(b.m["c"].slabs[8].g.dups, sl.g.dups) || !bytes.Equal(b.MarshalANN(), a.MarshalANN()) {
+		t.Fatal("restored graph differs")
+	}
+	// Delete every representative: the copies take over.
+	for n, s := range sl.g.slot {
+		if s >= 0 && sl.g.dups[int32(n)] != nil {
+			a.del("c", sl.ids[s])
+		}
+	}
+	checkGraph(t, sl)
+	for _, d := range dirs {
+		u, _ := normalize(d)
+		got, _ := a.ANN("c", u, 50, 0, 0)
+		want := MergeHits([][]Hit{a.TopK("c", u, 50, 0, len(sl.ids))}, 50)
+		if rc := recall(MergeHits([][]Hit{got}, 50), want); rc != 1 {
+			t.Fatalf("recall %.2f after deleting representatives", rc)
+		}
+	}
+}
+
+// CheckANN must notice each kind of broken copy bookkeeping.
+func TestCheckANNCatches(t *testing.T) {
+	build := func() (*Vector, *hnsw) {
+		l := NewVector()
+		l.EnableANN("c", ANNParams{M: 4})
+		for i := 0; i < 60; i++ {
+			put(l, "c", itoa(i), "", []float32{float32(i%3) + 1, 1})
+		}
+		return l, l.m["c"].slabs[2].g
+	}
+	if l, _ := build(); l.CheckANN() != nil {
+		t.Fatal(l.CheckANN())
+	}
+	breaks := map[string]func(g *hnsw){
+		"copy forgotten": func(g *hnsw) {
+			for n, ds := range g.dups {
+				g.dups[n] = ds[1:]
+				return
+			}
+		},
+		"copies unsorted": func(g *hnsw) {
+			for _, ds := range g.dups {
+				ds[0], ds[1] = ds[1], ds[0]
+				return
+			}
+		},
+		"copy listed twice": func(g *hnsw) {
+			for n, ds := range g.dups {
+				g.dups[n] = append(ds, ds[len(ds)-1])
+				return
+			}
+		},
+		"copy differs": func(g *hnsw) {
+			for _, ds := range g.dups {
+				p := g.sl.pos[ds[0]]
+				g.sl.data[p*2] += 1
+				return
+			}
+		},
+		"empty copy list": func(g *hnsw) { g.dups[g.entry] = []string{} },
+		"self link":       func(g *hnsw) { g.links[g.entry][0] = append(g.links[g.entry][0], g.entry) },
+		"dead node with copies": func(g *hnsw) {
+			g.slot = append(g.slot, -1)
+			g.links = append(g.links, nil)
+			g.dups[int32(len(g.slot)-1)] = []string{"x"}
+		},
+	}
+	for name, f := range breaks {
+		l, g := build()
+		f(g)
+		if l.CheckANN() == nil {
+			t.Errorf("%s: not caught", name)
+		}
 	}
 }

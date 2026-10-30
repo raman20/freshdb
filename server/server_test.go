@@ -53,6 +53,19 @@ func TestHTTPAPI(t *testing.T) {
 			t.Fatalf("%s: %s", body, got)
 		}
 	}
+	do("PUT", "/v1/vectors/mem/bad", "[0,0]", 400)         // zero vector
+	do("PUT", "/v1/vectors/mem/bad", "[]", 400)            // empty
+	do("PUT", "/v1/vectors/mem/bad", `{"a":1}`, 400)       // not an array
+	do("PUT", "/v1/vectors/mem/bad", "[1e39]", 400)        // overflows float32
+	do("POST", "/v1/vectors/mem/ann", `{"m":100000}`, 400) // past MaxM
+	do("POST", "/v1/vectors/mem/search", `{"vector":[1,0],"k":1,"ef":-1}`, 400)
+	do("POST", "/v1/vectors/mem/search", `{"vector":[1,0],"k":1,"ef":100000}`, 400)
+	do("POST", "/v1/vectors/mem/search", `{"vector":[1,0],"k":1000000000000}`, 200) // capped, no huge allocation
+	do("PUT", "/v1/vectors/mem/m3", "[1,1]", 200)
+	do("DELETE", "/v1/vectors/mem/m3", "", 200)
+	if got := do("POST", "/v1/vectors/mem/search", `{"vector":[1,1],"k":5}`, 200); strings.Contains(got, `"m3"`) {
+		t.Fatalf("deleted vector found: %s", got)
+	}
 	do("PUT", "/v1/docs/notes/n1?subject=alice", `{"user":"alice","text":"likes tea"}`, 200)
 	do("POST", "/v1/indexes", `{"coll":"notes","field":"user"}`, 200)
 	if got := do("GET", "/v1/docs/notes?field=user&value=alice", "", 200); !strings.Contains(got, "n1") {

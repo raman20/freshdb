@@ -109,14 +109,15 @@ func (db *DB) enableANN(ctx context.Context, id string, v *view, head uint64) {
 		tot.Rebuilt += st.Rebuilt
 		tot.Reused += st.Reused
 		tot.Stale += st.Stale
+		tot.Copies += st.Copies
 		tot.Inserted += st.Inserted
 	}
 	if db.annStats != nil {
 		db.annStats[id] = tot
 	}
 	if tot.Graphs > 0 {
-		db.logf("freshdb: log %s: ANN graphs restored in %v (%d reused, %d stale, %d inserted, %d rebuilt)",
-			id, time.Since(t0).Round(time.Millisecond), tot.Reused, tot.Stale, tot.Inserted, tot.Rebuilt)
+		db.logf("freshdb: log %s: ANN graphs restored in %v (%d reused, %d copies, %d stale, %d inserted, %d rebuilt)",
+			id, time.Since(t0).Round(time.Millisecond), tot.Reused, tot.Copies, tot.Stale, tot.Inserted, tot.Rebuilt)
 	}
 }
 
