@@ -157,9 +157,12 @@ func (db *DB) Compact(ctx context.Context, o CompactOptions) (CompactStats, erro
 	return db.runCompaction(ctx, GCOptions{Grace: o.Grace, Topics: o.Topics}, false)
 }
 
-// runCompaction is Compact (gc false) or GC (gc true).
+// runCompaction is Compact (gc false) or GC (gc true). Due garbage is
+// swept before the writers pause and again after they resume, so the
+// commit pause covers building and committing the bases and the reload,
+// not the deletes (two fsyncs each on a journal: 2,800 of them paused
+// commits for 0.3 s).
 func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats CompactStats, err error) {
-	t0 := time.Now()
 	defer func() {
 		runs, errs := &db.met.compactions, &db.met.compactErrors
 		if gc {
@@ -169,7 +172,6 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 		if err != nil {
 			errs.Add(1)
 		}
-		db.met.compactLat.Observe(time.Since(t0))
 	}()
 	db.mu.Lock()
 	switch {
@@ -184,26 +186,60 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 		return stats, ErrBusy
 	}
 	db.compacting, db.compactDone = true, make(chan struct{})
+	db.mu.Unlock()
+	// Branch ops wait in lockIdle from here on; commits do not.
+	if err := db.sweep(ctx, &stats, false); err != nil {
+		db.endCompaction(time.Time{})
+		return stats, err
+	}
+	resumed, err := db.compactPaused(ctx, o, gc, &stats)
+	if resumed && err == nil {
+		// The manifest is committed: the sweep finishes even if the
+		// caller gave up.
+		err = db.sweep(context.WithoutCancel(ctx), &stats, true)
+	}
+	if gc && err == nil {
+		db.lockIdle()
+		if !db.closed {
+			db.deleteOldManifests(ctx, o.KeepManifests, &stats)
+		}
+		db.mu.Unlock()
+	}
+	return stats, err
+}
+
+// endCompaction lets branch ops and paused commits go on; paused (when
+// set) is when the writers were paused, for the pause histogram.
+func (db *DB) endCompaction(paused time.Time) {
+	db.mu.Lock()
+	db.compacting = false
+	close(db.compactDone)
+	db.mu.Unlock()
+	if !paused.IsZero() {
+		db.met.compactLat.Observe(time.Since(paused))
+	}
+}
+
+// compactPaused pauses the writers, runs compactLocked and reloads the
+// branches. resumed reports a successful reload onto fresh writers.
+func (db *DB) compactPaused(ctx context.Context, o GCOptions, gc bool, stats *CompactStats) (resumed bool, err error) {
+	t0 := time.Now()
+	defer db.endCompaction(t0)
+	db.mu.RLock()
 	ws := make([]*writer, 0, len(db.writers))
 	for _, id := range sortedMapKeys(db.writers) {
 		ws = append(ws, db.writers[id])
 	}
-	db.mu.Unlock()
-	defer func() {
-		db.mu.Lock()
-		db.compacting = false
-		close(db.compactDone)
-		db.mu.Unlock()
-	}()
+	db.mu.RUnlock()
 	// Stop the writers without db.mu (a draining writer may need it to
-	// commit a snapshot). Branch ops wait in lockIdle meanwhile.
+	// commit a snapshot).
 	for _, w := range ws {
 		w.pause()
 	}
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	if db.closed {
-		return stats, ErrClosed
+		return false, ErrClosed
 	}
 	// A writer halted by a storage error (ErrUnknownOutcome) stays halted
 	// until reopen: compacting would rebuild from a state that may miss
@@ -215,10 +251,7 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 		}
 	}
 	if err == nil {
-		committed, err = db.compactLocked(ctx, o, gc, &stats)
-	}
-	if gc && err == nil {
-		defer func() { db.deleteOldManifests(ctx, o.KeepManifests, &stats) }()
+		committed, err = db.compactLocked(ctx, o, gc, stats)
 	}
 	if !committed {
 		// nothing changed: resume on the same logs and views
@@ -230,7 +263,7 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 			}
 		}
 		db.bw.Store(nil)
-		return stats, err
+		return false, err
 	}
 	// Reload every branch from its base: frees the history held in RAM.
 	// The HNSW graphs are handed over (the vectors are the same), unless
@@ -248,7 +281,7 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 	defer func() { db.annCarry, db.annTainted = nil, false }()
 	db.logs, db.views, db.writers = map[string]*logState{}, map[string]*view{}, map[string]*writer{}
 	db.bw.Store(nil)
-	// The manifest is committed: the reload (and the sweep) finish even
+	// The manifest is committed: the reload finishes even
 	// if the caller gave up; a failed reload would halt the DB, and an
 	// error here would report a committed compaction as failed.
 	rctx := context.WithoutCancel(ctx)
@@ -262,13 +295,10 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 				w.paused = false
 				w.mu.Unlock()
 			}
-			return stats, rerr
+			return false, rerr
 		}
 	}
-	if err == nil {
-		err = db.sweepLocked(rctx, &stats)
-	}
-	return stats, err
+	return err == nil, err
 }
 
 // compactLocked builds bases and commits them. Caller holds db.mu with
@@ -276,9 +306,6 @@ func (db *DB) runCompaction(ctx context.Context, o GCOptions, gc bool) (stats Co
 // Compact bases every log at its head; GC follows gcPlan (retention cuts,
 // reflog pruning, unreachable logs dropped).
 func (db *DB) compactLocked(ctx context.Context, o GCOptions, gc bool, stats *CompactStats) (committed bool, err error) {
-	if err := db.sweepLocked(ctx, stats); err != nil {
-		return false, err
-	}
 	type built struct {
 		id   string
 		base *BaseMeta
@@ -686,36 +713,86 @@ func (db *DB) fold(ctx context.Context, l *logState, upto uint64, fn func(*lens.
 	return l.each(ctx, upto, fn)
 }
 
-// sweepLocked deletes due garbage and unreferenced bases of older epochs,
-// then commits the shorter garbage list. Caller holds db.mu.
-func (db *DB) sweepLocked(ctx context.Context, stats *CompactStats) error {
+// sweep deletes due garbage and unreferenced bases of older epochs, then
+// commits the shorter garbage list. It holds db.mu only to read the
+// manifest and to commit, so writers keep committing while it deletes.
+// That is safe: due garbage is unreachable from every manifest from this
+// one on (and its grace has passed), and only a compaction writes bases,
+// which sweepOrphans skips for this epoch. sweepMu keeps one sweep at a
+// time. idle: take db.mu through lockIdle (no compaction of ours runs).
+func (db *DB) sweep(ctx context.Context, stats *CompactStats, idle bool) error {
+	db.sweepMu.Lock()
+	defer db.sweepMu.Unlock()
+	db.mu.RLock()
+	man, stopped := db.man, db.closed || db.failed != nil
+	db.mu.RUnlock()
+	if stopped {
+		return nil
+	}
 	now := db.opts.Clock()
-	var keep []Garbage
-	for _, g := range db.man.Garbage {
+	var swept []Garbage
+	pending := 0
+	for _, g := range man.Garbage {
 		if g.After > now {
-			keep = append(keep, g)
+			pending++
 			continue
 		}
 		n, err := db.deleteGarbage(ctx, g)
 		stats.Deleted += n
 		if err != nil {
 			db.logf("freshdb: sweep %s %s: %v", g.Kind, g.Log, err)
-			keep = append(keep, g)
+			pending++
+			continue
 		}
+		swept = append(swept, g)
 	}
-	stats.Pending = len(keep)
-	n, err := db.sweepOrphans(ctx)
+	stats.Pending = pending
+	n, err := db.sweepOrphans(ctx, man)
 	stats.Deleted += n
 	if err != nil {
 		db.logf("freshdb: orphan sweep: %v", err)
 	}
-	if len(keep) == len(db.man.Garbage) {
+	if len(swept) == 0 {
 		return nil
 	}
+	if idle {
+		db.lockIdle()
+	} else {
+		db.mu.Lock()
+	}
+	defer db.mu.Unlock()
+	if db.closed {
+		return nil // the entries stay listed; the next sweep finds them gone
+	}
 	return db.commitManifest(ctx, func(m *Manifest) error {
-		m.Garbage = keep
+		m.Garbage = withoutGarbage(m.Garbage, swept)
 		return nil
 	})
+}
+
+// withoutGarbage returns gs minus one occurrence of each entry of drop.
+func withoutGarbage(gs, drop []Garbage) []Garbage {
+	n := map[Garbage]int{}
+	for _, g := range drop {
+		n[g]++
+	}
+	var keep []Garbage
+	for _, g := range gs {
+		if n[g] > 0 {
+			n[g]--
+			continue
+		}
+		keep = append(keep, g)
+	}
+	return keep
+}
+
+// stopped reports whether the DB was closed (or crashed): sweeps stop
+// deleting then, as a crashed DB must not write storage any more.
+func (db *DB) stopped() bool {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return db.closed
 }
 
 func (db *DB) deleteGarbage(ctx context.Context, g Garbage) (int, error) {
@@ -759,6 +836,9 @@ func (db *DB) deleteGarbage(ctx context.Context, g Garbage) (int, error) {
 	}
 	n := 0
 	for _, k := range keys {
+		if db.stopped() {
+			return n, ErrClosed
+		}
 		if err := db.st.Delete(ctx, k); err != nil && !errors.Is(err, store.ErrNotFound) {
 			return n, err
 		}
@@ -770,24 +850,24 @@ func (db *DB) deleteGarbage(ctx context.Context, g Garbage) (int, error) {
 // sweepOrphans deletes base objects that no manifest from this one on
 // can refer to: written in an older epoch and not in the manifest (a
 // compaction whose commit lost to a newer opener).
-func (db *DB) sweepOrphans(ctx context.Context) (int, error) {
+func (db *DB) sweepOrphans(ctx context.Context, man *Manifest) (int, error) {
 	live := map[string]bool{}
-	for _, lm := range db.man.Logs {
+	for _, lm := range man.Logs {
 		if lm.Base != nil {
 			live[lm.Base.Key] = true
 		}
 	}
-	for _, g := range db.man.Garbage {
+	for _, g := range man.Garbage {
 		if g.Kind == "base" {
 			live[g.Key] = true
 		}
 	}
 	n := 0
 	ids := map[string]bool{}
-	for id := range db.man.Logs {
+	for id := range man.Logs {
 		ids[id] = true
 	}
-	for _, g := range db.man.Garbage {
+	for _, g := range man.Garbage {
 		ids[g.Log] = true // dropped by GC: its orphans too
 	}
 	for _, id := range sortedMapKeys(ids) {
@@ -802,6 +882,9 @@ func (db *DB) sweepOrphans(ctx context.Context) (int, error) {
 			}
 			if ep, ok := baseEpoch(bk); !ok || ep >= db.epoch {
 				continue
+			}
+			if db.stopped() {
+				return n, ErrClosed
 			}
 			if err := db.st.Delete(ctx, k); err != nil && !errors.Is(err, store.ErrNotFound) {
 				return n, err

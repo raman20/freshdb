@@ -26,12 +26,18 @@ import (
 // contain a key shredded while it runs (see docs/operations.md).
 type holdStore struct {
 	store.Store
-	mu      sync.Mutex
-	holds   int
-	pending map[string]bool
+	// inflight: deletes passed through hold it shared, hold takes it
+	// exclusively, so a backup starts only after they finish (sweeps run
+	// alongside commits and backups, not under db.mu).
+	inflight sync.RWMutex
+	mu       sync.Mutex
+	holds    int
+	pending  map[string]bool
 }
 
 func (h *holdStore) Delete(ctx context.Context, key string) error {
+	h.inflight.RLock()
+	defer h.inflight.RUnlock()
 	h.mu.Lock()
 	if h.holds > 0 && !strings.HasPrefix(key, "keys/") {
 		h.pending[key] = true
@@ -68,12 +74,14 @@ func (h *holdStore) Close() error {
 }
 
 func (h *holdStore) hold() func(ctx context.Context, logf func(string, ...any)) {
+	h.inflight.Lock()
 	h.mu.Lock()
 	h.holds++
 	if h.pending == nil {
 		h.pending = map[string]bool{}
 	}
 	h.mu.Unlock()
+	h.inflight.Unlock()
 	return func(ctx context.Context, logf func(string, ...any)) {
 		h.mu.Lock()
 		h.holds--

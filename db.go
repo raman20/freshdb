@@ -130,6 +130,7 @@ type DB struct {
 	// compactDone (lockIdle) and paused writers' callers retry after it.
 	compacting  bool
 	compactDone chan struct{}
+	sweepMu     sync.Mutex // one garbage sweep at a time (compact.go)
 }
 
 // lockIdle takes db.mu once no compaction is running.

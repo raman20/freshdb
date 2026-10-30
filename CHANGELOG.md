@@ -10,6 +10,22 @@ break APIs and the on-storage format.
 Work on the losses listed in `docs/benchmarks.md`; before/after numbers are
 in its "Changes since v0.1.0" section.
 
+### Changed (compaction pause)
+
+- Compaction and GC delete due garbage before pausing the writers and
+  after resuming them, instead of inside the pause. With ~2,700 objects
+  deleted on a journal store, the commit pause went from 280-317 ms to
+  11-14 ms (`BenchmarkCompactSweepPause`); the whole run takes ~15 % longer
+  as deletes share the journal with commits. Branch operations still wait
+  for the whole run.
+- `freshdb_compaction_pause_seconds` (`Stats.CompactionPause`) now
+  measures the pause itself; it used to time the whole run.
+- A backup's deletion hold now waits for deletes already in flight
+  (a sweep running alongside could otherwise remove an object the
+  backup had just listed).
+- Old manifests are deleted after the final sweep, so `KeepManifests`
+  counts the sweep's own manifest.
+
 ### Fixed (component D review: documents)
 
 - `Find` with an index now includes the transaction's own writes and is

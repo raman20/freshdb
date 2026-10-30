@@ -106,7 +106,15 @@ What this confirms or refutes:
   interleaved with the backup's deferred deletes for the journal's write
   lock. 135 µs per delete on a quiet small journal. Candidate fixes: a
   batched journal delete (one fsync pair per batch) or sweeping outside
-  the writer pause. Not done yet.
+  the writer pause. **Done (sweep outside the pause), 2026-10-30:** on
+  `BenchmarkCompactSweepPause` (journal, ~2,700 objects deleted per run,
+  a committer running) the commit pause went from 280-317 ms to 11-14 ms
+  and the slowest commit from 280-317 ms to 12-14 ms; the compaction's
+  wall time rose from 284-318 ms to 338-360 ms (deletes now share the
+  journal with commits). Not re-measured in a soak. A batched journal
+  delete was not done: tombstones in one write can tear out of order
+  (a later page durable, an earlier one not), which open treats as
+  corruption.
 - **The 6 GiB peak: not reproduced** (max 837 MiB in 25 min); still a
   hypothesis.
 - **Measurement artefact found:** a host snapshotter on this box drops
